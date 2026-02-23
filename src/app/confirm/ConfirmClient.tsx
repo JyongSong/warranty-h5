@@ -7,15 +7,32 @@ type Props = {
 };
 
 export default function ConfirmClient({ token }: Props) {
+  // 关键：用 state 存“最终 token”
+  const [effectiveToken, setEffectiveToken] = useState<string>(token ?? "");
+
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hasToken = useMemo(() => typeof token === "string" && token.trim().length > 0, [token]);
+  // 如果 server 没传到 token（你 Vercel 的情况），client 兜底从 URL 里取
+  useEffect(() => {
+    if (effectiveToken && effectiveToken.trim().length > 0) return;
+
+    try {
+      const t = new URLSearchParams(window.location.search).get("t") || "";
+      if (t) setEffectiveToken(t);
+    } catch {
+      // ignore
+    }
+  }, [effectiveToken]);
+
+  const hasToken = useMemo(
+    () => typeof effectiveToken === "string" && effectiveToken.trim().length > 0,
+    [effectiveToken]
+  );
 
   useEffect(() => {
     if (!hasToken) {
-      // 这里就是你截图里的“缺少确认 token”
       setError("缺少确认 token");
     } else {
       setError(null);
@@ -32,7 +49,7 @@ export default function ConfirmClient({ token }: Props) {
       const r = await fetch("/api/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token: effectiveToken }),
       });
 
       const data = await r.json().catch(() => ({}));
@@ -54,9 +71,9 @@ export default function ConfirmClient({ token }: Props) {
     <div style={{ maxWidth: 520, margin: "40px auto", padding: 16 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>설치 완료 확인</h1>
 
-      {/* 调试信息：确认线上到底有没有拿到 token（可保留/可删） */}
+      {/* 调试信息：看看到底最终拿到的 token 长度 */}
       <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 12 }}>
-        token length: {token?.length ?? 0}
+        token length: {effectiveToken?.length ?? 0}
       </div>
 
       {error ? (
