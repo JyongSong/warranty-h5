@@ -2,11 +2,12 @@ export const dynamic = "force-dynamic";
 
 import RegClient from "./RegClient";
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: { sn?: string | string[] };
+  searchParams: Promise<{ sn?: string | string[] }>;
 }) {
-  const sn = typeof searchParams?.sn === "string" ? searchParams.sn : "";
+  const sp = await searchParams;
+  const sn = typeof sp?.sn === "string" ? sp.sn : "";
   return <RegClient initialSn={sn} />;
 }

@@ -2,11 +2,12 @@ export const dynamic = "force-dynamic";
 
 import ConfirmClient from "./ConfirmClient";
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: { t?: string };
+  searchParams: Promise<{ t?: string | string[] }>;
 }) {
-  const token = typeof searchParams.t === "string" ? searchParams.t : "";
+  const sp = await searchParams;
+  const token = typeof sp?.t === "string" ? sp.t : "";
   return <ConfirmClient token={token} />;
 }
