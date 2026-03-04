@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Tesseract from "tesseract.js";
+import Tesseract, {createWorker, PSM} from "tesseract.js";
 import { normalizeAndValidateK100Sn } from "@/lib/k100Sn";
 
 type Props = {
@@ -9,7 +9,14 @@ type Props = {
   onClose: () => void;
   onResult: (sn: string) => void; // 识别成功回填
 };
+function extractK100SnFromOcrText(text: string) {
+  const t = (text || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, ""); // 只保留字母数字
 
+  const m = t.match(/AKS[A-Z0-9]{7}/);
+  return m?.[0] ?? "";
+}
 export default function OcrScanModalK100({
   title = "K100 사진 인식(OCR)",
   onClose,
@@ -68,19 +75,82 @@ export default function OcrScanModalK100({
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas not available");
 
-      // 캔버스 사이즈 = 영상 프레임
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      /**
+       * 1) ROI: 贴纸竖排 SN 大字通常在画面中间偏左位置
+       *    这里取一个“窄而高”的区域，专门抓竖排大字
+       */
+      const roiW = Math.floor(vw * 0.28);  // 竖排字列宽度（可调 0.22~0.35）
+      const roiH = Math.floor(vh * 0.75);  // 高度尽量覆盖整列
+      const sx = Math.floor(vw * 0.34);    // x 偏移（可调）
+      const sy = Math.floor(vh * 0.12);    // y 偏移（可调）
 
-      // OCR 실행 (eng)
-      const r = await Tesseract.recognize(canvas, "eng", {
-        logger: () => {},
+      // 2) 先把 ROI 抽出来到一个临时 canvas
+      const tmp = document.createElement("canvas");
+      tmp.width = roiW;
+      tmp.height = roiH;
+      const tctx = tmp.getContext("2d");
+      if (!tctx) throw new Error("Tmp canvas not available");
+
+      tctx.drawImage(video, sx, sy, roiW, roiH, 0, 0, roiW, roiH);
+
+      /**
+       * 3) 把竖排 ROI 旋转 90°，让它变成横排单行/少量行
+       *    rotated canvas: width=roiH, height=roiW
+       */
+      const scale = 2; // 放大提高识别率（手机上 2x 比较平衡）
+      canvas.width = roiH * scale;
+      canvas.height = roiW * scale;
+
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.translate(roiH, 0);       // 平移到旋转后可见区域
+      ctx.rotate(Math.PI / 2);      // 90° 顺时针
+      ctx.drawImage(tmp, 0, 0);     // 画上旋转后的 ROI
+      ctx.restore();
+
+      /**
+       * 4) 预处理：灰度 + 二值化（减少背景干扰）
+       */
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = img.data;
+      const threshold = 170; // 可调 150~190
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        const v = gray > threshold ? 255 : 0;
+        data[i] = v;
+        data[i + 1] = v;
+        data[i + 2] = v;
+      }
+      ctx.putImageData(img, 0, 0);
+
+      /**
+       * 5) OCR：白名单 + 单行模式
+       */
+      const worker = await createWorker("eng", 1, {
+        logger: () => { },
       });
 
+      await worker.setParameters({
+        // 注意：这里是 number，不是 string
+        tessedit_pageseg_mode: PSM.SINGLE_LINE, // single text line
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      });
+
+      const r = await worker.recognize(canvas);
+      await worker.terminate();
+
       const rawText = r?.data?.text ?? "";
-      const { ok, normalized, error } = normalizeAndValidateK100Sn(rawText);
+
+      // 6) 从 OCR 原文里提取 AKSXXXXXXXXX（10位）
+      const snCandidate = extractK100SnFromOcrText(rawText);
+      const { ok, normalized, error } = normalizeAndValidateK100Sn(snCandidate);
 
       if (!ok) {
         setCandidate(normalized); // 정규화된 후보를 보여주고 수정 유도
