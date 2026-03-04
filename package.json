@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
+    "html5-qrcode": "^2.3.8",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "tesseract.js": "^7.0.0",
     "twilio": "^5.12.2"
   },
   "devDependencies": {

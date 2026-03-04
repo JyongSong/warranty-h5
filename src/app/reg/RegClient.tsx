@@ -3,12 +3,20 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import QrScanModal from "./QrScanModal";
+import OcrScanModalK100 from "./OcrScanModalK100";
+
 function normalizePhone(input: string) {
   return input.replace(/[^\d]/g, "");
 }
 
+type Model = "L100" | "K100" | "U100";
+
 export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const router = useRouter();
+
+  const [model, setModel] = useState<Model>("L100");
+  const [scanOpen, setScanOpen] = useState(false);
 
   const [sn, setSn] = useState(initialSn);
   const [installDate, setInstallDate] = useState(() => {
@@ -59,7 +67,6 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         return;
       }
 
-      // 기존 코드가 success 페이지에서 이 값을 쓰면 그대로 유지
       sessionStorage.setItem("lastRegistrationId", data?.id ?? "");
       sessionStorage.setItem("lastConfirmLink", data?.confirmLink ?? "");
 
@@ -78,14 +85,48 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       </h1>
 
       <div style={{ display: "grid", gap: 10 }}>
+        {/* 1) 모델 선택 */}
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>제품 모델</span>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value as Model)}
+            style={{ height: 40, padding: "0 12px" }}
+          >
+            <option value="L100">L100 도어락</option>
+            <option value="K100">K100 도어락</option>
+            <option value="U100">U100 도어락</option>
+          </select>
+        </label>
+
+        {/* 2) SN 입력 + 스캔 버튼 */}
         <label style={{ display: "grid", gap: 6 }}>
           <span>제품 S/N</span>
-          <input
-            value={sn}
-            onChange={(e) => setSn(e.target.value)}
-            placeholder="예: A1B2C3D4..."
-            style={{ height: 40, padding: "0 12px" }}
-          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={sn}
+              onChange={(e) => setSn(e.target.value)}
+              placeholder={model === "K100" ? "예: AKSXXXXXXX" : "예: A1B2C3D4..."}
+              style={{ height: 40, padding: "0 12px", flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => setScanOpen(true)}
+              style={{
+                height: 40,
+                padding: "0 12px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {model === "K100" ? "📷 OCR" : "📷 QR"}
+            </button>
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
+            {model === "K100"
+              ? "K100은 SN이 문자로만 제공되어 사진 인식(OCR)을 사용합니다. (AKS로 시작하는 10자리)"
+              : "L100/U100은 QR 스캔을 권장합니다."}
+          </div>
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
@@ -144,6 +185,28 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           {loading ? "제출 중..." : "제출"}
         </button>
       </div>
+
+      {/* 3) Modal 분기 */}
+      {scanOpen && model !== "K100" && (
+        <QrScanModal
+          title={`${model} QR 스캔`}
+          onClose={() => setScanOpen(false)}
+          onResult={(value) => {
+            setSn(value);
+            setScanOpen(false);
+          }}
+        />
+      )}
+
+      {scanOpen && model === "K100" && (
+        <OcrScanModalK100
+          onClose={() => setScanOpen(false)}
+          onResult={(snValue) => {
+            setSn(snValue);
+            setScanOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

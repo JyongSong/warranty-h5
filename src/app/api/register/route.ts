@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendSms } from "@/lib/sms";
 import { krToE164 } from "@/lib/phone";
+import { getBaseUrl } from "@/lib/getBaseUrl"
 
 
 function normalizePhone(s: string) {
@@ -123,8 +124,7 @@ export async function POST(req: Request) {
         }
 
         // 4) 生成确认链接（短信以后接真实通道）
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-        const confirmLink = `${baseUrl}/confirm?t=${token}`;
+        const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
 
         const smsText = `[Aqara] 설치 완료 확인 링크입니다.\n${confirmLink}`;
         await sendSms(krToE164(installerPhone), smsText);

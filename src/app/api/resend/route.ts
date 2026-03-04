@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin"; // 若没用 alias，改成你的相对路径
+import { getBaseUrl } from "@/lib/getBaseUrl";
 
 export async function POST(req: Request) {
   try {
@@ -42,8 +43,7 @@ export async function POST(req: Request) {
     if (upd.error) return NextResponse.json({ error: upd.error.message }, { status: 500 });
 
     // 4) 生成确认链接（短信后续接）
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    const confirmLink = `${baseUrl}/confirm?t=${token}`;
+    const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
 
     console.log("[SMS MOCK][RESEND] to:", rec.data.installer_phone, "link:", confirmLink);
 

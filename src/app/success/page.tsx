@@ -78,9 +78,62 @@ export default function SuccessPage() {
 
       {/* 테스트 단계에서만 링크 노출 (운영에서는 제거 권장) */}
       {link && (
-        <p style={{ marginTop: 12, wordBreak: "break-all", fontSize: 13 }}>
-          테스트용 확인 링크: <a href={link}>{link}</a>
-        </p>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, marginBottom: 6, opacity: 0.85 }}>
+            테스트용 확인 링크:
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              id="confirmLinkInput"
+              value={link}
+              readOnly
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                fontSize: 13,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            />
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(link);
+                  setMsg("링크를 복사했습니다.");
+                } catch {
+                  const el = document.getElementById("confirmLinkInput") as HTMLInputElement | null;
+                  el?.focus();
+                  el?.select();
+                  document.execCommand("copy");
+                  setMsg("링크를 복사했습니다.");
+                }
+              }}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #111",
+                background: "#111",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                minWidth: 72,
+              }}
+            >
+              복사
+            </button>
+          </div>
+
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            <a href={link} target="_blank" rel="noreferrer">
+              새 창에서 열기
+            </a>
+          </div>
+        </div>
       )}
     </div>
   );
