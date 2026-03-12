@@ -135,7 +135,7 @@ export default function InstallersClient() {
         throw new Error(data?.error ?? "기사를 불러오지 못했습니다.");
       }
 
-      const nextItems = Array.isArray(data?.items) ? data.items : [];
+      const nextItems: InstallerItem[] = Array.isArray(data?.items) ? data.items : [];
       setAllItems(nextItems);
 
       if (selectedId) {

@@ -21,7 +21,7 @@ function nullableInt(value: unknown) {
 
 export function parseInstallerPayload(body: InstallerBody) {
   const name = String(body.name ?? "").trim();
-  const phone = normalizePhone(body.phone);
+  const phone = normalizePhone(String(body.phone ?? ""));
 
   if (!name) {
     throw new Error("NAME_REQUIRED");
