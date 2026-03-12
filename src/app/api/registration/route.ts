@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin"; 
+import { getErrorMessage } from "@/lib/error";
+import { mysqlPool } from "@/lib/mysql";
+import type { RowDataPacket } from "mysql2/promise";
+
+type RegistrationRow = RowDataPacket & {
+  sn: string;
+  installDate: string;
+  userPhone: string;
+  status: string;
+  confirmTokenExpiresAt: string | null;
+  confirmedAt: string | null;
+};
 
 function maskSn(sn: string) {
   if (!sn) return "";
@@ -22,32 +33,40 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
     }
 
-    const rec = await supabaseAdmin
-      .from("warranty_registrations")
-      .select("sn, install_date, user_phone, status, confirm_token_expires_at, confirmed_at")
-      .eq("confirm_token", token)
-      .maybeSingle();
+    const [rows] = await mysqlPool.execute<RegistrationRow[]>(
+      `SELECT
+        sn,
+        install_date AS installDate,
+        user_phone AS userPhone,
+        status,
+        confirm_token_expires_at AS confirmTokenExpiresAt,
+        confirmed_at AS confirmedAt
+      FROM warranty_registrations
+      WHERE confirm_token = ?
+      LIMIT 1`,
+      [token]
+    );
+    const rec = rows[0];
 
-    if (rec.error) return NextResponse.json({ error: rec.error.message }, { status: 500 });
-    if (!rec.data) return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 404 });
+    if (!rec) return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 404 });
 
     // token 过期也要能展示信息，但前端会提示不可确认
-    const exp = rec.data.confirm_token_expires_at
-      ? new Date(rec.data.confirm_token_expires_at).getTime()
+    const exp = rec.confirmTokenExpiresAt
+      ? new Date(rec.confirmTokenExpiresAt).getTime()
       : 0;
 
     return NextResponse.json({
       ok: true,
       data: {
-        snMasked: maskSn(rec.data.sn),
-        installDate: rec.data.install_date,
-        userPhoneMasked: maskPhone(rec.data.user_phone),
-        status: rec.data.status,
+        snMasked: maskSn(rec.sn),
+        installDate: rec.installDate,
+        userPhoneMasked: maskPhone(rec.userPhone),
+        status: rec.status,
         tokenExpired: exp > 0 ? Date.now() > exp : false,
-        confirmedAt: rec.data.confirmed_at,
+        confirmedAt: rec.confirmedAt,
       },
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "UNKNOWN_ERROR" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error, "UNKNOWN_ERROR") }, { status: 500 });
   }
 }

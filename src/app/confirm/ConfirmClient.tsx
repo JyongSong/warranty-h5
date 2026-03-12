@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getErrorMessage } from "@/lib/error";
 
 type Props = { token: string };
 
@@ -64,8 +65,8 @@ export default function ConfirmClient({ token }: Props) {
         }
 
         if (!cancelled) setInfo(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "데이터를 불러올 수 없습니다");
+      } catch (error: unknown) {
+        if (!cancelled) setError(getErrorMessage(error, "데이터를 불러올 수 없습니다"));
       } finally {
         if (!cancelled) setLoadingInfo(false);
       }
@@ -108,8 +109,8 @@ export default function ConfirmClient({ token }: Props) {
       setDone(true);
       // 可选：更新本地状态
       setInfo((prev) => (prev ? { ...prev, status: "confirmed" } : prev));
-    } catch (e: any) {
-      setError(e?.message ?? "확인실패");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "확인실패"));
     } finally {
       setConfirming(false);
     }

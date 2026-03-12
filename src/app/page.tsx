@@ -1,63 +1,83 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            Hello Song.
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f4f1ea_0%,#fbfaf8_55%,#ffffff_100%)] text-zinc-900">
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-12 px-6 py-16 sm:px-10">
+        <div className="max-w-3xl space-y-6">
+          <p className="inline-flex rounded-full border border-black/10 bg-white/70 px-4 py-1 text-sm font-medium tracking-[0.18em] text-zinc-600 uppercase">
+            Warranty Portal
+          </p>
+          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-6xl">
+            Aqara 설치 등록 및 설치 확인
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="max-w-2xl text-base leading-7 text-zinc-600 sm:text-lg">
+            이 프로젝트는 도어락 출고 검증, 설치 등록, 확인 링크 발송, 그리고 A/S 기간 산정을 위한 업무용 포털입니다. 현재 데이터 계층은 Prisma + MySQL로 통합되어 있습니다.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/reg"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Register
+            </div>
+            <div className="mb-2 text-2xl font-semibold">설치 등록</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              SN, 설치일, 연락처를 입력하고 설치 확인 절차를 시작합니다.
+            </p>
           </a>
           <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/confirm"
           >
-            Documentation
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Confirm
+            </div>
+            <div className="mb-2 text-2xl font-semibold">설치 확인</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              설치 기사님이 문자 링크로 접속해 설치 완료를 최종 확인합니다.
+            </p>
           </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/privacy"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Privacy
+            </div>
+            <div className="mb-2 text-2xl font-semibold">개인정보 안내</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              수집 항목, 이용 목적, 보관 기준 등 개인정보 관련 안내를 확인합니다.
+            </p>
+          </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/installers"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Installers
+            </div>
+            <div className="mb-2 text-2xl font-semibold">기사 관리</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              기사 조회, 추가, 수정, 삭제와 설치 지표 관리를 한 페이지에서 처리합니다.
+            </p>
+          </a>
+        </div>
+
+        <div className="grid gap-6 rounded-[2rem] border border-black/10 bg-[#1d3129] px-6 py-8 text-white sm:grid-cols-3 sm:px-8">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] text-white/60">Stack</div>
+            <div className="mt-2 text-lg font-semibold">Next.js 16 + Prisma 7</div>
+          </div>
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] text-white/60">Database</div>
+            <div className="mt-2 text-lg font-semibold">MySQL 8 / Docker Compose</div>
+          </div>
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] text-white/60">SMS</div>
+            <div className="mt-2 text-lg font-semibold">Mock / Twilio</div>
+          </div>
         </div>
       </main>
     </div>

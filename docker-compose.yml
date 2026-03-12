@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: warranty_mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: warranty
+      MYSQL_USER: warranty
+      MYSQL_PASSWORD: warranty
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - warranty_mysql_data:/var/lib/mysql
+
+volumes:
+  warranty_mysql_data:

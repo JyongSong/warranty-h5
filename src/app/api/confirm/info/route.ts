@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { mysqlPool } from "@/lib/mysql";
+import type { RowDataPacket } from "mysql2/promise";
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // 用 service role 读数据（server only）
-);
+type ConfirmInfoRow = RowDataPacket & {
+    id: string;
+    sn: string;
+    installDate: string;
+    userPhone: string;
+    installerPhone: string | null;
+    status: string;
+    confirmTokenExpiresAt: string | null;
+    submittedAt: string;
+};
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -14,36 +21,38 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "MISSING_TOKEN" }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-        .from("warranty_registrations")
-        .select(
-            "id,sn,install_date,user_phone,installer_phone,status,confirm_token_expires_at,submitted_at"
-        )
-        .eq("confirm_token", token)
-        .maybeSingle();
+    const [rows] = await mysqlPool.execute<ConfirmInfoRow[]>(
+        `SELECT
+          id,
+          sn,
+          install_date AS installDate,
+          user_phone AS userPhone,
+          installer_phone AS installerPhone,
+          status,
+          confirm_token_expires_at AS confirmTokenExpiresAt,
+          submitted_at AS submittedAt
+        FROM warranty_registrations
+        WHERE confirm_token = ?
+        LIMIT 1`,
+        [token]
+    );
+    const data = rows[0];
 
-    if (error) {
-        console.error("[confirm/info] supabase error:", error);
-        return NextResponse.json(
-            { error: "DB_ERROR", detail: error.message },
-            { status: 500 }
-        );
-    }
     if (!data) {
         return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 404 });
     }
 
     const tokenExpired =
-        data.confirm_token_expires_at && new Date(data.confirm_token_expires_at).getTime() < Date.now();
+        data.confirmTokenExpiresAt && new Date(data.confirmTokenExpiresAt).getTime() < Date.now();
 
     return NextResponse.json({
         id: data.id,
         sn: data.sn,
-        installDate: data.install_date,
-        userPhone: data.user_phone,
-        installerPhone: data.installer_phone,
+        installDate: data.installDate,
+        userPhone: data.userPhone,
+        installerPhone: data.installerPhone,
         status: data.status,
         tokenExpired,
-        createdAt: data.submitted_at,
+        createdAt: data.submittedAt,
     });
 }

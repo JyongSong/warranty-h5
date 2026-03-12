@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { getErrorMessage } from "@/lib/error";
 
 type Props = {
   title?: string;
@@ -10,10 +11,7 @@ type Props = {
 };
 
 export default function QrScanModal({ title = "QR 스캔", onClose, onResult }: Props) {
-  const readerId = useMemo(
-    () => `qr-reader-${Math.random().toString(16).slice(2)}`,
-    []
-  );
+  const readerId = `qr-reader-${useId().replace(/:/g, "")}`;
   const [err, setErr] = useState<string>("");
 
   useEffect(() => {
@@ -40,8 +38,8 @@ export default function QrScanModal({ title = "QR 스캔", onClose, onResult }: 
             // ignore scan failure per frame
           }
         );
-      } catch (e: any) {
-        setErr(e?.message ?? "카메라를 열 수 없습니다.");
+      } catch (error: unknown) {
+        setErr(getErrorMessage(error, "카메라를 열 수 없습니다."));
       }
     }
 

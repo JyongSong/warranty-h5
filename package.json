@@ -6,12 +6,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:import-shipped": "node scripts/import-shipped-devices.mjs",
+    "db:import-installers": "node scripts/import-installers.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.95.3",
+    "@prisma/client": "^7.4.2",
+    "csv-parse": "^6.1.0",
     "html5-qrcode": "^2.3.8",
     "next": "16.1.6",
+    "prisma": "^7.4.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tesseract.js": "^7.0.0",

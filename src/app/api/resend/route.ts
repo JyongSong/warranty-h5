@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseAdmin } from "@/lib/supabaseAdmin"; // 若没用 alias，改成你的相对路径
 import { getBaseUrl } from "@/lib/getBaseUrl";
+import { sendSms } from "@/lib/sms";
+import { krToE164 } from "@/lib/phone";
+import { getErrorMessage } from "@/lib/error";
+import { mysqlPool } from "@/lib/mysql";
+import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+type ResendRow = RowDataPacket & {
+  id: string;
+  sn: string;
+  installerPhone: string | null;
+  status: string;
+};
 
 export async function POST(req: Request) {
   try {
@@ -11,20 +22,29 @@ export async function POST(req: Request) {
     if (!id) return NextResponse.json({ error: "MISSING_ID" }, { status: 400 });
 
     // 1) 先查记录
-    const rec = await supabaseAdmin
-      .from("warranty_registrations")
-      .select("id, sn, installer_phone, status")
-      .eq("id", id)
-      .maybeSingle();
+    const [rows] = await mysqlPool.execute<ResendRow[]>(
+      `SELECT
+        id,
+        sn,
+        installer_phone AS installerPhone,
+        status
+      FROM warranty_registrations
+      WHERE id = ?
+      LIMIT 1`,
+      [id]
+    );
+    const rec = rows[0];
 
-    if (rec.error) return NextResponse.json({ error: rec.error.message }, { status: 500 });
-    if (!rec.data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (!rec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-    if (rec.data.status === "confirmed") {
+    if (rec.status === "confirmed") {
       return NextResponse.json({ error: "ALREADY_CONFIRMED" }, { status: 400 });
     }
-    if (rec.data.status === "void") {
+    if (rec.status === "void") {
       return NextResponse.json({ error: "VOID_RECORD" }, { status: 400 });
+    }
+    if (!rec.installerPhone) {
+      return NextResponse.json({ error: "INSTALLER_PHONE_MISSING" }, { status: 400 });
     }
 
     // 2) 生成新 token（72h）
@@ -32,23 +52,25 @@ export async function POST(req: Request) {
     const expiresAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
 
     // 3) 更新 token
-    const upd = await supabaseAdmin
-      .from("warranty_registrations")
-      .update({
-        confirm_token: token,
-        confirm_token_expires_at: expiresAt,
-      })
-      .eq("id", id);
+    await mysqlPool.execute<ResultSetHeader>(
+      `UPDATE warranty_registrations
+       SET
+         confirm_token = ?,
+         confirm_token_expires_at = ?,
+         updated_at = NOW(3)
+       WHERE id = ?`,
+      [token, expiresAt, id]
+    );
 
-    if (upd.error) return NextResponse.json({ error: upd.error.message }, { status: 500 });
-
-    // 4) 生成确认链接（短信后续接）
     const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
+    const smsText = `[Aqara] 설치 완료 확인 링크입니다.\n${confirmLink}`;
 
-    console.log("[SMS MOCK][RESEND] to:", rec.data.installer_phone, "link:", confirmLink);
+    await sendSms(krToE164(rec.installerPhone), smsText);
+
+    console.log("[SMS MOCK][RESEND] to:", rec.installerPhone, "link:", confirmLink);
 
     return NextResponse.json({ ok: true, confirmLink });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "UNKNOWN_ERROR" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error, "UNKNOWN_ERROR") }, { status: 500 });
   }
 }

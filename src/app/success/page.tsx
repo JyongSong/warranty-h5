@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getErrorMessage } from "@/lib/error";
 
 export default function SuccessPage() {
   const [link, setLink] = useState("");
   const [regId, setRegId] = useState("");
+  const [status, setStatus] = useState("");
+  const [installType, setInstallType] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const isSelfInstall = installType === "self" || status === "confirmed";
 
   useEffect(() => {
     setLink(sessionStorage.getItem("lastConfirmLink") || "");
     setRegId(sessionStorage.getItem("lastRegistrationId") || "");
+    setStatus(sessionStorage.getItem("lastRegistrationStatus") || "");
+    setInstallType(sessionStorage.getItem("lastInstallType") || "");
   }, []);
 
   async function onResend() {
@@ -37,8 +43,8 @@ export default function SuccessPage() {
       setLink(j.confirmLink);
       sessionStorage.setItem("lastConfirmLink", j.confirmLink);
       setMsg("확인 링크를 재전송했습니다. (현재는 테스트 모드로 링크가 화면에 표시됩니다.)");
-    } catch (e: any) {
-      setMsg(e?.message ?? "재전송에 실패했습니다.");
+    } catch (error: unknown) {
+      setMsg(getErrorMessage(error, "재전송에 실패했습니다."));
     } finally {
       setLoading(false);
     }
@@ -49,7 +55,9 @@ export default function SuccessPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>제출 완료 ✅</h1>
 
       <p style={{ opacity: 0.85, lineHeight: 1.6 }}>
-        설치 기사님께 설치 완료 확인 링크를 문자로 전송했습니다. 문자를 받지 못하셨다면 아래 버튼으로 재전송해 주세요.
+        {isSelfInstall
+          ? "자가 설치로 접수되어 즉시 확인 완료 처리되었습니다."
+          : "설치 기사님께 설치 완료 확인 링크를 문자로 전송했습니다. 문자를 받지 못하셨다면 아래 버튼으로 재전송해 주세요."}
       </p>
 
       {msg && (
@@ -58,26 +66,27 @@ export default function SuccessPage() {
         </div>
       )}
 
-      <button
-        onClick={onResend}
-        disabled={loading}
-        style={{
-          width: "100%",
-          padding: "12px 14px",
-          borderRadius: 12,
-          border: "none",
-          fontSize: 15,
-          fontWeight: 700,
-          marginTop: 12,
-          opacity: loading ? 0.6 : 1,
-          cursor: loading ? "not-allowed" : "pointer",
-        }}
-      >
-        {loading ? "전송 중..." : "확인 링크 재전송"}
-      </button>
+      {!isSelfInstall ? (
+        <button
+          onClick={onResend}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 14px",
+            borderRadius: 12,
+            border: "none",
+            fontSize: 15,
+            fontWeight: 700,
+            marginTop: 12,
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          {loading ? "전송 중..." : "확인 링크 재전송"}
+        </button>
+      ) : null}
 
-      {/* 테스트 단계에서만 링크 노출 (운영에서는 제거 권장) */}
-      {link && (
+      {!isSelfInstall && link && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 13, marginBottom: 6, opacity: 0.85 }}>
             테스트용 확인 링크:

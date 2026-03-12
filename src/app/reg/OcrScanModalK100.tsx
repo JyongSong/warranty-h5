@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Tesseract, {createWorker, PSM} from "tesseract.js";
+import { useEffect, useRef, useState } from "react";
+import { createWorker, PSM } from "tesseract.js";
 import { normalizeAndValidateK100Sn } from "@/lib/k100Sn";
+import { getErrorMessage } from "@/lib/error";
 
 type Props = {
   title?: string;
@@ -30,8 +31,6 @@ export default function OcrScanModalK100({
   const [msg, setMsg] = useState<string>("");
   const [candidate, setCandidate] = useState<string>("");
 
-  const canvasId = useMemo(() => `ocr-canvas-${Math.random().toString(16).slice(2)}`, []);
-
   useEffect(() => {
     let alive = true;
 
@@ -47,8 +46,8 @@ export default function OcrScanModalK100({
           videoRef.current.srcObject = s;
           await videoRef.current.play();
         }
-      } catch (e: any) {
-        setMsg(e?.message ?? "카메라를 열 수 없습니다.");
+      } catch (error: unknown) {
+        setMsg(getErrorMessage(error, "카메라를 열 수 없습니다."));
       }
     }
 
@@ -159,8 +158,8 @@ export default function OcrScanModalK100({
       }
 
       onResult(normalized);
-    } catch (e: any) {
-      setMsg(e?.message ?? "인식에 실패했습니다.");
+    } catch (error: unknown) {
+      setMsg(getErrorMessage(error, "인식에 실패했습니다."));
     } finally {
       setBusy(false);
     }
@@ -195,11 +194,7 @@ export default function OcrScanModalK100({
           }}
         />
 
-        <canvas
-          id={canvasId}
-          ref={canvasRef}
-          style={{ display: "none" }}
-        />
+        <canvas ref={canvasRef} style={{ display: "none" }} />
 
         {msg ? (
           <div style={{ background: "#f6f7f9", padding: 10, borderRadius: 10, fontSize: 13, marginTop: 10 }}>
