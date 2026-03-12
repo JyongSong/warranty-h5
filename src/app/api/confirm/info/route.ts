@@ -1,17 +1,5 @@
 import { NextResponse } from "next/server";
-import { mysqlPool } from "@/lib/mysql";
-import type { RowDataPacket } from "mysql2/promise";
-
-type ConfirmInfoRow = RowDataPacket & {
-    id: string;
-    sn: string;
-    installDate: string;
-    userPhone: string;
-    installerPhone: string | null;
-    status: string;
-    confirmTokenExpiresAt: string | null;
-    submittedAt: string;
-};
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -21,29 +9,26 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "MISSING_TOKEN" }, { status: 400 });
     }
 
-    const [rows] = await mysqlPool.execute<ConfirmInfoRow[]>(
-        `SELECT
-          id,
-          sn,
-          install_date AS installDate,
-          user_phone AS userPhone,
-          installer_phone AS installerPhone,
-          status,
-          confirm_token_expires_at AS confirmTokenExpiresAt,
-          submitted_at AS submittedAt
-        FROM warranty_registrations
-        WHERE confirm_token = ?
-        LIMIT 1`,
-        [token]
-    );
-    const data = rows[0];
+    const data = await prisma.warrantyRegistration.findFirst({
+        where: { confirmToken: token },
+        select: {
+            id: true,
+            sn: true,
+            installDate: true,
+            userPhone: true,
+            installerPhone: true,
+            status: true,
+            confirmTokenExpiresAt: true,
+            submittedAt: true,
+        },
+    });
 
     if (!data) {
         return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 404 });
     }
 
     const tokenExpired =
-        data.confirmTokenExpiresAt && new Date(data.confirmTokenExpiresAt).getTime() < Date.now();
+        data.confirmTokenExpiresAt && data.confirmTokenExpiresAt.getTime() < Date.now();
 
     return NextResponse.json({
         id: data.id,

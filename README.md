@@ -1,6 +1,6 @@
 # warranty-h5
 
-门锁安装登记与安装确认项目，现已统一为 `Next.js + Prisma + MySQL`。
+门锁安装登记与安装确认项目，现已统一为 `Next.js + Prisma + Supabase Postgres`。
 
 ## 当前业务流
 
@@ -15,7 +15,7 @@
 - Next.js 16 App Router
 - React 19
 - Prisma 7
-- MySQL 8
+- Supabase Postgres
 - Tailwind CSS 4
 - Twilio / mock SMS
 - `html5-qrcode` 与 `tesseract.js`
@@ -34,33 +34,36 @@ npm install
 
 关键变量：
 
-- `DATABASE_URL`: MySQL 连接串
+- `DATABASE_URL`: Supabase transaction pooler 连接串，建议使用 `:6543` 并追加 `?pgbouncer=true&connection_limit=1`
+- `DIRECT_URL`: Supabase direct/session 连接串，供 Prisma schema push / migrate
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase 前端配置
+- `SUPABASE_SERVICE_ROLE_KEY`: 服务端高权限 key
 - `NEXT_PUBLIC_BASE_URL`: 生成短信确认链接时使用的站点地址
 - `SMS_PROVIDER`: `mock` 或 `twilio`
 - `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM`: 使用 Twilio 时必填
 
-### 3. 启动 MySQL
+### 3. 初始化 Supabase 数据库
+
+```bash
+npm run prisma:generate
+npx prisma db push
+```
+
+### 4. 从本地 MySQL 迁移现有数据
+
+如果你本地还有旧的 Docker MySQL 数据源，先启动它：
 
 ```bash
 npm run db:up
 ```
 
-默认 `docker-compose.yml` 会启动一个本地 MySQL：
-
-- host: `127.0.0.1`
-- port: `3307`
-- database: `warranty`
-- user: `warranty`
-- password: `warranty`
-
-### 4. 初始化数据库
+然后把当前三张表全量迁移到 Supabase：
 
 ```bash
-npm run prisma:generate
-npm run prisma:migrate
+npm run db:migrate-local-to-supabase
 ```
 
-### 5. 导入出货清单
+### 5. 导入 CSV（可选）
 
 将 CSV 放在 [data/shipped.csv](/Users/zhiyongsong/warranty-h5/data/shipped.csv)，然后执行：
 
@@ -74,7 +77,7 @@ npm run db:import-shipped
 npm run db:import-installers
 ```
 
-该脚本会通过 Docker 容器内的 MySQL 以 `utf8mb4` 全量刷新 `installers`，用于避免韩文乱码。
+该脚本用于从 CSV 刷新安装人员数据。
 
 ### 6. 启动项目
 
@@ -92,6 +95,7 @@ npm run dev
 - `npm run prisma:generate`
 - `npm run prisma:migrate`
 - `npm run prisma:studio`
+- `npm run db:migrate-local-to-supabase`
 - `npm run db:up`
 - `npm run db:down`
 - `npm run db:import-shipped`
@@ -110,7 +114,7 @@ npm run dev
 
 ## 当前整理结果
 
-- 已移除运行时 Supabase 依赖，API 全部改为 Prisma 查询
+- 已切换到 Supabase Postgres，运行时 API 全部改为 Prisma 查询
 - 首页和 metadata 已改为业务项目说明
 - 增加了 `.env.example` 和 Prisma / DB 开发脚本
 

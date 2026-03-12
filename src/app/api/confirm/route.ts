@@ -1,20 +1,6 @@
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/error";
-import { mysqlPool } from "@/lib/mysql";
-import type { RowDataPacket } from "mysql2/promise";
-
-type RegistrationRow = RowDataPacket & {
-  id: string;
-  status: string;
-  confirmTokenExpiresAt: string | null;
-  installType: string;
-  installerPhone: string | null;
-};
-
-type InstallerRow = RowDataPacket & {
-  id: string;
-  installCount: number | null;
-};
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
@@ -24,19 +10,16 @@ export async function POST(req: Request) {
     if (token.length < 10) return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
 
     // 1) 查记录
-    const [rows] = await mysqlPool.execute<RegistrationRow[]>(
-      `SELECT
-        id,
-        status,
-        confirm_token_expires_at AS confirmTokenExpiresAt,
-        install_type AS installType,
-        installer_phone AS installerPhone
-      FROM warranty_registrations
-      WHERE confirm_token = ?
-      LIMIT 1`,
-      [token]
-    );
-    const rec = rows[0];
+    const rec = await prisma.warrantyRegistration.findFirst({
+      where: { confirmToken: token },
+      select: {
+        id: true,
+        status: true,
+        confirmTokenExpiresAt: true,
+        installType: true,
+        installerPhone: true,
+      },
+    });
 
     if (!rec) return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 400 });
 
@@ -45,48 +28,37 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "VOID_RECORD"}, { status: 400 });
     }
 
-    const exp = rec.confirmTokenExpiresAt ? new Date(rec.confirmTokenExpiresAt).getTime() : 0;
+    const exp = rec.confirmTokenExpiresAt ? rec.confirmTokenExpiresAt.getTime() : 0;
     if (Date.now() > exp) return NextResponse.json({ error: "TOKEN_EXPIRED" }, { status: 400 });
 
-    const conn = await mysqlPool.getConnection();
-    try {
-      await conn.beginTransaction();
-
-      await conn.execute(
-        `UPDATE warranty_registrations
-         SET
-           status = 'confirmed',
-           confirmed_at = NOW(3),
-           confirmed_by = 'sms_link',
-           confirm_token = NULL,
-           confirm_token_expires_at = NULL,
-           updated_at = NOW(3)
-         WHERE id = ?`,
-        [rec.id]
-      );
+    await prisma.$transaction(async (tx) => {
+      await tx.warrantyRegistration.update({
+        where: { id: rec.id },
+        data: {
+          status: "confirmed",
+          confirmedAt: new Date(),
+          confirmedBy: "sms_link",
+          confirmToken: null,
+          confirmTokenExpiresAt: null,
+        },
+      });
 
       if (rec.installType === "installer" && rec.installerPhone) {
-        const [installerRows] = await conn.execute<InstallerRow[]>(
-          "SELECT id, install_count AS installCount FROM installers WHERE phone = ? LIMIT 1",
-          [rec.installerPhone]
-        );
-        const installer = installerRows[0];
+        const installer = await tx.installer.findUnique({
+          where: { phone: rec.installerPhone },
+          select: { id: true, installCount: true },
+        });
 
         if (installer) {
-          await conn.execute(
-            "UPDATE installers SET install_count = ?, updated_at = NOW(3) WHERE id = ?",
-            [(installer.installCount ?? 0) + 1, installer.id]
-          );
+          await tx.installer.update({
+            where: { id: installer.id },
+            data: {
+              installCount: (installer.installCount ?? 0) + 1,
+            },
+          });
         }
       }
-
-      await conn.commit();
-    } catch (error) {
-      await conn.rollback();
-      throw error;
-    } finally {
-      conn.release();
-    }
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {

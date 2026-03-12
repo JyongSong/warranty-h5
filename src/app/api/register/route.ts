@@ -4,18 +4,12 @@ import { sendSms } from "@/lib/sms";
 import { krToE164, normalizePhone } from "@/lib/phone";
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { getErrorMessage } from "@/lib/error";
-import { mysqlPool } from "@/lib/mysql";
-import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { prisma } from "@/lib/prisma";
 
 function addDays(dateStr: string, days: number) {
     const d = new Date(dateStr + "T00:00:00");
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
-}
-
-function toMysqlDatetime(date: Date | null) {
-    if (!date) return null;
-    return date.toISOString().slice(0, 23).replace("T", " ").replace("Z", "");
 }
 
 export async function POST(req: Request) {
@@ -43,38 +37,31 @@ export async function POST(req: Request) {
         if (!consentPrivacy) return NextResponse.json({ error: "CONSENT_REQUIRED" }, { status: 400 });
 
         // 1) SN 必须在出货清单中
-        const [shippedRows] = await mysqlPool.execute<RowDataPacket[]>(
-            "SELECT sn FROM shipped_devices WHERE sn = ? LIMIT 1",
-            [sn]
-        );
-        if (!shippedRows[0]) return NextResponse.json({ error: "SN_NOT_FOUND" }, { status: 400 });
+        const shipped = await prisma.shippedDevice.findUnique({ where: { sn }, select: { sn: true } });
+        if (!shipped) return NextResponse.json({ error: "SN_NOT_FOUND" }, { status: 400 });
 
         if (installType === "installer") {
-            const [installerRows] = await mysqlPool.execute<RowDataPacket[]>(
-                "SELECT id FROM installers WHERE phone = ? LIMIT 1",
-                [installerPhone]
-            );
-            if (!installerRows[0]) {
+            const installer = await prisma.installer.findUnique({
+                where: { phone: installerPhone },
+                select: { id: true },
+            });
+            if (!installer) {
                 return NextResponse.json({ error: "INSTALLER_NOT_FOUND" }, { status: 400 });
             }
         }
 
         const token = installType === "installer" ? crypto.randomBytes(16).toString("hex") : null;
-        const expiresAt =
-            installType === "installer"
-                ? toMysqlDatetime(new Date(Date.now() + 72 * 3600 * 1000))
-                : null;
+        const expiresAt = installType === "installer" ? new Date(Date.now() + 72 * 3600 * 1000) : null;
         const freeEnd = addDays(installDate, 365);
         const status = installType === "self" ? "confirmed" : "submitted";
         const confirmedAt = installType === "self" ? new Date() : null;
         const confirmedBy = installType === "self" ? "self_install" : null;
         const installerPhoneValue = installType === "installer" ? installerPhone : null;
 
-        const [existingRows] = await mysqlPool.execute<(RowDataPacket & { id: string; status: string })[]>(
-            "SELECT id, status FROM warranty_registrations WHERE sn = ? LIMIT 1",
-            [sn]
-        );
-        const existing = existingRows[0];
+        const existing = await prisma.warrantyRegistration.findUnique({
+            where: { sn },
+            select: { id: true, status: true },
+        });
 
         if (existing?.status === "confirmed") {
             return NextResponse.json({ error: "ALREADY_CONFIRMED" }, { status: 400 });
@@ -83,62 +70,44 @@ export async function POST(req: Request) {
         let regId: string;
 
         if (existing) {
-            await mysqlPool.execute<ResultSetHeader>(
-                `UPDATE warranty_registrations
-                 SET
-                   install_type = ?,
-                   install_date = ?,
-                   user_phone = ?,
-                   installer_phone = ?,
-                   consent_privacy = ?,
-                   confirm_token = ?,
-                   confirm_token_expires_at = ?,
-                   free_as_end_date = ?,
-                   submitted_at = NOW(3),
-                   status = ?,
-                   confirmed_at = ?,
-                   confirmed_by = ?,
-                   updated_at = NOW(3)
-                 WHERE id = ?`,
-                [
+            await prisma.warrantyRegistration.update({
+                where: { id: existing.id },
+                data: {
                     installType,
                     installDate,
                     userPhone,
-                    installerPhoneValue,
-                    1,
-                    token,
-                    expiresAt,
-                    freeEnd,
+                    installerPhone: installerPhoneValue,
+                    consentPrivacy: true,
+                    confirmToken: token,
+                    confirmTokenExpiresAt: expiresAt,
+                    freeAsEndDate: freeEnd,
+                    submittedAt: new Date(),
                     status,
-                    toMysqlDatetime(confirmedAt),
+                    confirmedAt,
                     confirmedBy,
-                    existing.id,
-                ]
-            );
+                },
+            });
             regId = existing.id;
         } else {
             const id = crypto.randomUUID();
-            await mysqlPool.execute<ResultSetHeader>(
-                `INSERT INTO warranty_registrations
-                  (id, sn, install_type, install_date, user_phone, installer_phone, consent_privacy, status, confirm_token, confirm_token_expires_at, free_as_end_date, submitted_at, confirmed_at, confirmed_by, created_at, updated_at)
-                 VALUES
-                  (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), ?, ?, NOW(3), NOW(3))`,
-                [
+            await prisma.warrantyRegistration.create({
+                data: {
                     id,
                     sn,
                     installType,
                     installDate,
                     userPhone,
-                    installerPhoneValue,
-                    1,
+                    installerPhone: installerPhoneValue,
+                    consentPrivacy: true,
                     status,
-                    token,
-                    expiresAt,
-                    freeEnd,
-                    toMysqlDatetime(confirmedAt),
+                    confirmToken: token,
+                    confirmTokenExpiresAt: expiresAt,
+                    freeAsEndDate: freeEnd,
+                    submittedAt: new Date(),
+                    confirmedAt,
                     confirmedBy,
-                ]
-            );
+                },
+            });
             regId = id;
         }
 

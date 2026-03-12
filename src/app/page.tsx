@@ -63,6 +63,18 @@ export default function Home() {
               기사 조회, 추가, 수정, 삭제와 설치 지표 관리를 한 페이지에서 처리합니다.
             </p>
           </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/registrations"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Registrations
+            </div>
+            <div className="mb-2 text-2xl font-semibold">설치 정보 조회</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              등록된 설치 정보와 상태, 고객 및 기사 연락처, 확인 이력을 조회합니다.
+            </p>
+          </a>
         </div>
 
         <div className="grid gap-6 rounded-[2rem] border border-black/10 bg-[#1d3129] px-6 py-8 text-white sm:grid-cols-3 sm:px-8">

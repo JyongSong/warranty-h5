@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/error";
-import { mysqlPool } from "@/lib/mysql";
-import type { RowDataPacket } from "mysql2/promise";
-
-type RegistrationRow = RowDataPacket & {
-  sn: string;
-  installDate: string;
-  userPhone: string;
-  status: string;
-  confirmTokenExpiresAt: string | null;
-  confirmedAt: string | null;
-};
+import { prisma } from "@/lib/prisma";
 
 function maskSn(sn: string) {
   if (!sn) return "";
@@ -33,27 +23,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
     }
 
-    const [rows] = await mysqlPool.execute<RegistrationRow[]>(
-      `SELECT
-        sn,
-        install_date AS installDate,
-        user_phone AS userPhone,
-        status,
-        confirm_token_expires_at AS confirmTokenExpiresAt,
-        confirmed_at AS confirmedAt
-      FROM warranty_registrations
-      WHERE confirm_token = ?
-      LIMIT 1`,
-      [token]
-    );
-    const rec = rows[0];
+    const rec = await prisma.warrantyRegistration.findFirst({
+      where: { confirmToken: token },
+      select: {
+        sn: true,
+        installDate: true,
+        userPhone: true,
+        status: true,
+        confirmTokenExpiresAt: true,
+        confirmedAt: true,
+      },
+    });
 
     if (!rec) return NextResponse.json({ error: "TOKEN_NOT_FOUND" }, { status: 404 });
 
     // token 过期也要能展示信息，但前端会提示不可确认
-    const exp = rec.confirmTokenExpiresAt
-      ? new Date(rec.confirmTokenExpiresAt).getTime()
-      : 0;
+    const exp = rec.confirmTokenExpiresAt ? rec.confirmTokenExpiresAt.getTime() : 0;
 
     return NextResponse.json({
       ok: true,

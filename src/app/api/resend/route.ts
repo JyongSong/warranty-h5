@@ -4,15 +4,7 @@ import { getBaseUrl } from "@/lib/getBaseUrl";
 import { sendSms } from "@/lib/sms";
 import { krToE164 } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
-import { mysqlPool } from "@/lib/mysql";
-import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-
-type ResendRow = RowDataPacket & {
-  id: string;
-  sn: string;
-  installerPhone: string | null;
-  status: string;
-};
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
@@ -22,18 +14,15 @@ export async function POST(req: Request) {
     if (!id) return NextResponse.json({ error: "MISSING_ID" }, { status: 400 });
 
     // 1) 先查记录
-    const [rows] = await mysqlPool.execute<ResendRow[]>(
-      `SELECT
-        id,
-        sn,
-        installer_phone AS installerPhone,
-        status
-      FROM warranty_registrations
-      WHERE id = ?
-      LIMIT 1`,
-      [id]
-    );
-    const rec = rows[0];
+    const rec = await prisma.warrantyRegistration.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        sn: true,
+        installerPhone: true,
+        status: true,
+      },
+    });
 
     if (!rec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
@@ -49,18 +38,16 @@ export async function POST(req: Request) {
 
     // 2) 生成新 token（72h）
     const token = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 72 * 3600 * 1000);
 
     // 3) 更新 token
-    await mysqlPool.execute<ResultSetHeader>(
-      `UPDATE warranty_registrations
-       SET
-         confirm_token = ?,
-         confirm_token_expires_at = ?,
-         updated_at = NOW(3)
-       WHERE id = ?`,
-      [token, expiresAt, id]
-    );
+    await prisma.warrantyRegistration.update({
+      where: { id },
+      data: {
+        confirmToken: token,
+        confirmTokenExpiresAt: expiresAt,
+      },
+    });
 
     const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
     const smsText = `[Aqara] 설치 완료 확인 링크입니다.\n${confirmLink}`;

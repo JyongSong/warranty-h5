@@ -1,19 +1,7 @@
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/error";
 import { normalizePhone } from "@/lib/phone";
-import { mysqlPool } from "@/lib/mysql";
-import type { RowDataPacket } from "mysql2/promise";
-
-type InstallerRow = RowDataPacket & {
-  id: string;
-  name: string;
-  phone: string;
-  branch: string | null;
-  region: string | null;
-  coverage: string | null;
-  category: string | null;
-  ability: string | null;
-};
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
@@ -24,15 +12,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "INVALID_PHONE" }, { status: 400 });
     }
 
-    const [rows] = await mysqlPool.execute<InstallerRow[]>(
-      `SELECT id, name, phone, branch, region, coverage, category, ability
-       FROM installers
-       WHERE phone = ?
-       LIMIT 1`,
-      [phone]
-    );
-
-    const item = rows[0];
+    const item = await prisma.installer.findUnique({
+      where: { phone },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        branch: true,
+        region: true,
+        coverage: true,
+        category: true,
+        ability: true,
+      },
+    });
 
     if (!item) {
       return NextResponse.json({ error: "INSTALLER_NOT_FOUND" }, { status: 404 });
