@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { AuthAdmin } from "@/lib/adminAuth";
 import { formatKrPhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
 
@@ -43,7 +44,7 @@ function formatDateTime(value: string | null) {
   return value.replace("T", " ").slice(0, 16);
 }
 
-export default function RegistrationsClient() {
+export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<RegistrationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -98,13 +99,30 @@ export default function RegistrationsClient() {
     };
   }, [query, selectedId]);
 
+  async function onLogout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    window.location.href = "/auth";
+  }
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#eef2f4_0%,#fafaf7_55%,#ffffff_100%)] px-4 py-8 text-zinc-900 sm:px-6">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
         <aside className="rounded-[2rem] border border-black/10 bg-white/85 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur">
-          <div className="mb-4">
-            <div className="text-sm uppercase tracking-[0.2em] text-zinc-500">Registrations</div>
-            <h1 className="text-2xl font-semibold">설치 정보 조회</h1>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm uppercase tracking-[0.2em] text-zinc-500">Registrations</div>
+              <h1 className="text-2xl font-semibold">설치 정보 조회</h1>
+              <div className="mt-1 text-xs text-zinc-500">
+                {admin.name} / 권한 등급 {admin.level}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700"
+            >
+              로그아웃
+            </button>
           </div>
 
           <input

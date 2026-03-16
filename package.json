@@ -13,6 +13,7 @@
     "prisma:studio": "prisma studio",
     "db:setup-supabase": "node scripts/setup-supabase-schema.mjs",
     "db:migrate-local-to-supabase": "node scripts/migrate-local-mysql-to-supabase.mjs",
+    "db:sync-default-admin": "node scripts/sync-default-admin.mjs",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:import-shipped": "node scripts/import-shipped-devices.mjs",

@@ -6,17 +6,17 @@ import { getErrorMessage } from "@/lib/error";
 export default function SuccessPage() {
   const [link, setLink] = useState("");
   const [regId, setRegId] = useState("");
-  const [status, setStatus] = useState("");
   const [installType, setInstallType] = useState("");
+  const [freeAsEndDate, setFreeAsEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const isSelfInstall = installType === "self" || status === "confirmed";
+  const isSelfInstall = installType === "self";
 
   useEffect(() => {
     setLink(sessionStorage.getItem("lastConfirmLink") || "");
     setRegId(sessionStorage.getItem("lastRegistrationId") || "");
-    setStatus(sessionStorage.getItem("lastRegistrationStatus") || "");
     setInstallType(sessionStorage.getItem("lastInstallType") || "");
+    setFreeAsEndDate(sessionStorage.getItem("lastFreeAsEndDate") || "");
   }, []);
 
   async function onResend() {
@@ -59,6 +59,28 @@ export default function SuccessPage() {
           ? "자가 설치로 접수되어 즉시 확인 완료 처리되었습니다."
           : "설치 기사님께 설치 완료 확인 링크를 문자로 전송했습니다. 문자를 받지 못하셨다면 아래 버튼으로 재전송해 주세요."}
       </p>
+
+      {freeAsEndDate ? (
+        <div
+          style={{
+            background: "#f6f7f9",
+            padding: 12,
+            borderRadius: 10,
+            fontSize: 14,
+            lineHeight: 1.6,
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <strong>무상 A/S 종료일:</strong> {freeAsEndDate}
+          </div>
+          {isSelfInstall ? (
+            <div style={{ marginTop: 6, color: "#8a4b00" }}>
+              설치로 발생한 불량은 무상 AS 어려울 수 있습니다.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {msg && (
         <div style={{ background: "#f6f7f9", padding: 12, borderRadius: 10, fontSize: 14 }}>

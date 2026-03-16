@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/adminAuth";
 import { getErrorMessage } from "@/lib/error";
 import { parseInstallerPayload } from "@/lib/installer";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,9 @@ type Context = {
 
 export async function PATCH(req: Request, context: Context) {
   try {
+    const { errorResponse } = await requireAdminApi(1);
+    if (errorResponse) return errorResponse;
+
     const { id } = await context.params;
     const body = await req.json();
     const data = parseInstallerPayload(body);
@@ -29,6 +33,9 @@ export async function PATCH(req: Request, context: Context) {
 
 export async function DELETE(_req: Request, context: Context) {
   try {
+    const { errorResponse } = await requireAdminApi(1);
+    if (errorResponse) return errorResponse;
+
     const { id } = await context.params;
 
     await prisma.installer.delete({ where: { id } });

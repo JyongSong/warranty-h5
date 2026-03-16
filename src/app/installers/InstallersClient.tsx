@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { AuthAdmin } from "@/lib/adminAuth";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
 
@@ -51,6 +52,82 @@ const emptyForm: FormState = {
   dissatisfactionNote: "",
 };
 
+const exportHeaders = [
+  "성명",
+  "전화번호",
+  "지점",
+  "광역",
+  "지역",
+  "주소",
+  "분류",
+  "능력",
+  "설치 횟수",
+  "Happy Call LT",
+  "불량 횟수",
+  "불만 사항",
+  "수정일",
+];
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function exportInstallersToExcel(items: InstallerItem[]) {
+  const rows = items.map((item) => [
+    item.name ?? "",
+    formatKrPhone(item.phone ?? ""),
+    item.branch ?? "",
+    item.region ?? "",
+    item.coverage ?? "",
+    item.address ?? "",
+    item.category ?? "",
+    item.ability ?? "",
+    item.installCount == null ? "" : String(item.installCount),
+    item.happyCallLt == null ? "" : String(item.happyCallLt),
+    item.defectCount == null ? "" : String(item.defectCount),
+    item.dissatisfactionNote ?? "",
+    item.updatedAt ? item.updatedAt.replace("T", " ").slice(0, 16) : "",
+  ]);
+
+  const tableRows = [exportHeaders, ...rows]
+    .map(
+      (cols) =>
+        `<tr>${cols.map((col) => `<td>${escapeHtml(col)}</td>`).join("")}</tr>`
+    )
+    .join("");
+
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:x="urn:schemas-microsoft-com:office:excel"
+          xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <table>${tableRows}</table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob(["\ufeff", html], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `installers-${stamp}.xls`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function toFormState(item: InstallerItem): FormState {
   return {
     name: item.name ?? "",
@@ -68,7 +145,7 @@ function toFormState(item: InstallerItem): FormState {
   };
 }
 
-export default function InstallersClient() {
+export default function InstallersClient({ admin }: { admin: AuthAdmin }) {
   const [query, setQuery] = useState("");
   const [allItems, setAllItems] = useState<InstallerItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -79,6 +156,7 @@ export default function InstallersClient() {
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canManageInstallers = admin.level >= 1;
 
   const selectedItem = useMemo(
     () => allItems.find((item) => item.id === selectedId) ?? null,
@@ -163,6 +241,7 @@ export default function InstallersClient() {
   }, []);
 
   function startCreate() {
+    if (!canManageInstallers) return;
     setSelectedId(null);
     setForm(emptyForm);
     setMessage(null);
@@ -194,6 +273,7 @@ export default function InstallersClient() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canManageInstallers) return;
     setSaving(true);
     setMessage(null);
     setError(null);
@@ -230,6 +310,7 @@ export default function InstallersClient() {
   }
 
   async function onDelete() {
+    if (!canManageInstallers) return;
     if (!selectedId || !selectedItem) return;
     if (!window.confirm(`${selectedItem.name} 기사를 삭제할까요?`)) return;
 
@@ -256,6 +337,11 @@ export default function InstallersClient() {
     }
   }
 
+  async function onLogout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    window.location.href = "/auth";
+  }
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f2ede4_0%,#fbfaf7_50%,#ffffff_100%)] px-4 py-8 text-zinc-900 sm:px-6">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -264,15 +350,42 @@ export default function InstallersClient() {
             <div>
               <div className="text-sm uppercase tracking-[0.2em] text-zinc-500">Installers</div>
               <h1 className="text-2xl font-semibold">기사 관리</h1>
+              <div className="mt-1 text-xs text-zinc-500">
+                {admin.name} / 권한 등급 {admin.level}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={startCreate}
-              className="rounded-full bg-[#1d3129] px-4 py-2 text-sm font-semibold text-white"
-            >
-              새 기사
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onLogout}
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700"
+              >
+                로그아웃
+              </button>
+              <button
+                type="button"
+                onClick={() => exportInstallersToExcel(items)}
+                disabled={items.length === 0}
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 disabled:opacity-50"
+              >
+                Excel 내보내기
+              </button>
+              <button
+                type="button"
+                onClick={startCreate}
+                disabled={!canManageInstallers}
+                className="rounded-full bg-[#1d3129] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                새 기사
+              </button>
+            </div>
           </div>
+
+          {!canManageInstallers ? (
+            <div className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              현재 계정은 조회 전용입니다. 등급 1 계정만 기사 추가, 수정, 삭제가 가능합니다.
+            </div>
+          ) : null}
 
           <input
             value={query}
@@ -340,7 +453,7 @@ export default function InstallersClient() {
               <button
                 type="button"
                 onClick={onDelete}
-                disabled={deleting}
+                disabled={deleting || !canManageInstallers}
                 className="rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
               >
                 {deleting ? "삭제 중..." : "기사 삭제"}
@@ -460,7 +573,7 @@ export default function InstallersClient() {
             <div className="flex flex-wrap gap-3 pt-2">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !canManageInstallers}
                 className="rounded-full bg-[#1d3129] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {saving ? "저장 중..." : selectedId ? "기사 정보 저장" : "기사 추가"}
@@ -468,7 +581,8 @@ export default function InstallersClient() {
               <button
                 type="button"
                 onClick={startCreate}
-                className="rounded-full border border-zinc-300 px-5 py-3 text-sm font-semibold text-zinc-700"
+                disabled={!canManageInstallers}
+                className="rounded-full border border-zinc-300 px-5 py-3 text-sm font-semibold text-zinc-700 disabled:opacity-50"
               >
                 새 입력으로 초기화
               </button>

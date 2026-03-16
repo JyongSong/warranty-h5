@@ -112,7 +112,13 @@ export async function POST(req: Request) {
         }
 
         if (installType === "self") {
-            return NextResponse.json({ ok: true, id: regId, status: "confirmed", installType });
+            return NextResponse.json({
+                ok: true,
+                id: regId,
+                status: "confirmed",
+                installType,
+                freeAsEndDate: freeEnd,
+            });
         }
 
         const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token as string)}`;
@@ -121,7 +127,14 @@ export async function POST(req: Request) {
 
         console.log("[SMS MOCK] to:", installerPhone, "link:", confirmLink);
 
-        return NextResponse.json({ ok: true, id: regId, confirmLink, status: "submitted", installType });
+        return NextResponse.json({
+            ok: true,
+            id: regId,
+            confirmLink,
+            status: "submitted",
+            installType,
+            freeAsEndDate: freeEnd,
+        });
     } catch (error: unknown) {
         return NextResponse.json({ error: getErrorMessage(error, "UNKNOWN_ERROR") }, { status: 500 });
     }

@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/error";
 import { normalizePhone } from "@/lib/phone";
 import { parseInstallerPayload } from "@/lib/installer";
+import { requireAdminApi } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
+    const { errorResponse } = await requireAdminApi();
+    if (errorResponse) return errorResponse;
+
     const { searchParams } = new URL(req.url);
     const query = String(searchParams.get("query") ?? "").trim();
     const phone = normalizePhone(query);
@@ -43,6 +47,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const { errorResponse } = await requireAdminApi(1);
+    if (errorResponse) return errorResponse;
+
     const body = await req.json();
     const data = parseInstallerPayload(body);
 

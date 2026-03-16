@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/adminAuth";
 import { getErrorMessage } from "@/lib/error";
 import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
+    const { errorResponse } = await requireAdminApi();
+    if (errorResponse) return errorResponse;
+
     const { searchParams } = new URL(req.url);
     const query = String(searchParams.get("query") ?? "").trim();
     const normalizedPhone = normalizePhone(query);

@@ -38,8 +38,17 @@ npm install
 - `DIRECT_URL`: Supabase direct/session 连接串，供 Prisma schema push / migrate
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase 前端配置
 - `SUPABASE_SERVICE_ROLE_KEY`: 服务端高权限 key
+- `MANAGEMENT_ACCESS_CODE`: 기본 관리자 로그인 코드, `admins.login_code` 초기값 동기화에도 사용
+- `MANAGEMENT_SESSION_SECRET`: 관리 페이지 세션 서명용 secret
+- `MANAGEMENT_ADMIN_NAME`: 기본 관리자 이름
+- `MANAGEMENT_ADMIN_LEVEL`: 기본 관리자 등급
 - `NEXT_PUBLIC_BASE_URL`: 生成短信确认链接时使用的站点地址
 - `SMS_PROVIDER`: `mock` 或 `twilio`
+- `CAFE24_MALL_ID` / `CAFE24_CLIENT_ID` / `CAFE24_CLIENT_SECRET` / `CAFE24_REDIRECT_URI`: Cafe24 OAuth 配置
+- `CAFE24_SCOPE`: Cafe24 OAuth scope
+- `CAFE24_STATE_SECRET`: Cafe24 OAuth `state` 서명용 secret
+- `CAFE24_SMS_SENDER_NO`: Cafe24 SMS 发信号码
+- `INTERNAL_API_KEY`: 其他项目调用本项目内部 SMS API 时使用
 - `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM`: 使用 Twilio 时必填
 
 ### 3. 初始化 Supabase 数据库
@@ -63,7 +72,20 @@ npm run db:up
 npm run db:migrate-local-to-supabase
 ```
 
-### 5. 导入 CSV（可选）
+### 5. 기본 관리자 동기화
+
+`admins` 表用于管理登录码、姓名、等级。默认会用环境变量里的管理员信息做一次 upsert：
+
+```bash
+npm run db:sync-default-admin
+```
+
+其中：
+
+- `level = 1`: 可新增、删除、修改 `installers`
+- `level = 0`: 仅查看
+
+### 6. 导入 CSV（可选）
 
 将 CSV 放在 [data/shipped.csv](/Users/zhiyongsong/warranty-h5/data/shipped.csv)，然后执行：
 
@@ -79,13 +101,41 @@ npm run db:import-installers
 
 该脚本用于从 CSV 刷新安装人员数据。
 
-### 6. 启动项目
+### 7. 启动项目
 
 ```bash
 npm run dev
 ```
 
 打开 [http://localhost:3000](http://localhost:3000)。
+
+## Cafe24 集成
+
+这个项目现在可以作为统一的 Cafe24 OAuth / SMS 入口：
+
+- `GET /api/cafe24/authorize`: 发起 Cafe24 OAuth
+- `GET /api/cafe24/callback`: 接收 `code` 并换取 token
+- `GET /api/cafe24/status`: 查看当前 token 状态
+- `POST /api/internal/sms`: 供其他项目通过内部 key 调用短信发送
+
+如果要让本项目自己通过 Cafe24 发短信：
+
+```env
+SMS_PROVIDER=cafe24
+```
+
+如果其他项目要共用这里的短信能力，调用：
+
+```http
+POST /api/internal/sms
+x-internal-key: <INTERNAL_API_KEY>
+content-type: application/json
+
+{
+  "to": "01012345678",
+  "text": "문자 내용"
+}
+```
 
 ## 常用脚本
 
@@ -96,6 +146,7 @@ npm run dev
 - `npm run prisma:migrate`
 - `npm run prisma:studio`
 - `npm run db:migrate-local-to-supabase`
+- `npm run db:sync-default-admin`
 - `npm run db:up`
 - `npm run db:down`
 - `npm run db:import-shipped`

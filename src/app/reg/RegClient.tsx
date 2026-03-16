@@ -129,6 +129,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       sessionStorage.setItem("lastConfirmLink", data?.confirmLink ?? "");
       sessionStorage.setItem("lastRegistrationStatus", data?.status ?? "");
       sessionStorage.setItem("lastInstallType", data?.installType ?? installType);
+      sessionStorage.setItem("lastFreeAsEndDate", data?.freeAsEndDate ?? "");
 
       router.push("/success");
     } catch (error: unknown) {

@@ -22,6 +22,7 @@ function queryMysql(sql) {
       "exec",
       "warranty_mysql",
       "mysql",
+      "--default-character-set=utf8mb4",
       "-uroot",
       "-proot",
       "-Dwarranty",
