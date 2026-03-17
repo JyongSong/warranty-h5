@@ -279,15 +279,20 @@ export async function getCafe24SmsSetting() {
     | Record<string, unknown>;
 
   if (!r.ok) {
-    throw new Error(
+    const errorMessage =
       typeof data === "object" && data
-        ? "error" in data && data.error?.message
-          ? String(data.error.message)
-          : "message" in data && data.message
-            ? String(data.message)
+        ? "error" in data &&
+          data.error &&
+          typeof data.error === "object" &&
+          "message" in data.error &&
+          typeof data.error.message === "string"
+          ? data.error.message
+          : "message" in data && typeof data.message === "string"
+            ? data.message
             : "CAFE24_SMS_SETTING_FAILED"
-        : "CAFE24_SMS_SETTING_FAILED"
-    );
+        : "CAFE24_SMS_SETTING_FAILED";
+
+    throw new Error(errorMessage);
   }
 
   return data;
