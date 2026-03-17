@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
     await sendSms(krToE164(rec.installerPhone), smsText);
 
-    console.log("[SMS MOCK][RESEND] to:", rec.installerPhone, "link:", confirmLink);
+    console.log("[SMS SENT][RESEND] to:", rec.installerPhone, "link:", confirmLink);
 
     return NextResponse.json({ ok: true, confirmLink });
   } catch (error: unknown) {

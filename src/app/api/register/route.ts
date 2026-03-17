@@ -125,7 +125,7 @@ export async function POST(req: Request) {
         const smsText = `설치 정보 확인 링크입니다. 확인해주시면 설치 날짜부터 보증기간 적용됩니다.\n${confirmLink}`;
         await sendSms(krToE164(installerPhone), smsText);
 
-        console.log("[SMS MOCK] to:", installerPhone, "link:", confirmLink);
+        console.log("[SMS SENT][REGISTER] to:", installerPhone, "link:", confirmLink);
 
         return NextResponse.json({
             ok: true,

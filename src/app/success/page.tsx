@@ -42,7 +42,7 @@ export default function SuccessPage() {
 
       setLink(j.confirmLink);
       sessionStorage.setItem("lastConfirmLink", j.confirmLink);
-      setMsg("확인 링크를 재전송했습니다. (현재는 테스트 모드로 링크가 화면에 표시됩니다.)");
+      setMsg("확인 링크를 재전송했습니다. 아래 예비 확인 링크도 함께 확인하실 수 있습니다.");
     } catch (error: unknown) {
       setMsg(getErrorMessage(error, "재전송에 실패했습니다."));
     } finally {
@@ -111,7 +111,7 @@ export default function SuccessPage() {
       {!isSelfInstall && link && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 13, marginBottom: 6, opacity: 0.85 }}>
-            테스트용 확인 링크:
+            예비 확인 링크:
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
