@@ -1,5 +1,6 @@
 import { requireAdminPage } from "@/lib/adminAuth";
 import { getCafe24Status } from "@/lib/cafe24";
+import Cafe24Actions from "@/app/cafe24/Cafe24Actions";
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "-";
@@ -31,20 +32,7 @@ export default async function Cafe24Page() {
           <InfoCard label="갱신 시각" value={formatDate(status.token?.updatedAt)} />
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/api/cafe24/authorize"
-            className="rounded-full bg-[#173045] px-5 py-3 text-sm font-semibold text-white"
-          >
-            Cafe24 연결 시작
-          </a>
-          <a
-            href="/api/cafe24/status"
-            className="rounded-full border border-zinc-300 px-5 py-3 text-sm font-semibold text-zinc-700"
-          >
-            상태 JSON 보기
-          </a>
-        </div>
+        <Cafe24Actions />
       </div>
     </div>
   );
