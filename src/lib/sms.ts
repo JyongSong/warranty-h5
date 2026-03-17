@@ -4,6 +4,16 @@ type SmsProvider = "mock" | "twilio" | "internal" | "cafe24";
 
 const PROVIDER = (process.env.SMS_PROVIDER as SmsProvider) || "mock";
 
+function toCafe24Recipient(input: string) {
+  const digits = input.replace(/[^\d]/g, "");
+
+  if (digits.startsWith("82") && digits.length >= 11) {
+    return `0${digits.slice(2)}`;
+  }
+
+  return digits;
+}
+
 export async function sendSms(toE164: string, text: string) {
   if (PROVIDER === "mock") {
     console.log("[SMS MOCK] to:", toE164, "text:", text);
@@ -30,8 +40,7 @@ export async function sendSms(toE164: string, text: string) {
   }
 
   if (PROVIDER === "cafe24") {
-    const digits = toE164.replace(/[^\d]/g, "");
-    await sendCafe24Sms(digits, text);
+    await sendCafe24Sms(toCafe24Recipient(toE164), text);
     return { ok: true };
   }
 
