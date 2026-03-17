@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     });
 
     const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
-    const smsText = `[Aqara] 설치 완료 확인 링크입니다.\n${confirmLink}`;
+    const smsText = `설치 정보 확인 링크입니다. 확인해주시면 설치 날짜부터 보증기간 적용됩니다.\n${confirmLink}`;
 
     await sendSms(krToE164(rec.installerPhone), smsText);
 

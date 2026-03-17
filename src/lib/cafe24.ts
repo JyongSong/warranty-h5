@@ -231,19 +231,29 @@ export async function sendCafe24Sms(toDigits: string, content: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      sender_no: senderNo,
-      content,
-      recipients: [toDigits],
+      request: {
+        shop_no: 1,
+        sender_no: Number(senderNo),
+        type: "SMS",
+        content,
+        recipients: [toDigits],
+      },
     }),
     cache: "no-store",
   });
 
-  const data = await r.json().catch(() => ({}));
+  const data = (await r.json().catch(() => ({}))) as
+    | { error?: { message?: string } }
+    | { message?: string };
 
   if (!r.ok) {
     throw new Error(
-      typeof data === "object" && data && "message" in data
-        ? String(data.message)
+      typeof data === "object" && data
+        ? "error" in data && data.error?.message
+          ? String(data.error.message)
+          : "message" in data && data.message
+            ? String(data.message)
+            : "CAFE24_SMS_SEND_FAILED"
         : "CAFE24_SMS_SEND_FAILED"
     );
   }
