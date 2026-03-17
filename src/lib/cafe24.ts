@@ -261,6 +261,38 @@ export async function sendCafe24Sms(toDigits: string, content: string) {
   return data;
 }
 
+export async function getCafe24SmsSetting() {
+  const mallId = getCafe24MallId();
+  const accessToken = await getActiveCafe24Token();
+
+  const r = await fetch(`https://${mallId}.cafe24api.com/api/v2/admin/sms/setting`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const data = (await r.json().catch(() => ({}))) as
+    | { error?: { message?: string } }
+    | { message?: string }
+    | Record<string, unknown>;
+
+  if (!r.ok) {
+    throw new Error(
+      typeof data === "object" && data
+        ? "error" in data && data.error?.message
+          ? String(data.error.message)
+          : "message" in data && data.message
+            ? String(data.message)
+            : "CAFE24_SMS_SETTING_FAILED"
+        : "CAFE24_SMS_SETTING_FAILED"
+    );
+  }
+
+  return data;
+}
+
 export async function getCafe24Status() {
   const mallId = process.env.CAFE24_MALL_ID?.trim() || null;
 
