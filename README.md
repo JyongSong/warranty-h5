@@ -42,9 +42,9 @@ npm install
 - `MANAGEMENT_SESSION_SECRET`: 관리 페이지 세션 서명용 secret
 - `MANAGEMENT_ADMIN_NAME`: 기본 관리자 이름
 - `MANAGEMENT_ADMIN_LEVEL`: 기본 관리자 등급
-- `NEXT_PUBLIC_BASE_URL`: 生成短信确认链接时使用的站点地址
+- `NEXT_PUBLIC_BASE_URL`: 生成短信确认链接时使用的站点地址，例如 `https://warranty-aqaralife.vercel.app`
 - `SMS_PROVIDER`: `mock` 或 `twilio`
-- `CAFE24_MALL_ID` / `CAFE24_CLIENT_ID` / `CAFE24_CLIENT_SECRET` / `CAFE24_REDIRECT_URI`: Cafe24 OAuth 配置
+- `CAFE24_MALL_ID` / `CAFE24_CLIENT_ID` / `CAFE24_CLIENT_SECRET` / `CAFE24_REDIRECT_URI`: Cafe24 OAuth 配置，例如 `https://warranty-aqaralife.vercel.app/api/cafe24/callback`
 - `CAFE24_SCOPE`: Cafe24 OAuth scope
 - `CAFE24_STATE_SECRET`: Cafe24 OAuth `state` 서명용 secret
 - `CAFE24_SMS_SENDER_NO`: Cafe24 SMS 发信号码
