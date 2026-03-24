@@ -63,6 +63,18 @@ export default function Home() {
               OAuth 토큰 상태를 확인하고 이 프로젝트를 SMS 통합 발송 진입점으로 사용합니다.
             </p>
           </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/ble_upgrade"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Upgrade
+            </div>
+            <div className="mb-2 text-2xl font-semibold">BLE 유료 업그레이드</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              BLE 기기를 Zigbee로 유료 업그레이드하고 결제 상태를 관리합니다.
+            </p>
+          </a>
         </div>
 
         <div className="grid gap-6 rounded-[2rem] border border-black/10 bg-[#1d3129] px-6 py-8 text-white sm:grid-cols-3 sm:px-8">
