@@ -183,23 +183,23 @@ export default function SurveyClient() {
           />
         </div>
 
-        {/* 지역 */}
+        {/* 광역 */}
         <div style={fieldGap}>
-          <label style={labelStyle}>지역</label>
+          <label style={labelStyle}>광역</label>
           <input
             style={inputStyle}
-            placeholder="서울, 경기 등"
+            placeholder="예: 서울, 경기, 충북 등"
             value={region}
             onChange={(e) => setRegion(e.target.value)}
           />
         </div>
 
-        {/* 담당 지역 */}
+        {/* 출장 가능 지역 */}
         <div style={fieldGap}>
-          <label style={labelStyle}>담당 지역</label>
+          <label style={labelStyle}>출장 가능 지역</label>
           <input
             style={inputStyle}
-            placeholder="담당 설치 지역"
+            placeholder="예: 서울 강남구, 부천시, 청주시 등"
             value={coverage}
             onChange={(e) => setCoverage(e.target.value)}
           />
