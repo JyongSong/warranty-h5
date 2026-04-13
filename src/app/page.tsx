@@ -65,6 +65,18 @@ export default function Home() {
           </a>
           <a
             className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/survey"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Survey
+            </div>
+            <div className="mb-2 text-2xl font-semibold">기사 설문</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              설치 기사에게 링크를 공유하여 기사 정보를 등록합니다.
+            </p>
+          </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
             href="/ble_upgrade"
           >
             <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
