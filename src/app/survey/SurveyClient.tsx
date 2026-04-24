@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-const ABILITY_OPTIONS = ["도어락", "도어벨", "월패드 연동기", "기타"] as const;
+const ABILITY_OPTIONS = ["도어락", "도어벨", "월패드 연동기"] as const;
 
 export default function SurveyClient() {
   const [name, setName] = useState("");
@@ -27,6 +27,8 @@ export default function SurveyClient() {
   const [address, setAddress] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
   const [abilities, setAbilities] = useState<string[]>([]);
+  const [abilityEtcChecked, setAbilityEtcChecked] = useState(false);
+  const [abilityEtc, setAbilityEtc] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,15 @@ export default function SurveyClient() {
           region: region.trim(),
           coverage: coverage.trim(),
           address: fullAddress || undefined,
-          ability: abilities.length > 0 ? abilities.join(", ") : undefined,
+          ability: (() => {
+            const list = [...abilities];
+            if (abilityEtcChecked && abilityEtc.trim()) {
+              list.push(`기타: ${abilityEtc.trim()}`);
+            } else if (abilityEtcChecked) {
+              list.push("기타");
+            }
+            return list.length > 0 ? list.join(", ") : undefined;
+          })(),
         }),
       });
 
@@ -253,7 +263,7 @@ export default function SurveyClient() {
         {/* 설치 가능 항목 (다중 선택) */}
         <div style={fieldGap}>
           <label style={labelStyle}>설치 가능 항목</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
             {ABILITY_OPTIONS.map((item) => (
               <label
                 key={item}
@@ -274,7 +284,35 @@ export default function SurveyClient() {
                 {item}
               </label>
             ))}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={abilityEtcChecked}
+                onChange={(e) => {
+                  setAbilityEtcChecked(e.target.checked);
+                  if (!e.target.checked) setAbilityEtc("");
+                }}
+                style={{ width: 18, height: 18 }}
+              />
+              기타
+            </label>
           </div>
+          {abilityEtcChecked && (
+            <input
+              style={inputStyle}
+              placeholder="기타 설치 가능 항목을 입력해 주세요"
+              value={abilityEtc}
+              onChange={(e) => setAbilityEtc(e.target.value)}
+            />
+          )}
         </div>
 
         {/* Error */}
