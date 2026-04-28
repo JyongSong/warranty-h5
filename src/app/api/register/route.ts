@@ -17,11 +17,17 @@ export async function POST(req: Request) {
         const body = await req.json();
 
         const sn = String(body.sn ?? "").trim();
-        const installType = body.installType === "self" ? "self" : "installer";
+        const installType =
+            body.installType === "self"
+                ? "self"
+                : body.installType === "external"
+                  ? "external"
+                  : "installer";
         const installDate = String(body.installDate ?? "");
         const userPhone = normalizePhone(body.userPhone);
         const installerPhone = normalizePhone(body.installerPhone);
         const consentPrivacy = body.consentPrivacy === true;
+        const requiresInstallerPhone = installType === "installer" || installType === "external";
 
         if (!sn || sn.length < 6) return NextResponse.json({ error: "INVALID_SN" }, { status: 400 });
         if (!/^\d{4}-\d{2}-\d{2}$/.test(installDate))
@@ -31,7 +37,7 @@ export async function POST(req: Request) {
         if (installDate > today) return NextResponse.json({ error: "INSTALL_DATE_IN_FUTURE" }, { status: 400 });
 
         if (userPhone.length < 9) return NextResponse.json({ error: "INVALID_USER_PHONE" }, { status: 400 });
-        if (installType === "installer" && installerPhone.length < 9) {
+        if (requiresInstallerPhone && installerPhone.length < 9) {
             return NextResponse.json({ error: "INVALID_INSTALLER_PHONE" }, { status: 400 });
         }
         if (!consentPrivacy) return NextResponse.json({ error: "CONSENT_REQUIRED" }, { status: 400 });
@@ -50,13 +56,14 @@ export async function POST(req: Request) {
             }
         }
 
-        const token = installType === "installer" ? crypto.randomBytes(16).toString("hex") : null;
-        const expiresAt = installType === "installer" ? new Date(Date.now() + 72 * 3600 * 1000) : null;
-        const freeEnd = addDays(installDate, 365);
+        const token = requiresInstallerPhone ? crypto.randomBytes(16).toString("hex") : null;
+        const expiresAt = requiresInstallerPhone ? new Date(Date.now() + 72 * 3600 * 1000) : null;
+        // 본사 공인 기사 시공만 2년 무상 A/S, 자가/외부 기사는 1년
+        const freeEnd = addDays(installDate, installType === "installer" ? 730 : 365);
         const status = installType === "self" ? "confirmed" : "submitted";
         const confirmedAt = installType === "self" ? new Date() : null;
         const confirmedBy = installType === "self" ? "self_install" : null;
-        const installerPhoneValue = installType === "installer" ? installerPhone : null;
+        const installerPhoneValue = requiresInstallerPhone ? installerPhone : null;
 
         const existing = await prisma.warrantyRegistration.findUnique({
             where: { sn },

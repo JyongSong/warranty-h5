@@ -9,6 +9,7 @@ import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
 type Model = "L100" | "K100" | "U100";
 type InstallType = "installer" | "self";
+type InstallerCheckStatus = "idle" | "registered" | "external";
 type InstallerItem = {
   id: string;
   name: string;
@@ -18,6 +19,9 @@ type InstallerItem = {
   coverage: string | null;
   category: string | null;
 };
+
+const EXTERNAL_INSTALLER_NOTICE =
+  "본사 공인 설치 기사가 아닙니다. 본사 공인 기사가 시공해야 2년 무상 A/S 혜택을 받으실 수 있습니다.";
 
 export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const router = useRouter();
@@ -35,7 +39,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const [installerPhone, setInstallerPhone] = useState("");
   const [selectedInstaller, setSelectedInstaller] = useState<InstallerItem | null>(null);
   const [verifyingInstaller, setVerifyingInstaller] = useState(false);
-  const [installerVerified, setInstallerVerified] = useState(false);
+  const [installerCheckStatus, setInstallerCheckStatus] = useState<InstallerCheckStatus>("idle");
   const [installerVerifyMessage, setInstallerVerifyMessage] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
 
@@ -47,7 +51,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       installDate.length === 10 &&
       normalizePhone(userPhone).length >= 9 &&
       (installType === "self" ||
-        (normalizePhone(installerPhone).length >= 9 && !!selectedInstaller && installerVerified)) &&
+        (normalizePhone(installerPhone).length >= 9 && installerCheckStatus !== "idle")) &&
       consent &&
       !loading
     );
@@ -56,8 +60,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
     installDate,
     userPhone,
     installerPhone,
-    selectedInstaller,
-    installerVerified,
+    installerCheckStatus,
     installType,
     consent,
     loading,
@@ -66,7 +69,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   async function verifyInstallerPhone() {
     const phone = normalizePhone(installerPhone);
     if (phone.length < 9) {
-      setInstallerVerified(false);
+      setInstallerCheckStatus("idle");
       setInstallerVerifyMessage("기사 전화번호를 먼저 입력해 주세요.");
       return;
     }
@@ -80,6 +83,13 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       });
       const data = await r.json().catch(() => ({}));
 
+      if (r.status === 404 && data?.error === "INSTALLER_NOT_FOUND") {
+        setSelectedInstaller(null);
+        setInstallerCheckStatus("external");
+        setInstallerVerifyMessage(EXTERNAL_INSTALLER_NOTICE);
+        return;
+      }
+
       if (!r.ok) {
         throw new Error(data?.error ?? "기사 확인에 실패했습니다.");
       }
@@ -87,11 +97,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       const installer = data?.item as InstallerItem;
       setSelectedInstaller(installer);
       setInstallerPhone(installer.phone);
-      setInstallerVerified(true);
+      setInstallerCheckStatus("registered");
       setInstallerVerifyMessage("기사님 전화가 확인되었습니다.");
     } catch (error: unknown) {
       setSelectedInstaller(null);
-      setInstallerVerified(false);
+      setInstallerCheckStatus("idle");
       setInstallerVerifyMessage(getErrorMessage(error, "기사 확인에 실패했습니다."));
     } finally {
       setVerifyingInstaller(false);
@@ -103,12 +113,19 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
     setLoading(true);
 
     try {
+      const finalInstallType =
+        installType === "self"
+          ? "self"
+          : installerCheckStatus === "external"
+            ? "external"
+            : "installer";
+
       const payload = {
         sn: sn.trim(),
-        installType,
+        installType: finalInstallType,
         installDate,
         userPhone: normalizePhone(userPhone),
-        installerPhone: installType === "installer" ? normalizePhone(installerPhone) : "",
+        installerPhone: installType === "self" ? "" : normalizePhone(installerPhone),
         consentPrivacy: consent,
       };
 
@@ -163,7 +180,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
                 setInstallType("self");
                 setInstallerPhone("");
                 setSelectedInstaller(null);
-                setInstallerVerified(false);
+                setInstallerCheckStatus("idle");
                 setInstallerVerifyMessage(null);
               }}
               style={typeButtonStyle(installType === "self")}
@@ -183,7 +200,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           <select
             value={model}
             onChange={(e) => setModel(e.target.value as Model)}
-            style={{ height: 40, padding: "0 12px" }}
+            style={inputStyle}
           >
             <option value="L100">L100 도어락</option>
             <option value="K100">K100 도어락</option>
@@ -199,7 +216,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               value={sn}
               onChange={(e) => setSn(e.target.value)}
               placeholder={model === "K100" ? "예: AKSXXXXXXX" : "예: A1B2C3D4..."}
-              style={{ height: 40, padding: "0 12px", flex: 1 }}
+              style={{ ...inputStyle, flex: 1 }}
             />
             <button
               type="button"
@@ -227,7 +244,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             type="date"
             value={installDate}
             onChange={(e) => setInstallDate(e.target.value)}
-            style={{ height: 40, padding: "0 12px" }}
+            style={inputStyle}
           />
         </label>
 
@@ -237,7 +254,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             value={userPhone}
             onChange={(e) => setUserPhone(e.target.value)}
             placeholder="숫자만 입력"
-            style={{ height: 40, padding: "0 12px" }}
+            style={inputStyle}
           />
         </label>
 
@@ -249,34 +266,25 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               onChange={(e) => {
                 setInstallerPhone(e.target.value);
                 setSelectedInstaller(null);
-                setInstallerVerified(false);
+                setInstallerCheckStatus("idle");
                 setInstallerVerifyMessage(null);
               }}
               placeholder="기사 전화번호 입력"
-              style={{ height: 40, padding: "0 12px" }}
+              style={inputStyle}
             />
             <button
               type="button"
               onClick={verifyInstallerPhone}
               disabled={verifyingInstaller}
-              style={{
-                height: 42,
-                borderRadius: 12,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                fontWeight: 700,
-                cursor: verifyingInstaller ? "not-allowed" : "pointer",
-                opacity: verifyingInstaller ? 0.6 : 1,
-              }}
+              style={primaryButtonStyle(verifyingInstaller)}
             >
               {verifyingInstaller ? "확인 중..." : "기사님 전화 확인"}
             </button>
-            {selectedInstaller ? (
+            {selectedInstaller && installerCheckStatus === "registered" ? (
               <div
                 style={{
                   borderRadius: 12,
-                  background: installerVerified ? "#eef8ee" : "#f6f7f9",
+                  background: "#eef8ee",
                   padding: "10px 12px",
                   fontSize: 13,
                   lineHeight: 1.5,
@@ -287,17 +295,35 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
                 {selectedInstaller.region ? ` / ${selectedInstaller.region}` : ""}
               </div>
             ) : null}
-            {installerVerifyMessage ? (
+            {installerCheckStatus === "external" ? (
+              <div
+                style={{
+                  borderRadius: 12,
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  color: "#9a3412",
+                  padding: "10px 12px",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                {EXTERNAL_INSTALLER_NOTICE}
+                <div style={{ marginTop: 6, fontSize: 12, color: "#7c2d12" }}>
+                  계속 진행하시면 외부 기사 시공으로 등록됩니다.
+                </div>
+              </div>
+            ) : null}
+            {installerVerifyMessage && installerCheckStatus !== "external" ? (
               <div
                 style={{
                   fontSize: 12,
-                  color: installerVerified ? "#1d5e1d" : "#b42318",
+                  color: installerCheckStatus === "registered" ? "#1d5e1d" : "#b42318",
                 }}
               >
                 {installerVerifyMessage}
               </div>
             ) : null}
-            {!selectedInstaller && normalizePhone(installerPhone).length >= 9 ? (
+            {installerCheckStatus === "idle" && normalizePhone(installerPhone).length >= 9 ? (
               <div style={{ fontSize: 12, opacity: 0.7 }}>
                 기사님 전화 확인 버튼을 눌러 확인 후 제출해 주세요.
               </div>
@@ -347,14 +373,44 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   );
 }
 
+const inputStyle: React.CSSProperties = {
+  height: 40,
+  padding: "0 12px",
+  border: "1px solid #d4d4d8",
+  borderRadius: 10,
+  background: "#fff",
+  fontSize: 14,
+  color: "#111",
+  outline: "none",
+};
+
 function typeButtonStyle(active: boolean): React.CSSProperties {
   return {
     height: 44,
     borderRadius: 12,
-    border: active ? "1px solid #111" : "1px solid #d4d4d8",
-    background: active ? "#111" : "#fff",
-    color: active ? "#fff" : "#111",
+    border: active ? "1px solid #1d3129" : "1px solid #e4e4e7",
+    background: active ? "#1d3129" : "#f4f4f5",
+    color: active ? "#fff" : "#71717a",
     fontWeight: 700,
     cursor: "pointer",
+    boxShadow: active ? "0 6px 16px rgba(29,49,41,0.25)" : "none",
+    transform: active ? "translateY(-1px)" : "none",
+    transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+  };
+}
+
+function primaryButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    height: 44,
+    borderRadius: 12,
+    border: "1px solid #1d3129",
+    background: "#1d3129",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.6 : 1,
+    boxShadow: disabled ? "none" : "0 6px 16px rgba(29,49,41,0.25)",
+    transform: disabled ? "none" : "translateY(-1px)",
+    transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
   };
 }

@@ -22,7 +22,9 @@ type RegistrationItem = {
 };
 
 function installTypeLabel(type: string) {
-  return type === "self" ? "자가 설치" : "기사 설치";
+  if (type === "self") return "자가 설치";
+  if (type === "external") return "외부 기사";
+  return "기사 설치";
 }
 
 function statusLabel(status: string) {
