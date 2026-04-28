@@ -172,7 +172,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               onClick={() => setInstallType("installer")}
               style={typeButtonStyle(installType === "installer")}
             >
-              {installType === "installer" ? "✓ " : ""}기사 설치
+              기사 설치
             </button>
             <button
               type="button"
@@ -185,7 +185,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               }}
               style={typeButtonStyle(installType === "self")}
             >
-              {installType === "self" ? "✓ " : ""}자가 설치
+              자가 설치
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
@@ -384,22 +384,26 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
+// 选中按钮的灯光效果：品牌深绿 #1d3129 的亮一阶版本，从底部向上发散
+const SELECTED_GLOW =
+  "inset 0 -22px 30px -10px rgba(74,138,114,0.6), inset 0 -2px 0 rgba(74,138,114,0.95)";
+
 function typeButtonStyle(active: boolean): React.CSSProperties {
   return {
     height: 44,
     borderRadius: 12,
-    border: active ? "1px solid #1d3129" : "1px solid #e4e4e7",
-    background: active ? "#1d3129" : "#f4f4f5",
-    color: active ? "#fff" : "#71717a",
+    border: "1px solid #e4e4e7",
+    background: "#fff",
+    color: "#18181b",
     fontWeight: 700,
     cursor: "pointer",
-    boxShadow: active
-      ? "0 0 0 3px rgba(29,49,41,0.25), 0 6px 16px rgba(29,49,41,0.18)"
-      : "none",
-    transform: active ? "translateY(-1px)" : "none",
-    transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+    boxShadow: active ? SELECTED_GLOW : "none",
+    transition: "box-shadow 200ms ease",
   };
 }
+
+const PRIMARY_BUTTON_SHADOW =
+  "0 12px 28px rgba(29,49,41,0.45), 0 4px 10px rgba(29,49,41,0.25)";
 
 function primaryButtonStyle(disabled: boolean): React.CSSProperties {
   return {
@@ -411,7 +415,7 @@ function primaryButtonStyle(disabled: boolean): React.CSSProperties {
     fontWeight: 700,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.6 : 1,
-    boxShadow: disabled ? "none" : "0 6px 16px rgba(29,49,41,0.25)",
+    boxShadow: disabled ? "none" : PRIMARY_BUTTON_SHADOW,
     transform: disabled ? "none" : "translateY(-1px)",
     transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
   };
