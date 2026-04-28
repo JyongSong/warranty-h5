@@ -172,7 +172,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               onClick={() => setInstallType("installer")}
               style={typeButtonStyle(installType === "installer")}
             >
-              기사 설치
+              {installType === "installer" ? "✓ " : ""}기사 설치
             </button>
             <button
               type="button"
@@ -185,7 +185,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
               }}
               style={typeButtonStyle(installType === "self")}
             >
-              자가 설치
+              {installType === "self" ? "✓ " : ""}자가 설치
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
@@ -393,7 +393,9 @@ function typeButtonStyle(active: boolean): React.CSSProperties {
     color: active ? "#fff" : "#71717a",
     fontWeight: 700,
     cursor: "pointer",
-    boxShadow: active ? "0 6px 16px rgba(29,49,41,0.25)" : "none",
+    boxShadow: active
+      ? "0 0 0 3px rgba(29,49,41,0.25), 0 6px 16px rgba(29,49,41,0.18)"
+      : "none",
     transform: active ? "translateY(-1px)" : "none",
     transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
   };
