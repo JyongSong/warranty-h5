@@ -16,6 +16,15 @@ declare global {
 }
 
 const ABILITY_OPTIONS = ["도어락", "도어벨", "월패드 연동기"] as const;
+const WALLPAD_BRIDGE = "월패드 연동기";
+
+const AQARA_APP_LEVELS = [
+  { value: "none", label: "Aqara 앱 설치 불가" },
+  { value: "app", label: "도어락 설치 + Aqara 앱 연동 가능" },
+  { value: "hub", label: "도어락 설치 + Aqara 앱 연동 + Aqara 허브 연동 가능" },
+] as const;
+
+type AqaraAppLevel = (typeof AQARA_APP_LEVELS)[number]["value"];
 
 export default function SurveyClient() {
   const [name, setName] = useState("");
@@ -29,23 +38,45 @@ export default function SurveyClient() {
   const [abilities, setAbilities] = useState<string[]>([]);
   const [abilityEtcChecked, setAbilityEtcChecked] = useState(false);
   const [abilityEtc, setAbilityEtc] = useState("");
+  const [aqaraDoorlockBridge, setAqaraDoorlockBridge] = useState<"yes" | "no" | "">("");
+  const [aqaraAppLevel, setAqaraAppLevel] = useState<AqaraAppLevel | "">("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [updated, setUpdated] = useState(false);
 
+  const wallpadSelected = abilities.includes(WALLPAD_BRIDGE);
+  const hasAbilitySelection = abilities.length > 0 || abilityEtcChecked;
+
   const canSubmit = useMemo(() => {
     if (loading) return false;
     if (!name.trim()) return false;
     if (normalizePhone(phone).length < 9) return false;
+    if (!hasAbilitySelection) return false;
+    if (wallpadSelected && !aqaraDoorlockBridge) return false;
+    if (!aqaraAppLevel) return false;
     return true;
-  }, [loading, name, phone]);
+  }, [
+    loading,
+    name,
+    phone,
+    hasAbilitySelection,
+    wallpadSelected,
+    aqaraDoorlockBridge,
+    aqaraAppLevel,
+  ]);
 
   function toggleAbility(item: string) {
-    setAbilities((prev) =>
-      prev.includes(item) ? prev.filter((a) => a !== item) : [...prev, item],
-    );
+    setAbilities((prev) => {
+      const next = prev.includes(item)
+        ? prev.filter((a) => a !== item)
+        : [...prev, item];
+      if (item === WALLPAD_BRIDGE && !next.includes(WALLPAD_BRIDGE)) {
+        setAqaraDoorlockBridge("");
+      }
+      return next;
+    });
   }
 
   function openPostcode() {
@@ -83,6 +114,15 @@ export default function SurveyClient() {
               list.push(`기타: ${abilityEtc.trim()}`);
             } else if (abilityEtcChecked) {
               list.push("기타");
+            }
+            if (wallpadSelected && aqaraDoorlockBridge) {
+              list.push(
+                `Aqara 도어락용 연동기: ${aqaraDoorlockBridge === "yes" ? "보유" : "미보유"}`,
+              );
+            }
+            if (aqaraAppLevel) {
+              const label = AQARA_APP_LEVELS.find((l) => l.value === aqaraAppLevel)?.label;
+              if (label) list.push(`Aqara 앱 연동/설정 서비스: ${label}`);
             }
             return list.length > 0 ? list.join(", ") : undefined;
           })(),
@@ -262,7 +302,9 @@ export default function SurveyClient() {
 
         {/* 설치 가능 항목 (다중 선택) */}
         <div style={fieldGap}>
-          <label style={labelStyle}>설치 가능 항목</label>
+          <label style={labelStyle}>
+            설치 가능 항목 <span style={{ color: "#e53e3e" }}>*</span>
+          </label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
             {ABILITY_OPTIONS.map((item) => (
               <label
@@ -313,6 +355,79 @@ export default function SurveyClient() {
               onChange={(e) => setAbilityEtc(e.target.value)}
             />
           )}
+          {wallpadSelected && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 10,
+                background: "#f7f7f8",
+                border: "1px solid #ececef",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                Aqara 도어락용 연동기를 보유하고 계신가요?
+              </div>
+              <div style={{ display: "flex", gap: 16 }}>
+                {[
+                  { value: "yes", label: "보유" },
+                  { value: "no", label: "미보유" },
+                ].map((opt) => (
+                  <label
+                    key={opt.value}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 14,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="aqaraDoorlockBridge"
+                      checked={aqaraDoorlockBridge === opt.value}
+                      onChange={() =>
+                        setAqaraDoorlockBridge(opt.value as "yes" | "no")
+                      }
+                      style={{ width: 16, height: 16 }}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Aqara 앱 설정 가능 여부 */}
+        <div style={fieldGap}>
+          <label style={labelStyle}>
+            Aqara 앱 연동/설정 서비스 가능 여부 <span style={{ color: "#e53e3e" }}>*</span>
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {AQARA_APP_LEVELS.map((opt) => (
+              <label
+                key={opt.value}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 14,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="aqaraAppLevel"
+                  checked={aqaraAppLevel === opt.value}
+                  onChange={() => setAqaraAppLevel(opt.value)}
+                  style={{ width: 16, height: 16 }}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Error */}
