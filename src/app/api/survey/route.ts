@@ -28,6 +28,10 @@ export async function POST(req: Request) {
       NAME_REQUIRED: 400,
       INVALID_PHONE: 400,
       INVALID_NUMBER_FIELD: 400,
+      INVALID_ARRAY_FIELD: 400,
+      INVALID_CAPABILITY: 400,
+      INVALID_AQARA_APP_CAPABILITY: 400,
+      INVALID_BOOLEAN_FIELD: 400,
     };
 
     return NextResponse.json(
