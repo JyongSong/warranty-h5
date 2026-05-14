@@ -181,7 +181,7 @@ export default function SurveyClient() {
         <p style={{ opacity: 0.85, lineHeight: 1.6 }}>
           {updated
             ? "기존 정보가 업데이트되었습니다. 감사합니다!"
-            : "설문이 정상적으로 등록되었습니다. 감사합니다!"}
+            : "기사 등록이 정상적으로 완료되었습니다. 감사합니다!"}
         </p>
       </div>
     );
@@ -214,7 +214,7 @@ export default function SurveyClient() {
 
       <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-          설치 기사 설문
+          설치 기사 등록
         </h1>
         <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 24, lineHeight: 1.5 }}>
           아래 정보를 입력해 주세요. <span style={{ color: "#e53e3e" }}>*</span> 표시는 필수 항목입니다.

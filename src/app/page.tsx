@@ -70,7 +70,7 @@ export default function Home() {
             <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
               Survey
             </div>
-            <div className="mb-2 text-2xl font-semibold">기사 설문</div>
+            <div className="mb-2 text-2xl font-semibold">기사 등록</div>
             <p className="text-sm leading-6 text-zinc-600">
               설치 기사에게 링크를 공유하여 기사 정보를 등록합니다.
             </p>
