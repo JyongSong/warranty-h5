@@ -42,3 +42,8 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Installer cleanup artifacts (contain PII; one-shot M0 data, do not commit)
+/data/installers_rows.csv
+/data/installers-cleaned.sql
+/data/installers-need-review.csv

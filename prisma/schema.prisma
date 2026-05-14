@@ -40,21 +40,27 @@ model WarrantyRegistration {
 }
 
 model Installer {
-  id                  String   @id @default(uuid())
-  name                String
-  phone               String   @unique
-  branch              String?
-  region              String?
-  coverage            String?
-  address             String?
-  category            String?
-  ability             String?
-  installCount        Int?     @map("install_count")
-  happyCallLt         Int?     @map("happy_call_lt")
-  defectCount         Int?     @map("defect_count")
-  dissatisfactionNote String?  @db.Text @map("dissatisfaction_note")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid())
+  name                 String
+  phone                String   @unique
+  branch               String?
+  region               String?
+  coverage             String?
+  address              String?
+  category             String?
+  ability              String?
+  installCount         Int?     @map("install_count")
+  happyCallLt          Int?     @map("happy_call_lt")
+  defectCount          Int?     @map("defect_count")
+  dissatisfactionNote  String?  @db.Text @map("dissatisfaction_note")
+  serviceAreas         String[] @default([]) @map("service_areas")
+  capabilities         String[] @default([]) @map("capabilities")
+  aqaraAppCapability   String   @default("NONE") @map("aqara_app_capability")
+  hasAqaraHubInventory Boolean  @default(false) @map("has_aqara_hub_inventory")
+  monthlyDispatchCount Int      @default(0) @map("monthly_dispatch_count")
+  active               Boolean  @default(true) @map("active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@index([branch])
   @@index([region])

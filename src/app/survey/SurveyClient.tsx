@@ -18,10 +18,16 @@ declare global {
 const ABILITY_OPTIONS = ["도어락", "도어벨", "월패드 연동기"] as const;
 const WALLPAD_BRIDGE = "월패드 연동기";
 
+const ABILITY_TO_CAPABILITY: Record<string, string> = {
+  "도어락": "DOORLOCK",
+  "도어벨": "DOORBELL",
+  "월패드 연동기": "WALLPAD_HUB",
+};
+
 const AQARA_APP_LEVELS = [
-  { value: "none", label: "Aqara 앱 설치 불가" },
-  { value: "app", label: "도어락 설치 + Aqara 앱 연동 가능" },
-  { value: "hub", label: "도어락 설치 + Aqara 앱 연동 + Aqara 허브 연동 가능" },
+  { value: "none", label: "Aqara 앱 설치 불가", capability: "NONE" },
+  { value: "app", label: "도어락 설치 + Aqara 앱 연동 가능", capability: "DOORLOCK_AND_APP" },
+  { value: "hub", label: "도어락 설치 + Aqara 앱 연동 + Aqara 허브 연동 가능", capability: "DOORLOCK_AND_APP_AND_HUB" },
 ] as const;
 
 type AqaraAppLevel = (typeof AQARA_APP_LEVELS)[number]["value"];
@@ -97,6 +103,21 @@ export default function SurveyClient() {
       .filter(Boolean)
       .join(" ");
 
+    const capabilities = abilities
+      .map((a) => ABILITY_TO_CAPABILITY[a])
+      .filter((c): c is string => Boolean(c));
+    if (abilityEtcChecked) capabilities.push("OTHER");
+
+    const serviceAreas = coverage
+      .split(/[,，、\n]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const aqaraAppCapability =
+      AQARA_APP_LEVELS.find((l) => l.value === aqaraAppLevel)?.capability ?? "NONE";
+
+    const hasAqaraHubInventory = wallpadSelected && aqaraDoorlockBridge === "yes";
+
     try {
       const res = await fetch("/api/survey", {
         method: "POST",
@@ -126,6 +147,10 @@ export default function SurveyClient() {
             }
             return list.length > 0 ? list.join(", ") : undefined;
           })(),
+          serviceAreas,
+          capabilities,
+          aqaraAppCapability,
+          hasAqaraHubInventory,
         }),
       });
 

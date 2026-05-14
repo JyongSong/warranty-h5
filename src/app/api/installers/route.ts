@@ -12,28 +12,40 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const query = String(searchParams.get("query") ?? "").trim();
-    const phone = normalizePhone(query);
-    const filters =
-      query.length >= 2 || phone.length >= 2
-        ? {
-            OR: [
-              { name: { contains: query, mode: "insensitive" as const } },
-              { phone: { contains: phone || query } },
-              { branch: { contains: query, mode: "insensitive" as const } },
-              { region: { contains: query, mode: "insensitive" as const } },
-              { coverage: { contains: query, mode: "insensitive" as const } },
-              { category: { contains: query, mode: "insensitive" as const } },
-              { ability: { contains: query, mode: "insensitive" as const } },
-              { address: { contains: query, mode: "insensitive" as const } },
-              { dissatisfactionNote: { contains: query, mode: "insensitive" as const } },
-            ],
-          }
-        : undefined;
+    const branch = String(searchParams.get("branch") ?? "").trim();
+    const region = String(searchParams.get("region") ?? "").trim();
+    const capabilitiesRaw = String(searchParams.get("capabilities") ?? "").trim();
+    const capabilities = capabilitiesRaw
+      ? capabilitiesRaw.split(",").map((c) => c.trim()).filter(Boolean)
+      : [];
+
+    const conditions: Record<string, unknown>[] = [];
+
+    if (query) {
+      const phone = normalizePhone(query);
+      conditions.push({
+        OR: [
+          { name: { contains: query, mode: "insensitive" as const } },
+          { phone: { contains: phone || query } },
+        ],
+      });
+    }
+    if (branch) {
+      conditions.push({ branch: { contains: branch, mode: "insensitive" as const } });
+    }
+    if (region) {
+      conditions.push({ region: { contains: region, mode: "insensitive" as const } });
+    }
+    if (capabilities.length > 0) {
+      conditions.push({ capabilities: { hasEvery: capabilities } });
+    }
+
+    const filters = conditions.length > 0 ? { AND: conditions } : undefined;
 
     const rows = await prisma.installer.findMany({
       where: filters,
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
-      take: query.length < 2 && phone.length < 2 ? 100 : 20,
+      take: 500,
     });
 
     return NextResponse.json({ items: rows });
