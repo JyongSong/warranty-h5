@@ -83,19 +83,60 @@ export default function QrScanModal({
           return;
         }
 
-        // 방안 B: 시작 후 applyConstraints 로 continuous focus 재적용. capabilities 확인.
+        // 방안 B: 시작 후 capabilities 확인 → continuous AF + 근접 초점 hint + zoom.
         const track = stream.getVideoTracks()[0];
         trackRef.current = track ?? null;
         if (track) {
           const cap = track.getCapabilities?.() as
             | Record<string, unknown>
             | undefined;
+
+          // B-1. continuous focus
           const modes = cap?.focusMode as string[] | undefined;
           if (modes?.includes("continuous")) {
             await track
               .applyConstraints({
                 advanced: [
                   { focusMode: "continuous" },
+                ] as unknown as MediaTrackConstraintSet[],
+              })
+              .catch(() => {});
+          }
+
+          // B-2. 근접 초점 hint (Android Chrome 등): 스캐닝 거리는 보통 10~30cm 이므로
+          //      초점을 약 15cm 부근에서 시작하도록 유도.
+          //      iOS Safari 는 focusDistance 를 capabilities 에 노출 안 함 → 자동 skip.
+          const focusDistance = cap?.focusDistance as
+            | { min: number; max: number; step?: number }
+            | undefined;
+          if (
+            focusDistance &&
+            typeof focusDistance.min === "number" &&
+            typeof focusDistance.max === "number"
+          ) {
+            const nearFocus = Math.max(
+              focusDistance.min,
+              Math.min(0.15, focusDistance.max)
+            );
+            await track
+              .applyConstraints({
+                advanced: [
+                  { focusMode: "continuous", focusDistance: nearFocus },
+                ] as unknown as MediaTrackConstraintSet[],
+              })
+              .catch(() => {});
+          }
+
+          // B-3. 적정 zoom (지원 시): 작은 바코드를 더 많은 픽셀로 잡아 인식률 ↑.
+          const zoom = cap?.zoom as
+            | { min: number; max: number; step?: number }
+            | undefined;
+          if (zoom && typeof zoom.max === "number" && zoom.max >= 1.5) {
+            const targetZoom = Math.min(1.8, zoom.max);
+            await track
+              .applyConstraints({
+                advanced: [
+                  { zoom: targetZoom },
                 ] as unknown as MediaTrackConstraintSet[],
               })
               .catch(() => {});
