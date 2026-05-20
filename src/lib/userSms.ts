@@ -26,7 +26,7 @@ export function buildUserCompletionSms(input: {
     lines.push(`기사님 연락처: ${formatKrPhone(input.installerPhone)}`);
   }
 
-  lines.push("", "문의: www.aqaralife-service.kr");
+  lines.push("", "문의: www.aqaralife-service.kr", "※ 발신전용");
 
   return lines.join("\n");
 }
