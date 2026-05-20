@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS warranty_registrations (
   user_phone text NOT NULL,
   installer_phone text,
   consent_privacy boolean NOT NULL,
+  consent_marketing boolean NOT NULL DEFAULT false,
   status text NOT NULL DEFAULT 'submitted',
   confirm_token text UNIQUE,
   confirm_token_expires_at timestamptz,

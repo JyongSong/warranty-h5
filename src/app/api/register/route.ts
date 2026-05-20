@@ -5,6 +5,7 @@ import { normalizePhone } from "@/lib/phone";
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
+import { buildUserCompletionSms } from "@/lib/userSms";
 
 function addDays(dateStr: string, days: number) {
     const d = new Date(dateStr + "T00:00:00");
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
         const userPhone = normalizePhone(body.userPhone);
         const installerPhone = normalizePhone(body.installerPhone);
         const consentPrivacy = body.consentPrivacy === true;
+        const consentMarketing = body.consentMarketing === true;
         const requiresInstallerPhone = installType === "installer" || installType === "external";
 
         if (!sn || sn.length < 6) return NextResponse.json({ error: "INVALID_SN" }, { status: 400 });
@@ -85,6 +87,7 @@ export async function POST(req: Request) {
                     userPhone,
                     installerPhone: installerPhoneValue,
                     consentPrivacy: true,
+                    consentMarketing,
                     confirmToken: token,
                     confirmTokenExpiresAt: expiresAt,
                     freeAsEndDate: freeEnd,
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
                     userPhone,
                     installerPhone: installerPhoneValue,
                     consentPrivacy: true,
+                    consentMarketing,
                     status,
                     confirmToken: token,
                     confirmTokenExpiresAt: expiresAt,
@@ -118,21 +122,32 @@ export async function POST(req: Request) {
             regId = id;
         }
 
-        if (installType === "self") {
+        // 자가/외부 기사: 등록 즉시 완료 → 사용자에게 SMS 발송.
+        // 인증 기사: 기사 confirm 후 (/api/confirm) 에서 사용자 SMS 발송.
+        if (installType === "self" || installType === "external") {
+            const userSmsText = buildUserCompletionSms({
+                installType,
+                freeAsEndDate: freeEnd,
+                installerPhone: null,
+            });
+            await sendSms(userPhone, userSmsText);
+            console.log("[SMS SENT][REGISTER→USER]", { to: userPhone, installType });
+
             return NextResponse.json({
                 ok: true,
                 id: regId,
-                status: "confirmed",
+                status: installType === "self" ? "confirmed" : "submitted",
                 installType,
                 freeAsEndDate: freeEnd,
             });
         }
 
+        // 인증 기사: 기사에게 confirm link SMS
         const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token as string)}`;
-        const smsText = `[Aqara] 설치 확인이 필요합니다.\n72시간 이내에 아래 링크에서 설치 정보를 확인해 주세요. 확인 후 보증기간이 적용됩니다.\n${confirmLink}`;
-        await sendSms(installerPhone, smsText);
+        const installerSmsText = `[Aqara] 설치 확인이 필요합니다.\n72시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.\n\n${confirmLink}\n\n※ 발신전용`;
+        await sendSms(installerPhone, installerSmsText);
 
-        console.log("[SMS SENT][REGISTER] to:", installerPhone, "link:", confirmLink);
+        console.log("[SMS SENT][REGISTER→INSTALLER]", { to: installerPhone, link: confirmLink });
 
         return NextResponse.json({
             ok: true,

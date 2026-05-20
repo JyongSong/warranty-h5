@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import QrScanModal from "./QrScanModal";
+import SnLocationModal from "./SnLocationModal";
 import { getErrorMessage } from "@/lib/error";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
@@ -30,6 +31,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const [installType, setInstallType] = useState<InstallType>("installer");
   // 통합 스캐너: ZXing BrowserMultiFormatReader 로 QR + 1D 바코드 동시 인식.
   const [scanOpen, setScanOpen] = useState(false);
+  const [snHelpOpen, setSnHelpOpen] = useState(false);
 
   const [sn, setSn] = useState(initialSn);
   const [installDate, setInstallDate] = useState(() => {
@@ -43,6 +45,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const [installerCheckStatus, setInstallerCheckStatus] = useState<InstallerCheckStatus>("idle");
   const [installerVerifyMessage, setInstallerVerifyMessage] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
+  const [consentMarketing, setConsentMarketing] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +131,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         userPhone: normalizePhone(userPhone),
         installerPhone: installType === "self" ? "" : normalizePhone(installerPhone),
         consentPrivacy: consent,
+        consentMarketing,
       };
 
       const r = await fetch("/api/register", {
@@ -148,6 +152,10 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       sessionStorage.setItem("lastRegistrationStatus", data?.status ?? "");
       sessionStorage.setItem("lastInstallType", data?.installType ?? installType);
       sessionStorage.setItem("lastFreeAsEndDate", data?.freeAsEndDate ?? "");
+      sessionStorage.setItem(
+        "lastInstallerPhone",
+        installType === "self" ? "" : normalizePhone(installerPhone)
+      );
 
       router.push("/success");
     } catch (error: unknown) {
@@ -211,7 +219,16 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
         {/* 2) 일련번호 입력 + 스캔 버튼 */}
         <label style={{ display: "grid", gap: 6 }}>
-          <span>제품 일련번호</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            제품 일련번호
+            <button
+              type="button"
+              onClick={() => setSnHelpOpen(true)}
+              style={snHelpLinkStyle}
+            >
+              일련번호 위치 확인
+            </button>
+          </span>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={sn}
@@ -238,7 +255,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
-          <span>설치일</span>
+          <span>설치 완료일</span>
           <input
             type="date"
             value={installDate}
@@ -248,7 +265,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
-          <span>고객 전화번호</span>
+          <span>전화번호</span>
           <input
             value={userPhone}
             onChange={(e) => setUserPhone(e.target.value)}
@@ -330,13 +347,30 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           </label>
         ) : null}
 
-        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
           <input
             type="checkbox"
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
+            style={{ marginTop: 3 }}
           />
-          <span>개인정보 수집 및 이용에 동의합니다.</span>
+          <span>
+            개인정보 수집 및 이용에 동의합니다.{" "}
+            <span style={{ color: "#b42318", fontWeight: 600 }}>(필수)</span>
+          </span>
+        </label>
+
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <input
+            type="checkbox"
+            checked={consentMarketing}
+            onChange={(e) => setConsentMarketing(e.target.checked)}
+            style={{ marginTop: 3 }}
+          />
+          <span>
+            마케팅 정보 수신 동의{" "}
+            <span style={{ color: "#71717a", fontWeight: 600 }}>(선택)</span>
+          </span>
         </label>
 
         {error ? (
@@ -353,7 +387,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             cursor: canSubmit ? "pointer" : "not-allowed",
           }}
         >
-          {loading ? "제출 중..." : "제출"}
+          {loading ? "등록 중..." : "등록"}
         </button>
       </div>
 
@@ -368,9 +402,22 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           }}
         />
       )}
+
+      {/* 4) SN 위치 안내 모달 */}
+      {snHelpOpen && <SnLocationModal onClose={() => setSnHelpOpen(false)} />}
     </div>
   );
 }
+
+const snHelpLinkStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  padding: 0,
+  color: "#1d3129",
+  textDecoration: "underline",
+  fontSize: 12,
+  cursor: "pointer",
+};
 
 const inputStyle: React.CSSProperties = {
   height: 40,

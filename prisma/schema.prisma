@@ -25,6 +25,7 @@ model WarrantyRegistration {
   userPhone             String    @map("user_phone")
   installerPhone        String?   @map("installer_phone")
   consentPrivacy        Boolean   @map("consent_privacy")
+  consentMarketing      Boolean   @default(false) @map("consent_marketing")
   status                String    @default("submitted")
   confirmToken          String?   @unique @map("confirm_token")
   confirmTokenExpiresAt DateTime? @map("confirm_token_expires_at")

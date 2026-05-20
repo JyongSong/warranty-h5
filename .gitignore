@@ -47,3 +47,12 @@ next-env.d.ts
 /data/installers_rows.csv
 /data/installers-cleaned.sql
 /data/installers-need-review.csv
+
+# Office temp / lock files
+~$*
+
+# Claude Code worktrees (per-task isolated clones)
+.claude/
+
+# 工作目录里的 installer 명단 원본 xlsx (PII 포함, commit 금지)
+경기열쇠 기사 리스트*.xlsx

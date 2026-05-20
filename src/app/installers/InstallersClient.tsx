@@ -241,8 +241,8 @@ export default function InstallersClient({ admin }: { admin: AuthAdmin }) {
 
   // Initial load
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
     loadInstallers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Debounced reload on any filter change
