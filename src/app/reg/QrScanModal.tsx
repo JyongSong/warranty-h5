@@ -43,19 +43,41 @@ export default function QrScanModal({
     const qr = new Html5Qrcode(readerId, {
       formatsToSupport: formats,
       verbose: false,
+      // 브라우저 네이티브 BarcodeDetector API 가 가능하면 사용.
+      // Chrome/Edge 모바일에서 1D 바코드 인식이 훨씬 빠르고 정확하다.
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true,
+      },
     });
 
-    // QR 是正방형, 바코드는 가로로 긴 직사각형이 더 정확하다.
+    // QR 은 정사각형, 바코드는 가로로 긴 직사각형이 더 정확.
     const qrbox =
       mode === "barcode"
-        ? { width: 280, height: 100 }
-        : { width: 240, height: 240 };
+        ? { width: 320, height: 140 }
+        : { width: 260, height: 260 };
+
+    // 자동초점 + 후면 카메라 + 가능하면 고해상도.
+    // advanced 옵션은 미지원 브라우저에서 무시될 뿐 오류는 안 난다.
+    const videoConstraints: MediaTrackConstraints = {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      // focusMode 는 experimental, dom lib 타입에 없어서 unknown cast.
+      advanced: [
+        { focusMode: "continuous" },
+        { focusMode: "auto" },
+      ] as unknown as MediaTrackConstraintSet[],
+    };
 
     async function start() {
       try {
         await qr.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox },
+          videoConstraints,
+          {
+            fps: mode === "barcode" ? 15 : 10,
+            qrbox,
+            aspectRatio: window.innerWidth > window.innerHeight ? 16 / 9 : 9 / 16,
+          },
           async (decodedText) => {
             if (!active) return;
             const value = extractSn(decodedText);
@@ -69,6 +91,9 @@ export default function QrScanModal({
             // ignore scan failure per frame
           }
         );
+
+        // 카메라 시작 후 추가 자동초점 트리거 (iOS Safari 등에서 advanced 무시되는 케이스 대응)
+        applyAutofocus(readerId);
       } catch (error: unknown) {
         setErr(getErrorMessage(error, "카메라를 열 수 없습니다."));
       }
@@ -99,7 +124,18 @@ export default function QrScanModal({
             {err}
           </div>
         ) : (
-          <div id={readerId} style={{ width: "100%" }} />
+          <>
+            <div
+              id={readerId}
+              style={{ width: "100%", cursor: "pointer" }}
+              onClick={() => applyAutofocus(readerId)}
+            />
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6, textAlign: "center" }}>
+              {mode === "barcode"
+                ? "바코드를 가로 프레임 안에 맞춰주세요. 흐릿하면 화면을 탭하세요."
+                : "QR 을 프레임 안에 맞춰주세요. 흐릿하면 화면을 탭하세요."}
+            </div>
+          </>
         )}
 
         <button onClick={onClose} style={closeBtnStyle}>
@@ -108,6 +144,35 @@ export default function QrScanModal({
       </div>
     </div>
   );
+}
+
+// 화면 탭으로 다시 초점을 잡도록 트리거.
+// `applyConstraints` 로 focusMode 를 다시 한 번 적용해 강제 리포커스.
+function applyAutofocus(containerId: string) {
+  const container = document.getElementById(containerId);
+  const video = container?.querySelector("video") as HTMLVideoElement | null;
+  if (!video || !video.srcObject) return;
+  const stream = video.srcObject as MediaStream;
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+  try {
+    // 일단 single-shot
+    track
+      .applyConstraints({
+        advanced: [{ focusMode: "single-shot" }] as unknown as MediaTrackConstraintSet[],
+      })
+      .catch(() => {});
+    // 그 다음 continuous 로 복귀
+    setTimeout(() => {
+      track
+        .applyConstraints({
+          advanced: [{ focusMode: "continuous" }] as unknown as MediaTrackConstraintSet[],
+        })
+        .catch(() => {});
+    }, 300);
+  } catch {
+    // 미지원 브라우저는 그냥 무시
+  }
 }
 
 /**
