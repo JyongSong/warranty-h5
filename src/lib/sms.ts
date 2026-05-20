@@ -1,48 +1,42 @@
-import { sendCafe24Sms } from "@/lib/cafe24";
+import { SolapiMessageService } from "solapi";
 
-type SmsProvider = "mock" | "twilio" | "internal" | "cafe24";
+let _service: SolapiMessageService | null = null;
 
-const PROVIDER = (process.env.SMS_PROVIDER as SmsProvider) || "mock";
+function getService(): SolapiMessageService | null {
+  if (_service) return _service;
+  const apiKey = process.env.SOLAPI_API_KEY;
+  const apiSecret = process.env.SOLAPI_API_SECRET;
+  if (!apiKey || !apiSecret) return null;
+  _service = new SolapiMessageService(apiKey, apiSecret);
+  return _service;
+}
 
-function toCafe24Recipient(input: string) {
-  const digits = input.replace(/[^\d]/g, "");
-
-  if (digits.startsWith("82") && digits.length >= 11) {
-    return `0${digits.slice(2)}`;
-  }
-
+// Solapi 는 한국 로컬 번호 (01012345678) 를 요구한다.
+// 입력이 +8210... / 8210... 이어도 모두 0 으로 시작하는 로컬 번호로 정규화한다.
+function normalizeKr(input: string): string {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("82")) return `0${digits.slice(2)}`;
   return digits;
 }
 
-export async function sendSms(toE164: string, text: string) {
-  if (PROVIDER === "mock") {
-    console.log("[SMS MOCK] to:", toE164, "text:", text);
-    return { ok: true };
-  }
+export async function sendSms(
+  to: string | null | undefined,
+  text: string
+): Promise<void> {
+  if (!to) return;
+  const from = process.env.SOLAPI_SENDER;
+  if (!from) return;
 
-  if (PROVIDER === "twilio") {
-    // 你接 Twilio 才用（下面会告诉你要哪些 env）
-    const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM } = process.env;
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM) {
-      throw new Error("TWILIO_ENV_MISSING");
-    }
-    const twilio = (await import("twilio")).default;
-    const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    await client.messages.create({ from: TWILIO_FROM, to: toE164, body: text });
-    return { ok: true };
-  }
+  const service = getService();
+  if (!service) return;
 
-  if (PROVIDER === "internal") {
-    // 你们如果有内部短信网关，改这里：fetch 内部API
-    // 示例（伪代码）：
-    // await fetch(process.env.INTERNAL_SMS_ENDPOINT!, { method:"POST", headers:{...}, body: JSON.stringify({to:toE164, text}) })
-    throw new Error("INTERNAL_PROVIDER_NOT_IMPLEMENTED");
-  }
+  const normalized = normalizeKr(to);
+  if (!normalized) return;
 
-  if (PROVIDER === "cafe24") {
-    await sendCafe24Sms(toCafe24Recipient(toE164), text);
-    return { ok: true };
+  try {
+    await service.send({ to: normalized, from, text });
+  } catch (e) {
+    console.error("[SMS] 발송 실패:", e);
   }
-
-  throw new Error("UNKNOWN_SMS_PROVIDER");
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { sendSms } from "@/lib/sms";
-import { krToE164, normalizePhone } from "@/lib/phone";
+import { normalizePhone } from "@/lib/phone";
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
 
         const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token as string)}`;
         const smsText = `[Aqara] 설치 확인이 필요합니다.\n72시간 이내에 아래 링크에서 설치 정보를 확인해 주세요. 확인 후 보증기간이 적용됩니다.\n${confirmLink}`;
-        await sendSms(krToE164(installerPhone), smsText);
+        await sendSms(installerPhone, smsText);
 
         console.log("[SMS SENT][REGISTER] to:", installerPhone, "link:", confirmLink);
 

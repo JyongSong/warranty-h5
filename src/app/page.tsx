@@ -53,18 +53,6 @@ export default function Home() {
           </a>
           <a
             className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
-            href="/cafe24"
-          >
-            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
-              Cafe24
-            </div>
-            <div className="mb-2 text-2xl font-semibold">Cafe24 연동</div>
-            <p className="text-sm leading-6 text-zinc-600">
-              OAuth 토큰 상태를 확인하고 이 프로젝트를 SMS 통합 발송 진입점으로 사용합니다.
-            </p>
-          </a>
-          <a
-            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
             href="/survey"
           >
             <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
@@ -96,11 +84,11 @@ export default function Home() {
           </div>
           <div>
             <div className="text-sm uppercase tracking-[0.18em] text-white/60">Database</div>
-            <div className="mt-2 text-lg font-semibold">MySQL 8 / Docker Compose</div>
+            <div className="mt-2 text-lg font-semibold">Supabase Postgres</div>
           </div>
           <div>
             <div className="text-sm uppercase tracking-[0.18em] text-white/60">SMS</div>
-            <div className="mt-2 text-lg font-semibold">Mock / Twilio</div>
+            <div className="mt-2 text-lg font-semibold">Solapi</div>
           </div>
         </div>
       </main>

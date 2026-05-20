@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sendSms } from "@/lib/sms";
 import { normalizePhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
-import { validateInternalApiKey } from "@/lib/cafe24";
+import { validateInternalApiKey } from "@/lib/internalAuth";
 
 export async function POST(req: Request) {
   try {
@@ -24,8 +24,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "TEXT_REQUIRED" }, { status: 400 });
     }
 
-    const normalizedE164 = to.startsWith("82") ? `+${to}` : to.startsWith("0") ? `+82${to.slice(1)}` : `+${to}`;
-    await sendSms(normalizedE164, text);
+    await sendSms(to, text);
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
