@@ -79,17 +79,3 @@ model Admin {
   @@map("admins")
 }
 
-model Cafe24Token {
-  id                    String   @id @default(uuid())
-  mallId                String   @unique @map("mall_id")
-  accessToken           String   @map("access_token")
-  refreshToken          String   @map("refresh_token")
-  expiresAt             DateTime @map("expires_at")
-  refreshTokenExpiresAt DateTime @map("refresh_token_expires_at")
-  clientId              String?  @map("client_id")
-  scope                 String?
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-
-  @@map("cafe24_tokens")
-}

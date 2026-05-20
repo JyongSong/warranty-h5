@@ -17,7 +17,7 @@
 - Prisma 7
 - Supabase Postgres
 - Tailwind CSS 4
-- Twilio / mock SMS
+- Solapi SMS
 - `html5-qrcode` 与 `tesseract.js`
 
 ## 本地开发
@@ -43,13 +43,8 @@ npm install
 - `MANAGEMENT_ADMIN_NAME`: 기본 관리자 이름
 - `MANAGEMENT_ADMIN_LEVEL`: 기본 관리자 등급
 - `NEXT_PUBLIC_BASE_URL`: 生成短信确认链接时使用的站点地址，例如 `https://warranty-aqaralife.vercel.app`
-- `SMS_PROVIDER`: `mock` 或 `twilio`
-- `CAFE24_MALL_ID` / `CAFE24_CLIENT_ID` / `CAFE24_CLIENT_SECRET` / `CAFE24_REDIRECT_URI`: Cafe24 OAuth 配置，例如 `https://warranty-aqaralife.vercel.app/api/cafe24/callback`
-- `CAFE24_SCOPE`: Cafe24 OAuth scope
-- `CAFE24_STATE_SECRET`: Cafe24 OAuth `state` 서명용 secret
-- `CAFE24_SMS_SENDER_NO`: Cafe24 SMS 发信号码
-- `INTERNAL_API_KEY`: 其他项目调用本项目内部 SMS API 时使用
-- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM`: 使用 Twilio 时必填
+- `SOLAPI_API_KEY` / `SOLAPI_API_SECRET` / `SOLAPI_SENDER`: Solapi SMS 凭证与发信号码（在 KISA 备案过的号）。三者任一为空时短信会静默跳过，不影响业务流。
+- `INTERNAL_API_KEY`: 其他项目调用本项目 `/api/internal/sms` 时使用的 `x-internal-key` 头
 
 ### 3. 初始化 Supabase 数据库
 
@@ -109,22 +104,9 @@ npm run dev
 
 打开 [http://localhost:3000](http://localhost:3000)。
 
-## Cafe24 集成
+## 内部 SMS 网关
 
-这个项目现在可以作为统一的 Cafe24 OAuth / SMS 入口：
-
-- `GET /api/cafe24/authorize`: 发起 Cafe24 OAuth
-- `GET /api/cafe24/callback`: 接收 `code` 并换取 token
-- `GET /api/cafe24/status`: 查看当前 token 状态
-- `POST /api/internal/sms`: 供其他项目通过内部 key 调用短信发送
-
-如果要让本项目自己通过 Cafe24 发短信：
-
-```env
-SMS_PROVIDER=cafe24
-```
-
-如果其他项目要共用这里的短信能力，调用：
+其他项目可以借用本项目的 Solapi 通道：
 
 ```http
 POST /api/internal/sms
@@ -136,6 +118,8 @@ content-type: application/json
   "text": "문자 내용"
 }
 ```
+
+号码会被 normalize 成韩国本地号（`+8210...` / `8210...` 都会还原成 `010...`）。
 
 ## 常用脚本
 

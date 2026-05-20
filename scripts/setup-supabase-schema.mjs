@@ -51,19 +51,6 @@ CREATE TABLE IF NOT EXISTS admins (
 
 CREATE INDEX IF NOT EXISTS admins_level_idx ON admins(level);
 
-CREATE TABLE IF NOT EXISTS cafe24_tokens (
-  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  mall_id text NOT NULL UNIQUE,
-  access_token text NOT NULL,
-  refresh_token text NOT NULL,
-  expires_at timestamptz NOT NULL,
-  refresh_token_expires_at timestamptz NOT NULL,
-  client_id text,
-  scope text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE IF NOT EXISTS warranty_registrations (
   id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
   sn text NOT NULL UNIQUE,
