@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import QrScanModal, { type ScanMode } from "./QrScanModal";
-import ScanModeChoiceModal from "./ScanModeChoiceModal";
+import QrScanModal from "./QrScanModal";
 import { getErrorMessage } from "@/lib/error";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
@@ -29,11 +28,8 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
   const [model, setModel] = useState<Model>("L100");
   const [installType, setInstallType] = useState<InstallType>("installer");
-  // 스캔 흐름:
-  //   L100/U100: 스캔 버튼 → 바로 QR 스캐너 (scanMode='qr')
-  //   K100:      스캔 버튼 → 모드 선택 모달 → 사용자가 선택한 모드로 스캐너
+  // 통합 스캐너: ZXing BrowserMultiFormatReader 로 QR + 1D 바코드 동시 인식.
   const [scanOpen, setScanOpen] = useState(false);
-  const [scanMode, setScanMode] = useState<ScanMode | null>(null);
 
   const [sn, setSn] = useState(initialSn);
   const [installDate, setInstallDate] = useState(() => {
@@ -225,11 +221,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             />
             <button
               type="button"
-              onClick={() => {
-                setScanOpen(true);
-                // L100/U100 은 QR 만 사용 → 모드 선택 단계 생략
-                setScanMode(model === "K100" ? null : "qr");
-              }}
+              onClick={() => setScanOpen(true)}
               style={{
                 height: 40,
                 padding: "0 12px",
@@ -241,9 +233,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
-            {model === "K100"
-              ? "K100은 QR 또는 바코드 스캔을 선택할 수 있습니다."
-              : "L100/U100은 QR 스캔을 사용합니다."}
+            QR 또는 바코드를 카메라에 비춰 일련번호를 자동 입력합니다.
           </div>
         </label>
 
@@ -367,29 +357,14 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         </button>
       </div>
 
-      {/* 3) Modal 분기 */}
-      {scanOpen && scanMode === null && (
-        <ScanModeChoiceModal
-          title={`${model} 스캔 방식 선택`}
-          onSelect={(m) => setScanMode(m)}
-          onClose={() => {
-            setScanOpen(false);
-            setScanMode(null);
-          }}
-        />
-      )}
-      {scanOpen && scanMode !== null && (
+      {/* 3) 스캔 모달 */}
+      {scanOpen && (
         <QrScanModal
-          title={`${model} ${scanMode === "barcode" ? "바코드" : "QR"} 스캔`}
-          mode={scanMode}
-          onClose={() => {
-            setScanOpen(false);
-            setScanMode(null);
-          }}
+          title={`${model} 일련번호 스캔`}
+          onClose={() => setScanOpen(false)}
           onResult={(value) => {
             setSn(value);
             setScanOpen(false);
-            setScanMode(null);
           }}
         />
       )}

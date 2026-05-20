@@ -1,119 +1,186 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { useEffect, useRef, useState } from "react";
 import { getErrorMessage } from "@/lib/error";
-
-export type ScanMode = "qr" | "barcode";
 
 type Props = {
   title?: string;
-  mode?: ScanMode; // 기본 qr
   onClose: () => void;
   onResult: (value: string) => void; // 扫描结果回填给上层
 };
 
-const QR_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE];
-
-// 韩国零售/物流常见 1D barcode 类型. 库支持的全部 1D 都开。
-const BARCODE_FORMATS = [
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-];
-
 export default function QrScanModal({
-  title = "QR 스캔",
-  mode = "qr",
+  title = "스캔",
   onClose,
   onResult,
 }: Props) {
-  const readerId = `qr-reader-${useId().replace(/:/g, "")}`;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
   const [err, setErr] = useState<string>("");
 
+  // 화면 탭 → single-shot focus + pointOfInterest 좌표 적용 → 800ms 후 continuous 복귀.
+  // 일부 안드로이드 (특히 삼성) 에서 자동초점이 안 잡힐 때 수동 대응용.
+  const handleTapFocus = async (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    let clientX: number;
+    let clientY: number;
+    if ("touches" in e) {
+      clientX = e.touches[0]?.clientX ?? rect.left + rect.width / 2;
+      clientY = e.touches[0]?.clientY ?? rect.top + rect.height / 2;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+    try {
+      await track.applyConstraints({
+        advanced: [
+          { pointsOfInterest: [{ x, y }], focusMode: "single-shot" },
+        ] as unknown as MediaTrackConstraintSet[],
+      });
+      setTimeout(() => {
+        track
+          .applyConstraints({
+            advanced: [
+              { focusMode: "continuous" },
+            ] as unknown as MediaTrackConstraintSet[],
+          })
+          .catch(() => {});
+      }, 800);
+    } catch {
+      // 미지원 기기는 그냥 무시
+    }
+  };
+
   useEffect(() => {
-    let active = true;
-    const formats = mode === "barcode" ? BARCODE_FORMATS : QR_FORMATS;
-    const qr = new Html5Qrcode(readerId, {
-      formatsToSupport: formats,
-      verbose: false,
-      // 브라우저 네이티브 BarcodeDetector API 가 가능하면 사용.
-      // Chrome/Edge 모바일에서 1D 바코드 인식이 훨씬 빠르고 정확하다.
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true,
-      },
-    });
-
-    // QR 은 정사각형, 바코드는 가로로 긴 직사각형이 더 정확.
-    const qrbox =
-      mode === "barcode"
-        ? { width: 320, height: 140 }
-        : { width: 260, height: 260 };
-
-    // html5-qrcode 의 첫 인자는 정확히 1 key 객체만 받는다 (cameraIdOrConfig).
-    // 고급 옵션은 두 번째 인자의 videoConstraints 로 전달해야 한다.
-    // focusMode 등 experimental advanced 는 dom lib 타입에 없어서 unknown cast.
-    const videoConstraints = {
-      facingMode: { ideal: "environment" },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      advanced: [
-        { focusMode: "continuous" },
-        { focusMode: "auto" },
-      ],
-    } as unknown as MediaTrackConstraints;
+    let cancelled = false;
 
     async function start() {
       try {
-        await qr.start(
-          { facingMode: "environment" },
-          {
-            fps: mode === "barcode" ? 15 : 10,
-            qrbox,
-            aspectRatio: window.innerWidth > window.innerHeight ? 16 / 9 : 9 / 16,
-            videoConstraints,
-          },
-          async (decodedText) => {
-            if (!active) return;
-            const value = extractSn(decodedText);
-            try {
-              await qr.stop();
-              await qr.clear();
-            } catch {}
-            onResult(value);
-          },
-          () => {
-            // ignore scan failure per frame
+        // 방안 A: getUserMedia 단계에서 focusMode 를 top-level 에 포함.
+        //         일부 안드로이드는 advanced 안의 focusMode 를 무시하므로 top-level 도 같이 시도.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            ...({ focusMode: { ideal: "continuous" } } as object),
+          } as MediaTrackConstraints,
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        // 방안 B: 시작 후 applyConstraints 로 continuous focus 재적용. capabilities 확인.
+        const track = stream.getVideoTracks()[0];
+        trackRef.current = track ?? null;
+        if (track) {
+          const cap = track.getCapabilities?.() as
+            | Record<string, unknown>
+            | undefined;
+          const modes = cap?.focusMode as string[] | undefined;
+          if (modes?.includes("continuous")) {
+            await track
+              .applyConstraints({
+                advanced: [
+                  { focusMode: "continuous" },
+                ] as unknown as MediaTrackConstraintSet[],
+              })
+              .catch(() => {});
+          }
+        }
+
+        // ZXing 디코더: QR + 주요 1D 바코드 동시 인식.
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const { DecodeHintType, BarcodeFormat } = await import(
+          "@zxing/library"
+        );
+
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.CODE_93,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.ITF,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODABAR,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints);
+
+        if (cancelled || !videoRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        const controls = await reader.decodeFromStream(
+          stream,
+          videoRef.current,
+          (result) => {
+            if (result) {
+              controls.stop();
+              stream.getTracks().forEach((t) => t.stop());
+              const value = extractSn(result.getText());
+              onResult(value);
+            }
           }
         );
 
-        // 카메라 시작 후 추가 자동초점 트리거 (iOS Safari 등에서 advanced 무시되는 케이스 대응)
-        applyAutofocus(readerId);
+        cleanupRef.current = () => {
+          controls.stop();
+          stream.getTracks().forEach((t) => t.stop());
+          trackRef.current = null;
+        };
+
+        if (cancelled) cleanupRef.current();
       } catch (error: unknown) {
-        setErr(getErrorMessage(error, "카메라를 열 수 없습니다."));
+        if (cancelled) return;
+        const msg = error instanceof Error ? error.message : String(error);
+        const isPerm =
+          msg.toLowerCase().includes("permission") ||
+          msg.toLowerCase().includes("notallowed") ||
+          msg.toLowerCase().includes("denied");
+        setErr(
+          isPerm
+            ? "카메라 권한이 필요합니다.\n브라우저 설정에서 카메라를 허용해 주세요."
+            : getErrorMessage(error, "카메라를 열 수 없습니다.")
+        );
       }
     }
 
     start();
 
     return () => {
-      active = false;
-      (async () => {
-        try {
-          await qr.stop();
-        } catch {}
-        try {
-          await qr.clear();
-        } catch {}
-      })();
+      cancelled = true;
+      cleanupRef.current?.();
+      cleanupRef.current = null;
     };
-  }, [readerId, mode, onResult]);
+    // onResult 가 매 렌더 새 reference 여도 다시 카메라를 열 필요는 없음.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleClose = () => {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    onClose();
+  };
 
   return (
     <div style={overlayStyle}>
@@ -121,25 +188,45 @@ export default function QrScanModal({
         <div style={{ fontWeight: 800, marginBottom: 8 }}>{title}</div>
 
         {err ? (
-          <div style={{ background: "#f6f7f9", padding: 10, borderRadius: 10, fontSize: 13 }}>
+          <div
+            style={{
+              background: "#fee2e2",
+              border: "1px solid #fca5a5",
+              color: "#7f1d1d",
+              padding: 12,
+              borderRadius: 10,
+              fontSize: 13,
+              whiteSpace: "pre-line",
+              lineHeight: 1.5,
+            }}
+          >
             {err}
           </div>
         ) : (
           <>
             <div
-              id={readerId}
-              style={{ width: "100%", cursor: "pointer" }}
-              onClick={() => applyAutofocus(readerId)}
-            />
-            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6, textAlign: "center" }}>
-              {mode === "barcode"
-                ? "바코드를 가로 프레임 안에 맞춰주세요. 흐릿하면 화면을 탭하세요."
-                : "QR 을 프레임 안에 맞춰주세요. 흐릿하면 화면을 탭하세요."}
+              style={videoWrapperStyle}
+              onClick={handleTapFocus}
+              onTouchStart={handleTapFocus}
+            >
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                style={videoStyle}
+              />
+              {/* 扫描引导框 */}
+              <div style={guideOverlayStyle}>
+                <div style={guideBoxStyle} />
+              </div>
             </div>
+            <p style={hintStyle}>화면을 탭하면 초점을 다시 맞출 수 있습니다.</p>
+            <p style={hintSubStyle}>QR 또는 바코드를 가이드 안에 맞춰주세요.</p>
           </>
         )}
 
-        <button onClick={onClose} style={closeBtnStyle}>
+        <button onClick={handleClose} style={closeBtnStyle}>
           닫기
         </button>
       </div>
@@ -147,37 +234,8 @@ export default function QrScanModal({
   );
 }
 
-// 화면 탭으로 다시 초점을 잡도록 트리거.
-// `applyConstraints` 로 focusMode 를 다시 한 번 적용해 강제 리포커스.
-function applyAutofocus(containerId: string) {
-  const container = document.getElementById(containerId);
-  const video = container?.querySelector("video") as HTMLVideoElement | null;
-  if (!video || !video.srcObject) return;
-  const stream = video.srcObject as MediaStream;
-  const track = stream.getVideoTracks()[0];
-  if (!track) return;
-  try {
-    // 일단 single-shot
-    track
-      .applyConstraints({
-        advanced: [{ focusMode: "single-shot" }] as unknown as MediaTrackConstraintSet[],
-      })
-      .catch(() => {});
-    // 그 다음 continuous 로 복귀
-    setTimeout(() => {
-      track
-        .applyConstraints({
-          advanced: [{ focusMode: "continuous" }] as unknown as MediaTrackConstraintSet[],
-        })
-        .catch(() => {});
-    }, 300);
-  } catch {
-    // 미지원 브라우저는 그냥 무시
-  }
-}
-
 /**
- * 允许扫描内容是:
+ * 扫描结果可能形式:
  * - 直接就是 SN
  * - "SN:XXXX"
  * - URL ...?sn=XXXX
@@ -185,7 +243,6 @@ function applyAutofocus(containerId: string) {
 function extractSn(raw: string) {
   const t = (raw || "").trim();
 
-  // URL case
   try {
     if (t.startsWith("http://") || t.startsWith("https://")) {
       const u = new URL(t);
@@ -194,11 +251,9 @@ function extractSn(raw: string) {
     }
   } catch {}
 
-  // "SN:XXXX"
   const m = t.match(/SN\s*[:=]\s*([A-Za-z0-9\-]+)/i);
   if (m?.[1]) return m[1].trim();
 
-  // default
   return t;
 }
 
@@ -218,6 +273,53 @@ const modalStyle: React.CSSProperties = {
   background: "#fff",
   borderRadius: 14,
   padding: 14,
+};
+
+const videoWrapperStyle: React.CSSProperties = {
+  position: "relative",
+  width: "100%",
+  height: 320,
+  borderRadius: 12,
+  overflow: "hidden",
+  background: "#000",
+  cursor: "pointer",
+};
+
+const videoStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const guideOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  pointerEvents: "none",
+};
+
+const guideBoxStyle: React.CSSProperties = {
+  width: "80%",
+  height: 120,
+  border: "2px solid #f87171",
+  borderRadius: 8,
+};
+
+const hintStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontSize: 12,
+  color: "#71717a",
+  marginTop: 8,
+  marginBottom: 2,
+};
+
+const hintSubStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontSize: 12,
+  color: "#a1a1aa",
+  marginTop: 0,
 };
 
 const closeBtnStyle: React.CSSProperties = {
