@@ -29,6 +29,7 @@ export default function ConfirmClient({ token }: Props) {
     if (effectiveToken && effectiveToken.trim()) return;
     try {
       const t = new URLSearchParams(window.location.search).get("t") || "";
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (t) setEffectiveToken(t);
     } catch {}
   }, [effectiveToken]);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
+import { sendSms } from "@/lib/sms";
+import { buildUserCompletionSms } from "@/lib/userSms";
 
 export async function POST(req: Request) {
   try {
@@ -18,6 +20,8 @@ export async function POST(req: Request) {
         confirmTokenExpiresAt: true,
         installType: true,
         installerPhone: true,
+        userPhone: true,
+        freeAsEndDate: true,
       },
     });
 
@@ -59,6 +63,22 @@ export async function POST(req: Request) {
         }
       }
     });
+
+    // 인증 기사 + confirm 완료 → 사용자에게 완료 SMS (기사 연락처 포함).
+    // 트랜잭션 외부에서 발송 (SMS 실패 시 DB 롤백 방지, sms.ts 는 silent failure).
+    if (
+      rec.installType === "installer" &&
+      rec.userPhone &&
+      rec.freeAsEndDate
+    ) {
+      const userSmsText = buildUserCompletionSms({
+        installType: "installer",
+        freeAsEndDate: rec.freeAsEndDate,
+        installerPhone: rec.installerPhone,
+      });
+      await sendSms(rec.userPhone, userSmsText);
+      console.log("[SMS SENT][CONFIRM→USER]", { to: rec.userPhone });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
