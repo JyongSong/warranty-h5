@@ -47,3 +47,9 @@ next-env.d.ts
 /data/installers_rows.csv
 /data/installers-cleaned.sql
 /data/installers-need-review.csv
+
+# Office temp / lock files
+~$*
+
+# Claude Code worktrees (per-task isolated clones)
+.claude/
