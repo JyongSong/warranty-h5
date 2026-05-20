@@ -18,6 +18,24 @@ export default function QrScanModal({
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [err, setErr] = useState<string>("");
+  // zoom 상태: 사용자 +/- 버튼으로 조정 가능. 디바이스가 zoom 을 안 받으면
+  // applyConstraints 가 조용히 무시되지만 UI 표시는 유지된다.
+  const [zoom, setZoom] = useState<number>(3);
+  const [zoomMax, setZoomMax] = useState<number>(5);
+
+  const applyZoom = async (next: number) => {
+    const clamped = Math.max(1, Math.min(zoomMax, Number(next.toFixed(1))));
+    setZoom(clamped);
+    const track = trackRef.current;
+    if (!track) return;
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom: clamped }] as unknown as MediaTrackConstraintSet[],
+      });
+    } catch {
+      // 미지원 디바이스는 그냥 무시
+    }
+  };
 
   // 화면 탭 → single-shot focus + pointOfInterest 좌표 적용 → 800ms 후 continuous 복귀.
   // 일부 안드로이드 (특히 삼성) 에서 자동초점이 안 잡힐 때 수동 대응용.
@@ -83,64 +101,58 @@ export default function QrScanModal({
           return;
         }
 
-        // 방안 B: 시작 후 capabilities 확인 → continuous AF + 근접 초점 hint + zoom.
+        // 방안 B: capabilities 노출 여부와 무관하게 일단 apply 시도.
+        //         디바이스가 받으면 적용, 안 받으면 조용히 catch.
         const track = stream.getVideoTracks()[0];
         trackRef.current = track ?? null;
         if (track) {
-          const cap = track.getCapabilities?.() as
-            | Record<string, unknown>
-            | undefined;
+          const cap = (track.getCapabilities?.() ?? {}) as Record<
+            string,
+            unknown
+          >;
 
           // B-1. continuous focus
-          const modes = cap?.focusMode as string[] | undefined;
-          if (modes?.includes("continuous")) {
-            await track
-              .applyConstraints({
-                advanced: [
-                  { focusMode: "continuous" },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
-          }
+          await track
+            .applyConstraints({
+              advanced: [
+                { focusMode: "continuous" },
+              ] as unknown as MediaTrackConstraintSet[],
+            })
+            .catch(() => {});
 
-          // B-2. 근접 초점 hint (Android Chrome 등): 스캐닝 거리는 보통 10~30cm 이므로
-          //      초점을 약 15cm 부근에서 시작하도록 유도.
-          //      iOS Safari 는 focusDistance 를 capabilities 에 노출 안 함 → 자동 skip.
-          const focusDistance = cap?.focusDistance as
+          // B-2. 근접 초점: 5cm 시작 hint. 일부 디바이스는 capabilities 에 노출 안 해도
+          //      apply 는 받는다. 받지 않으면 조용히 무시.
+          //      iOS Safari 는 둘 다 무시 → 기존 동작 유지.
+          const fd = cap.focusDistance as
+            | { min: number; max: number }
+            | undefined;
+          const nearFocus = fd
+            ? Math.max(fd.min, Math.min(0.05, fd.max))
+            : 0.05;
+          await track
+            .applyConstraints({
+              advanced: [
+                { focusMode: "continuous", focusDistance: nearFocus },
+              ] as unknown as MediaTrackConstraintSet[],
+            })
+            .catch(() => {});
+
+          // B-3. zoom 기본 3x. capabilities 의 max 가 있으면 그 안에서 클램프.
+          //      max 가 없으면 그냥 3x 로 try.
+          const zoomCap = cap.zoom as
             | { min: number; max: number; step?: number }
             | undefined;
-          if (
-            focusDistance &&
-            typeof focusDistance.min === "number" &&
-            typeof focusDistance.max === "number"
-          ) {
-            const nearFocus = Math.max(
-              focusDistance.min,
-              Math.min(0.15, focusDistance.max)
-            );
-            await track
-              .applyConstraints({
-                advanced: [
-                  { focusMode: "continuous", focusDistance: nearFocus },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
-          }
-
-          // B-3. 적정 zoom (지원 시): 작은 바코드를 더 많은 픽셀로 잡아 인식률 ↑.
-          const zoom = cap?.zoom as
-            | { min: number; max: number; step?: number }
-            | undefined;
-          if (zoom && typeof zoom.max === "number" && zoom.max >= 1.5) {
-            const targetZoom = Math.min(1.8, zoom.max);
-            await track
-              .applyConstraints({
-                advanced: [
-                  { zoom: targetZoom },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
-          }
+          const maxZ = typeof zoomCap?.max === "number" ? zoomCap.max : 8;
+          setZoomMax(maxZ);
+          const initialZoom = Math.min(3, maxZ);
+          setZoom(initialZoom);
+          await track
+            .applyConstraints({
+              advanced: [
+                { zoom: initialZoom },
+              ] as unknown as MediaTrackConstraintSet[],
+            })
+            .catch(() => {});
         }
 
         // ZXing 디코더: QR + 주요 1D 바코드 동시 인식.
@@ -262,6 +274,28 @@ export default function QrScanModal({
                 <div style={guideBoxStyle} />
               </div>
             </div>
+            {/* zoom 컨트롤: 디바이스가 zoom 을 안 받으면 누름 효과 없음 */}
+            <div style={zoomControlsStyle}>
+              <button
+                type="button"
+                onClick={() => applyZoom(zoom - 0.5)}
+                disabled={zoom <= 1}
+                style={zoomButtonStyle(zoom <= 1)}
+                aria-label="zoom out"
+              >
+                −
+              </button>
+              <span style={zoomLabelStyle}>{zoom.toFixed(1)}x</span>
+              <button
+                type="button"
+                onClick={() => applyZoom(zoom + 0.5)}
+                disabled={zoom >= zoomMax}
+                style={zoomButtonStyle(zoom >= zoomMax)}
+                aria-label="zoom in"
+              >
+                +
+              </button>
+            </div>
             <p style={hintStyle}>화면을 탭하면 초점을 다시 맞출 수 있습니다.</p>
             <p style={hintSubStyle}>QR 또는 바코드를 가이드 안에 맞춰주세요.</p>
           </>
@@ -347,6 +381,37 @@ const guideBoxStyle: React.CSSProperties = {
   border: "2px solid #f87171",
   borderRadius: 8,
 };
+
+const zoomControlsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 16,
+  marginTop: 10,
+};
+
+const zoomLabelStyle: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 700,
+  color: "#18181b",
+  minWidth: 48,
+  textAlign: "center",
+};
+
+function zoomButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    border: "1px solid #d4d4d8",
+    background: disabled ? "#f4f4f5" : "#fff",
+    color: disabled ? "#a1a1aa" : "#18181b",
+    fontSize: 22,
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    lineHeight: 1,
+  };
+}
 
 const hintStyle: React.CSSProperties = {
   textAlign: "center",
