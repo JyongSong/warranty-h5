@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import QrScanModal from "./QrScanModal";
+import QrScanModal, { type ScanMode } from "./QrScanModal";
+import ScanModeChoiceModal from "./ScanModeChoiceModal";
 import { getErrorMessage } from "@/lib/error";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
@@ -28,7 +29,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
   const [model, setModel] = useState<Model>("L100");
   const [installType, setInstallType] = useState<InstallType>("installer");
+  // 스캔 흐름:
+  //   L100/U100: 스캔 버튼 → 바로 QR 스캐너 (scanMode='qr')
+  //   K100:      스캔 버튼 → 모드 선택 모달 → 사용자가 선택한 모드로 스캐너
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanMode, setScanMode] = useState<ScanMode | null>(null);
 
   const [sn, setSn] = useState(initialSn);
   const [installDate, setInstallDate] = useState(() => {
@@ -208,9 +213,9 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           </select>
         </label>
 
-        {/* 2) SN 입력 + 스캔 버튼 */}
+        {/* 2) 일련번호 입력 + 스캔 버튼 */}
         <label style={{ display: "grid", gap: 6 }}>
-          <span>제품 S/N</span>
+          <span>제품 일련번호</span>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={sn}
@@ -220,7 +225,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             />
             <button
               type="button"
-              onClick={() => setScanOpen(true)}
+              onClick={() => {
+                setScanOpen(true);
+                // L100/U100 은 QR 만 사용 → 모드 선택 단계 생략
+                setScanMode(model === "K100" ? null : "qr");
+              }}
               style={{
                 height: 40,
                 padding: "0 12px",
@@ -228,13 +237,13 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
                 cursor: "pointer",
               }}
             >
-              📷 QR
+              📷 일련번호 스캔
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
             {model === "K100"
-              ? "K100도 QR 스캔으로 S/N 입력을 진행합니다."
-              : "L100/U100은 QR 스캔을 권장합니다."}
+              ? "K100은 QR 또는 바코드 스캔을 선택할 수 있습니다."
+              : "L100/U100은 QR 스캔을 사용합니다."}
           </div>
         </label>
 
@@ -359,13 +368,28 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       </div>
 
       {/* 3) Modal 분기 */}
-      {scanOpen && (
+      {scanOpen && scanMode === null && (
+        <ScanModeChoiceModal
+          title={`${model} 스캔 방식 선택`}
+          onSelect={(m) => setScanMode(m)}
+          onClose={() => {
+            setScanOpen(false);
+            setScanMode(null);
+          }}
+        />
+      )}
+      {scanOpen && scanMode !== null && (
         <QrScanModal
-          title={`${model} QR 스캔`}
-          onClose={() => setScanOpen(false)}
+          title={`${model} ${scanMode === "barcode" ? "바코드" : "QR"} 스캔`}
+          mode={scanMode}
+          onClose={() => {
+            setScanOpen(false);
+            setScanMode(null);
+          }}
           onResult={(value) => {
             setSn(value);
             setScanOpen(false);
+            setScanMode(null);
           }}
         />
       )}
