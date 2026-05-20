@@ -28,6 +28,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
   const [model, setModel] = useState<Model>("L100");
   const [installType, setInstallType] = useState<InstallType>("installer");
+  // 통합 스캐너: ZXing BrowserMultiFormatReader 로 QR + 1D 바코드 동시 인식.
   const [scanOpen, setScanOpen] = useState(false);
 
   const [sn, setSn] = useState(initialSn);
@@ -208,9 +209,9 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           </select>
         </label>
 
-        {/* 2) SN 입력 + 스캔 버튼 */}
+        {/* 2) 일련번호 입력 + 스캔 버튼 */}
         <label style={{ display: "grid", gap: 6 }}>
-          <span>제품 S/N</span>
+          <span>제품 일련번호</span>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={sn}
@@ -228,13 +229,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
                 cursor: "pointer",
               }}
             >
-              📷 QR
+              📷 일련번호 스캔
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
-            {model === "K100"
-              ? "K100도 QR 스캔으로 S/N 입력을 진행합니다."
-              : "L100/U100은 QR 스캔을 권장합니다."}
+            QR 또는 바코드를 카메라에 비춰 일련번호를 자동 입력합니다.
           </div>
         </label>
 
@@ -358,10 +357,10 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
         </button>
       </div>
 
-      {/* 3) Modal 분기 */}
+      {/* 3) 스캔 모달 */}
       {scanOpen && (
         <QrScanModal
-          title={`${model} QR 스캔`}
+          title={`${model} 일련번호 스캔`}
           onClose={() => setScanOpen(false)}
           onResult={(value) => {
             setSn(value);
