@@ -56,27 +56,28 @@ export default function QrScanModal({
         ? { width: 320, height: 140 }
         : { width: 260, height: 260 };
 
-    // 자동초점 + 후면 카메라 + 가능하면 고해상도.
-    // advanced 옵션은 미지원 브라우저에서 무시될 뿐 오류는 안 난다.
-    const videoConstraints: MediaTrackConstraints = {
+    // html5-qrcode 의 첫 인자는 정확히 1 key 객체만 받는다 (cameraIdOrConfig).
+    // 고급 옵션은 두 번째 인자의 videoConstraints 로 전달해야 한다.
+    // focusMode 등 experimental advanced 는 dom lib 타입에 없어서 unknown cast.
+    const videoConstraints = {
       facingMode: { ideal: "environment" },
       width: { ideal: 1920 },
       height: { ideal: 1080 },
-      // focusMode 는 experimental, dom lib 타입에 없어서 unknown cast.
       advanced: [
         { focusMode: "continuous" },
         { focusMode: "auto" },
-      ] as unknown as MediaTrackConstraintSet[],
-    };
+      ],
+    } as unknown as MediaTrackConstraints;
 
     async function start() {
       try {
         await qr.start(
-          videoConstraints,
+          { facingMode: "environment" },
           {
             fps: mode === "barcode" ? 15 : 10,
             qrbox,
             aspectRatio: window.innerWidth > window.innerHeight ? 16 / 9 : 9 / 16,
+            videoConstraints,
           },
           async (decodedText) => {
             if (!active) return;
