@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getErrorMessage } from "@/lib/error";
-import type { BrowserMultiFormatReader } from "@zxing/browser";
 
 type Props = {
   title?: string;
@@ -17,12 +16,8 @@ export default function QrScanModal({
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-
   const [err, setErr] = useState<string>("");
-  const [capturing, setCapturing] = useState<boolean>(false);
-  const [captureMsg, setCaptureMsg] = useState<string>("");
 
   // 화면 탭 → single-shot focus + pointOfInterest 좌표 → 800ms 후 continuous 복귀.
   // 일부 안드로이드 (특히 삼성) 자동초점 미동작 시 수동 대응.
@@ -67,51 +62,12 @@ export default function QrScanModal({
     }
   };
 
-  // 수동 캡처: 자동 스캔이 잡지 못할 때 사용자가 적절한 순간 한 프레임을
-  // 정지 후 단일 이미지 디코딩. 자동초점이 부족한 안드로이드 대응.
-  const handleCapture = async () => {
-    const video = videoRef.current;
-    const reader = readerRef.current;
-    if (!video || !reader || capturing) return;
-
-    setCapturing(true);
-    setCaptureMsg("");
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("CANVAS_CTX_UNAVAILABLE");
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // ZXing browser API: BrowserCodeReader.decodeFromCanvas (동기)
-      const decodeFromCanvas = (
-        reader as unknown as {
-          decodeFromCanvas: (c: HTMLCanvasElement) => { getText: () => string };
-        }
-      ).decodeFromCanvas;
-      const result = decodeFromCanvas.call(reader, canvas);
-      if (result) {
-        const value = extractSn(result.getText());
-        cleanupRef.current?.();
-        cleanupRef.current = null;
-        onResult(value);
-        return;
-      }
-      setCaptureMsg("인식 실패. 더 가까이/밝게 비춰주세요.");
-    } catch {
-      setCaptureMsg("인식 실패. 다시 시도해 주세요.");
-    } finally {
-      setCapturing(false);
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
 
     async function start() {
       try {
-        // 방안 A: getUserMedia 단계 top-level focusMode (일부 안드로이드 advanced 무시 대응)
+        // 방안 A: getUserMedia top-level focusMode (일부 안드로이드 대응)
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
@@ -128,8 +84,8 @@ export default function QrScanModal({
 
         // 방안 B: 시작 후 capabilities 기반 추가 조정.
         //   B-1 continuous focus
-        //   B-2 근접 hint (15cm)        ← capabilities 노출 시에만
-        //   B-3 적정 zoom (1.5x)        ← capabilities 노출 시에만
+        //   B-2 근접 hint 0.15m (15cm)   ← capabilities 노출 시에만
+        //   B-3 적정 zoom 1.5x           ← capabilities 노출 시에만
         // iOS Safari 는 focusDistance / zoom 노출 안 함 → 자동 skip (기존 동작 유지).
         const track = stream.getVideoTracks()[0];
         trackRef.current = track ?? null;
@@ -205,7 +161,6 @@ export default function QrScanModal({
         hints.set(DecodeHintType.TRY_HARDER, true);
 
         const reader = new BrowserMultiFormatReader(hints);
-        readerRef.current = reader;
 
         if (cancelled || !videoRef.current) {
           stream.getTracks().forEach((t) => t.stop());
@@ -229,7 +184,6 @@ export default function QrScanModal({
           controls.stop();
           stream.getTracks().forEach((t) => t.stop());
           trackRef.current = null;
-          readerRef.current = null;
         };
 
         if (cancelled) cleanupRef.current();
@@ -303,23 +257,8 @@ export default function QrScanModal({
                 <div style={guideBoxStyle} />
               </div>
             </div>
-
-            <p style={hintStyle}>
-              자동 스캔이 안 되면 화면을 탭해 초점을 맞추거나 아래 버튼으로 캡처하세요.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleCapture}
-              disabled={capturing}
-              style={captureBtnStyle(capturing)}
-            >
-              {capturing ? "인식 중..." : "📸 캡처해서 인식"}
-            </button>
-
-            {captureMsg && (
-              <p style={captureMsgStyle}>{captureMsg}</p>
-            )}
+            <p style={hintStyle}>화면을 탭하면 초점을 다시 맞출 수 있습니다.</p>
+            <p style={hintSubStyle}>QR 또는 바코드를 가이드 안에 맞춰주세요.</p>
           </>
         )}
 
@@ -409,30 +348,14 @@ const hintStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#71717a",
   marginTop: 8,
-  marginBottom: 8,
-  lineHeight: 1.5,
+  marginBottom: 2,
 };
 
-function captureBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    width: "100%",
-    padding: "12px 12px",
-    borderRadius: 12,
-    border: "1px solid #1d3129",
-    background: disabled ? "#52766a" : "#1d3129",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 15,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
-
-const captureMsgStyle: React.CSSProperties = {
+const hintSubStyle: React.CSSProperties = {
   textAlign: "center",
-  fontSize: 13,
-  color: "#b42318",
-  marginTop: 8,
-  marginBottom: 0,
+  fontSize: 12,
+  color: "#a1a1aa",
+  marginTop: 0,
 };
 
 const closeBtnStyle: React.CSSProperties = {
@@ -441,8 +364,8 @@ const closeBtnStyle: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,
   border: "1px solid #111",
-  background: "#fff",
-  color: "#111",
+  background: "#111",
+  color: "#fff",
   fontWeight: 800,
   cursor: "pointer",
 };
