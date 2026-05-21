@@ -80,3 +80,12 @@ model Admin {
   @@map("admins")
 }
 
+model SmsTemplate {
+  key       String   @id
+  body      String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("sms_templates")
+}
+

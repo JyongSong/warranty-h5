@@ -1,0 +1,302 @@
+import sql from 'mssql'
+import { getErpPool } from './erp'
+
+// ============================================================
+// Types
+// ============================================================
+
+export type DispatchRow = {
+  customer_name: string | null
+  phone:         string | null
+  address:       string | null
+  order_numbers: string | null
+  memo:          string | null
+  due_date:      string | null    // YYYYMMDD (group 내 가장 빠른 날짜)
+}
+
+export type DispatchAssignment = DispatchRow & {
+  business_number: string                  // 거래처
+  branch_name:     string                  // 지점명
+  item_code:       string | null           // 품목코드
+  item_name:       string | null           // 품목명
+  quantity:        number | null           // 수량
+}
+
+// ============================================================
+// Constants (Excel 모범 예시 기반)
+// ============================================================
+
+/** YYYYMMDD → YYYY/MM/DD */
+export function formatDueDate(yyyymmdd: string): string {
+  return `${yyyymmdd.slice(0, 4)}/${yyyymmdd.slice(4, 6)}/${yyyymmdd.slice(6, 8)}`
+}
+
+export const DISPATCH_CONST = {
+  창고:         '본사',
+  담당자:       '서다은',
+  수리유형:     '설치',
+  설치완료여부: '접수',
+} as const
+
+// ============================================================
+// Installer Registry (설치기사목록_v2.xlsx 기준)
+// installation-assignment-app/server/excelAssignment.ts 와 동일한 로직 사용
+// ============================================================
+
+type Installer = {
+  businessNumber:     string
+  branchName:         string
+  phone:              string         // 기사님 연락처 (SMS 발송용 — 직접 채워 넣기)
+  installationRegion: string         // 설치지역 (시/도 수준)
+  possibleRegion:     string         // 가능지역 (구/시 수준, 쉼표 구분)
+  impossibleRegion:   string         // 불가지역
+}
+
+const INSTALLERS: readonly Installer[] = [
+  { businessNumber: '211-10-11445', branchName: '강남/열쇠닥터',                phone: '010-5168-2509', installationRegion: '서울',     possibleRegion: '강남구, 서초구, 송파구, 강동구',     impossibleRegion: '' },
+  { businessNumber: '204-27-28418', branchName: '동대문/24시출장열쇠',          phone: '010-2122-9140', installationRegion: '서울',     possibleRegion: '동대문구, 중랑구, 성동구, 광진구',   impossibleRegion: '' },
+  { businessNumber: '868-88-00353', branchName: '서울경기포항/24시출장열쇠5G',  phone: '010-6530-6760', installationRegion: '서울',     possibleRegion: '광진구, 하남시',                       impossibleRegion: '' },
+  { businessNumber: '112-48-04825', branchName: '관악/신우열쇠',                phone: '010-4003-1382', installationRegion: '서울',     possibleRegion: '영등포구, 동작구, 관악구',            impossibleRegion: '' },
+  { businessNumber: '110-17-24326', branchName: '용인/24시출장열쇠',            phone: '010-2084-5500', installationRegion: '경기도',   possibleRegion: '용인시, 수원시',                       impossibleRegion: '수원시 영통구' },
+  { businessNumber: '124-28-81512', branchName: '화성/신영통열쇠',              phone: '010-3602-3477', installationRegion: '경기도',   possibleRegion: '화성시, 동탄시, 수원 영통구',         impossibleRegion: '' },
+  { businessNumber: '134-24-54294', branchName: '안산/24시열쇠나라',            phone: '010-4733-5445', installationRegion: '경기도',   possibleRegion: '안산시',     impossibleRegion: '' },
+  { businessNumber: '126-12-75562', branchName: '경기광주/청도열쇠상사e',       phone: '010-3364-8385', installationRegion: '경기도',   possibleRegion: '광주시',                               impossibleRegion: '' },
+  { businessNumber: '130-14-95576', branchName: '경기열쇠상사',                 phone: '010-2245-2222', installationRegion: '전국',     possibleRegion: '인천, 부천, 전지역',                  impossibleRegion: '' },  // 기본/Fallback
+  { businessNumber: '136-46-00419', branchName: '의정부/롯데마트 장암점',       phone: '010-4819-4568', installationRegion: '경기도',   possibleRegion: '의정부시',                             impossibleRegion: '' },
+  { businessNumber: '856-21-00558', branchName: '대전/영신열쇠',                phone: '010-3444-8981', installationRegion: '충청남도', possibleRegion: '대전',                                 impossibleRegion: '' },
+  { businessNumber: '605-23-84667', branchName: '부산/열쇠특공대',              phone: '010-8542-5122', installationRegion: '경상북도', possibleRegion: '부산',                                 impossibleRegion: '강서구, 부산' },
+  { businessNumber: '114-86-91070', branchName: '피엘이앤지',                   phone: '', installationRegion: '전ㄱ',     possibleRegion: '전국',                                 impossibleRegion: '' },
+]
+
+const DEFAULT_INSTALLER: Installer = INSTALLERS.find(i => i.businessNumber === '130-14-95576') ?? INSTALLERS[0]
+
+/** 지점명으로 설치기사 조회. 정확히 일치하지 않으면 null 반환. */
+export function findInstallerByBranch(branchName: string): { branchName: string; phone: string } | null {
+  const target = branchName.trim()
+  if (!target) return null
+  const found = INSTALLERS.find(i => i.branchName === target)
+  return found ? { branchName: found.branchName, phone: found.phone } : null
+}
+
+// ============================================================
+// String normalization helpers
+// ============================================================
+
+const toText = (v: unknown): string => v == null ? '' : String(v).trim()
+
+const normalizeCompact = (v: unknown): string =>
+  toText(v).replace(/^﻿/, '').replace(/\s+/g, '')
+
+// ============================================================
+// Region matching (V2 mode — possibleRegion + impossibleRegion 기반)
+// ============================================================
+
+function isUniversalRegion(value: string): boolean {
+  const n = normalizeCompact(value)
+  return n === '전국' || n === '전체' || n === '전지역' || n.startsWith('전ㄱ')
+}
+
+function splitRegionTokens(value: string): string[] {
+  const seen = new Set<string>()
+  return value
+    .replace(/\([^)]*제외[^)]*\)/g, ' ')
+    .replace(/（[^）]*제외[^）]*）/g, ' ')
+    .split(/[\/／|·,，;；\n\r\t]+/g)
+    .map(t => t.trim())
+    .filter(Boolean)
+    .filter(t => {
+      const n = normalizeCompact(t)
+      if (!n || seen.has(n)) return false
+      seen.add(n)
+      return true
+    })
+}
+
+function tokenMatchesAddress(token: string, normalizedAddress: string): boolean {
+  const nt = normalizeCompact(token)
+  if (!nt) return false
+  if (isUniversalRegion(nt)) return true
+  if (normalizedAddress.includes(nt)) return true
+
+  const parts = token.split(/\s+/g).map(p => normalizeCompact(p)).filter(Boolean)
+  if (parts.length > 1 && parts.every(p => normalizedAddress.includes(p))) return true
+
+  if (/^[가-힣]{2,}$/.test(nt)) {
+    return normalizedAddress.includes(`${nt}시`) ||
+           normalizedAddress.includes(`${nt}구`) ||
+           normalizedAddress.includes(`${nt}군`)
+  }
+  return false
+}
+
+function installationRegionMatchesAddress(inst: Installer, normalizedAddress: string): boolean {
+  const ir = toText(inst.installationRegion)
+  if (!ir || isUniversalRegion(ir)) return true
+  if (splitRegionTokens(ir).some(t => tokenMatchesAddress(t, normalizedAddress))) return true
+  const pTokens = splitRegionTokens(toText(inst.possibleRegion))
+  return pTokens.some(t => !isUniversalRegion(t) && tokenMatchesAddress(t, normalizedAddress))
+}
+
+function impossibleRegionMatchesAddress(inst: Installer, normalizedAddress: string): boolean {
+  return splitRegionTokens(toText(inst.impossibleRegion)).some(t => tokenMatchesAddress(t, normalizedAddress))
+}
+
+function getV2MatchScore(inst: Installer, normalizedAddress: string): number {
+  if (!installationRegionMatchesAddress(inst, normalizedAddress)) return 0
+  if (impossibleRegionMatchesAddress(inst, normalizedAddress)) return 0
+
+  const pTokens = splitRegionTokens(toText(inst.possibleRegion))
+  if (pTokens.length === 0) return 0
+
+  const scores = pTokens
+    .filter(t => tokenMatchesAddress(t, normalizedAddress))
+    .map(t => isUniversalRegion(t) ? 1 : normalizeCompact(t).length + 10)
+
+  return scores.length > 0 ? Math.max(...scores) : 0
+}
+
+/** 주소 → 설치기사 매칭. 매칭 실패시 default (경기열쇠상사) 반환. */
+export function matchInstaller(address: string): Installer {
+  const n = normalizeCompact(address)
+  if (!n) return DEFAULT_INSTALLER
+
+  const best = INSTALLERS
+    .map((inst, idx) => ({ inst, idx, score: getV2MatchScore(inst, n) }))
+    .filter(m => m.score > 0)
+    .sort((a, b) => b.score - a.score || a.idx - b.idx)[0]
+
+  return best?.inst ?? DEFAULT_INSTALLER
+}
+
+// ============================================================
+// 품목 결정 (memo에 K100/L100 키워드로 판별)
+// installation-assignment-app 와 동일한 매핑 사용:
+//   L100 → 00047 L100도어락설치
+//   K100 → 00050 K100도어락설치
+//   기타 → null (Q/R 비움)
+// 수량은 우리 memo 포맷 ("용역 도어락 설치비(K100) x1 / ...") 기준으로 정규식 적용
+// ============================================================
+
+export function determineItem(memo: string): { itemCode: string | null; itemName: string | null; quantity: number | null } {
+  const hasL100 = memo.includes('L100')
+  const hasK100 = memo.includes('K100')
+
+  const qtyMatch = memo.match(/설치비\s*\([KL]100\)[^\/]*x\s*(\d+)/i) ||
+                   memo.match(/[KL]100[^\/\n]*?x\s*(\d+)/i)
+  const quantity = qtyMatch ? Number(qtyMatch[1]) : null
+
+  if (hasL100) return { itemCode: '00047', itemName: 'L100도어락설치', quantity }
+  if (hasK100) return { itemCode: '00050', itemName: 'K100도어락설치', quantity }
+  return { itemCode: null, itemName: null, quantity }
+}
+
+// ============================================================
+// 데이터 조회 + 분배 파이프라인
+// ============================================================
+
+/**
+ * 기사배정 대상 주문 조회 (ERP)
+ * - 납기일자 (DT_DUEDATE) 범위 매칭
+ * - 해당 주문(NO_SO)에 용역 품목(00010 출장비 / 00012% 도어락 설치비) 포함
+ * - 전화번호 기준 그룹핑 (한 사람 = 한 행)
+ * @param dueDateFrom YYYYMMDD (포함)
+ * @param dueDateTo   YYYYMMDD (포함)
+ */
+export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string): Promise<DispatchRow[]> {
+  const pool = await getErpPool()
+  const result = await pool.request()
+    .input('dueDateFrom', sql.VarChar(8), dueDateFrom)
+    .input('dueDateTo',   sql.VarChar(8), dueDateTo)
+    .query(`
+      WITH eligible AS (
+        SELECT DISTINCT SOL.NO_SO, SOL.CD_COMPANY
+        FROM NEOE.SA_SOL SOL
+        WHERE SOL.CD_COMPANY = '1000'
+          AND SOL.NO_HST     = 0
+          AND SOL.DT_DUEDATE BETWEEN @dueDateFrom AND @dueDateTo
+          AND (SOL.CD_ITEM = '00010' OR SOL.CD_ITEM LIKE '00012%')
+          -- 출하의뢰가 1건 이상 존재하고, 모든 SA_GIRL 라인이 QT_GIR = QT_GI 인 주문만
+          AND EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+              AND G.QT_GIR <> G.QT_GI
+          )
+      ),
+      lines AS (
+        SELECT
+          SOL.NO_SO, SOL.SEQ_SO, SOL.CD_COMPANY,
+          SOL.CD_ITEM,
+          LTRIM(RTRIM(ISNULL(I.NM_ITEM, SOL.CD_ITEM))) AS NM_ITEM,
+          CAST(SOL.QT_SO AS INT) AS QT,
+          SOL.NO_ORDER_ON,
+          SOL.DT_DUEDATE AS due_date,
+          COALESCE(
+            NULLIF(LTRIM(RTRIM(CZ.NO_HP2)),  ''),    -- 수령인 휴대폰 (우선)
+            NULLIF(LTRIM(RTRIM(CZ.NO_HP1)),  ''),    -- 구매자 휴대폰 (대체)
+            NULLIF(LTRIM(RTRIM(CZ.NO_TEL2)), ''),    -- 수령인 일반전화
+            NULLIF(LTRIM(RTRIM(CZ.NO_TEL1)), '')     -- 구매자 일반전화
+          ) AS phone,
+          COALESCE(
+            NULLIF(LTRIM(RTRIM(CZ.NM_RECEIVE)), ''),
+            NULLIF(LTRIM(RTRIM(CZ.NM_CUST)),    '')
+          ) AS nm,
+          CZ.DC_ADDR1 AS addr
+        FROM eligible e
+        JOIN NEOE.SA_SOL SOL
+          ON SOL.NO_SO = e.NO_SO AND SOL.CD_COMPANY = e.CD_COMPANY
+         AND SOL.NO_HST = 0
+        LEFT JOIN NEOE.CZ_SA_ORDER CZ
+          ON CZ.NO_ORDER  = SOL.NO_SO
+         AND CZ.SEQ_ORDER = SOL.SEQ_SO
+         AND CZ.CD_COMPANY = SOL.CD_COMPANY
+        LEFT JOIN NEOE.MA_PITEM I
+          ON I.CD_ITEM = SOL.CD_ITEM AND I.CD_COMPANY = '1000'
+      )
+      SELECT
+        MAX(nm)        AS customer_name,
+        l1.phone       AS phone,
+        MAX(addr)      AS address,
+        MIN(due_date)  AS due_date,
+        STUFF((
+          SELECT DISTINCT N', ' + l2.NO_ORDER_ON
+          FROM lines l2
+          WHERE l2.phone = l1.phone
+            AND l2.NO_ORDER_ON IS NOT NULL
+            -- 용역 라인이 속한 NO_ORDER_ON 만 (일반 상품의 NO_ORDER_ON 제외)
+            AND (l2.CD_ITEM = '00010' OR l2.CD_ITEM LIKE '00012%')
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS order_numbers,
+        STUFF((
+          SELECT N' / ' + l2.NM_ITEM + N' x' + CAST(l2.QT AS NVARCHAR(10))
+          FROM lines l2
+          WHERE l2.phone = l1.phone
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 3, '') AS memo
+      FROM lines l1
+      WHERE l1.phone IS NOT NULL
+      GROUP BY l1.phone
+      ORDER BY MIN(due_date), customer_name
+    `)
+
+  return result.recordset as DispatchRow[]
+}
+
+/** 조회된 행에 설치기사 매칭 + 품목 정보를 채워서 반환 */
+export function assignDispatch(rows: DispatchRow[]): DispatchAssignment[] {
+  return rows.map(row => {
+    const inst = matchInstaller(row.address ?? '')
+    const item = determineItem(row.memo ?? '')
+    return {
+      ...row,
+      business_number: inst.businessNumber,
+      branch_name:     inst.branchName,
+      item_code:       item.itemCode,
+      item_name:       item.itemName,
+      quantity:        item.quantity,
+    }
+  })
+}

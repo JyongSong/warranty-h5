@@ -75,6 +75,30 @@ export default function Home() {
               BLE 기기를 Zigbee로 유료 업그레이드하고 결제 상태를 관리합니다.
             </p>
           </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/dispatch"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Dispatch
+            </div>
+            <div className="mb-2 text-2xl font-semibold">기사배정</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              납기일자 기준 출장/설치 대상을 자동 분배하고 Excel 배정표를 다운로드합니다.
+            </p>
+          </a>
+          <a
+            className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1"
+            href="/send-assignment-sms"
+          >
+            <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-zinc-500">
+              Assignment SMS
+            </div>
+            <div className="mb-2 text-2xl font-semibold">설치 배정 SMS</div>
+            <p className="text-sm leading-6 text-zinc-600">
+              배정결과 엑셀을 업로드하여 고객에게 기사 연락처 SMS를 일괄 발송합니다.
+            </p>
+          </a>
         </div>
 
         <div className="grid gap-6 rounded-[2rem] border border-black/10 bg-[#1d3129] px-6 py-8 text-white sm:grid-cols-3 sm:px-8">
