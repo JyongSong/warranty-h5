@@ -169,24 +169,36 @@ export function matchInstaller(address: string): Installer {
 }
 
 // ============================================================
-// 품목 결정 (memo에 K100/L100 키워드로 판별)
-// installation-assignment-app 와 동일한 매핑 사용:
-//   L100 → 00047 L100도어락설치
-//   K100 → 00050 K100도어락설치
-//   기타 → null (Q/R 비움)
-// 수량은 우리 memo 포맷 ("용역 도어락 설치비(K100) x1 / ...") 기준으로 정규식 적용
+// 품목 결정 (memo에 K100/L100 + 월패드 연동 키워드로 판별)
+// 매핑:
+//   "용역 도어락 설치비(L100)+월패드 연동(RF447)" → 00048 L100도어락설치+월패드연동설치
+//   "용역 도어락 설치비(K100)+월패드 연동(RF447)" → 00049 K100도어락설치+월패드연동설치
+//   L100                                         → 00047 L100도어락설치
+//   K100                                         → 00050 K100도어락설치
+//   기타                                         → null (Q/R 비움)
+// 우선순위: 콤보(월패드 연동) > 단품. 콤보 매칭은 bare K100/L100 보다 먼저 평가해야 함.
+// 수량은 우리 memo 포맷 ("용역 도어락 설치비(K100)+월패드 연동(RF447) x1 / ...") 기준으로 정규식 적용
 // ============================================================
 
+const COMBO_L100_KEY = '용역 도어락 설치비(L100)+월패드 연동(RF447)'
+const COMBO_K100_KEY = '용역 도어락 설치비(K100)+월패드 연동(RF447)'
+
 export function determineItem(memo: string): { itemCode: string | null; itemName: string | null; quantity: number | null } {
+  const hasComboL100 = memo.includes(COMBO_L100_KEY)
+  const hasComboK100 = memo.includes(COMBO_K100_KEY)
   const hasL100 = memo.includes('L100')
   const hasK100 = memo.includes('K100')
 
+  // qtyMatch: 콤보의 "설치비(K100)+월패드 연동(RF447) x1" 도 [^\/]* 로 인해 동일하게 매칭됨
   const qtyMatch = memo.match(/설치비\s*\([KL]100\)[^\/]*x\s*(\d+)/i) ||
                    memo.match(/[KL]100[^\/\n]*?x\s*(\d+)/i)
   const quantity = qtyMatch ? Number(qtyMatch[1]) : null
 
-  if (hasL100) return { itemCode: '00047', itemName: 'L100도어락설치', quantity }
-  if (hasK100) return { itemCode: '00050', itemName: 'K100도어락설치', quantity }
+  // 콤보 (월패드 연동) 우선 — bare K100/L100 보다 먼저 평가
+  if (hasComboL100) return { itemCode: '00048', itemName: 'L100도어락설치+월패드연동설치', quantity }
+  if (hasComboK100) return { itemCode: '00049', itemName: 'K100도어락설치+월패드연동설치', quantity }
+  if (hasL100)      return { itemCode: '00047', itemName: 'L100도어락설치',                  quantity }
+  if (hasK100)      return { itemCode: '00050', itemName: 'K100도어락설치',                  quantity }
   return { itemCode: null, itemName: null, quantity }
 }
 
