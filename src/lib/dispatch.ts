@@ -66,7 +66,7 @@ const INSTALLERS: readonly Installer[] = [
   { businessNumber: '136-46-00419', branchName: '의정부/롯데마트 장암점',       phone: '010-4819-4568', installationRegion: '경기도',   possibleRegion: '의정부시',                             impossibleRegion: '' },
   { businessNumber: '856-21-00558', branchName: '대전/영신열쇠',                phone: '010-3444-8981', installationRegion: '충청남도', possibleRegion: '대전',                                 impossibleRegion: '' },
   { businessNumber: '605-23-84667', branchName: '부산/열쇠특공대',              phone: '010-8542-5122', installationRegion: '경상북도', possibleRegion: '부산',                                 impossibleRegion: '강서구, 부산' },
-  { businessNumber: '114-86-91070', branchName: '피엘이앤지',                   phone: '', installationRegion: '전ㄱ',     possibleRegion: '전국',                                 impossibleRegion: '' },
+  //{ businessNumber: '114-86-91070', branchName: '피엘이앤지',                   phone: '', installationRegion: '전ㄱ',     possibleRegion: '전국',                                 impossibleRegion: '' },
 ]
 
 const DEFAULT_INSTALLER: Installer = INSTALLERS.find(i => i.businessNumber === '130-14-95576') ?? INSTALLERS[0]
