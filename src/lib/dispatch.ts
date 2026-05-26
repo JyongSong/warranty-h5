@@ -57,6 +57,7 @@ const INSTALLERS: readonly Installer[] = [
   { businessNumber: '204-27-28418', branchName: '동대문/24시출장열쇠',          phone: '010-2122-9140', installationRegion: '서울',     possibleRegion: '동대문구, 중랑구, 성동구, 광진구',   impossibleRegion: '' },
   { businessNumber: '868-88-00353', branchName: '서울경기포항/24시출장열쇠5G',  phone: '010-6530-6760', installationRegion: '서울',     possibleRegion: '광진구, 하남시',                       impossibleRegion: '' },
   { businessNumber: '112-48-04825', branchName: '관악/신우열쇠',                phone: '010-4003-1382', installationRegion: '서울',     possibleRegion: '영등포구, 동작구, 관악구',            impossibleRegion: '' },
+  { businessNumber: '519-19-02649', branchName: '키플레이',                phone: '010-9220-3336', installationRegion: '경기도',     possibleRegion: '하남시, 성남시, 용인시, 수원시, 안성시, 평택시',            impossibleRegion: '' },
   { businessNumber: '110-17-24326', branchName: '용인/24시출장열쇠',            phone: '010-2084-5500', installationRegion: '경기도',   possibleRegion: '용인시, 수원시',                       impossibleRegion: '수원시 영통구' },
   { businessNumber: '124-28-81512', branchName: '화성/신영통열쇠',              phone: '010-3602-3477', installationRegion: '경기도',   possibleRegion: '화성시, 동탄시, 수원 영통구',         impossibleRegion: '' },
   { businessNumber: '134-24-54294', branchName: '안산/24시열쇠나라',            phone: '010-4733-5445', installationRegion: '경기도',   possibleRegion: '안산시',     impossibleRegion: '' },
@@ -155,17 +156,33 @@ function getV2MatchScore(inst: Installer, normalizedAddress: string): number {
   return scores.length > 0 ? Math.max(...scores) : 0
 }
 
-/** 주소 → 설치기사 매칭. 매칭 실패시 default (경기열쇠상사) 반환. */
-export function matchInstaller(address: string): Installer {
+/**
+ * 주소 → 동점 (가장 높은 score) 후보 설치기사 목록.
+ * 매칭 실패시 default (경기열쇠상사) 단일 반환.
+ *
+ * 후보가 여러 명이면 호출자 (assignDispatch) 가 round-robin 으로 균등 분배.
+ */
+export function matchInstallerCandidates(address: string): Installer[] {
   const n = normalizeCompact(address)
-  if (!n) return DEFAULT_INSTALLER
+  if (!n) return [DEFAULT_INSTALLER]
 
-  const best = INSTALLERS
+  const scored = INSTALLERS
     .map((inst, idx) => ({ inst, idx, score: getV2MatchScore(inst, n) }))
     .filter(m => m.score > 0)
-    .sort((a, b) => b.score - a.score || a.idx - b.idx)[0]
+    .sort((a, b) => b.score - a.score || a.idx - b.idx)
 
-  return best?.inst ?? DEFAULT_INSTALLER
+  if (scored.length === 0) return [DEFAULT_INSTALLER]
+  const maxScore = scored[0].score
+  return scored.filter(m => m.score === maxScore).map(m => m.inst)
+}
+
+/**
+ * 주소 → 단일 설치기사 매칭. 매칭 실패시 default (경기열쇠상사) 반환.
+ * 동점 후보 중 첫 번째 (배열 순서) 를 반환하므로 기존 동작과 호환.
+ * 균등 분배가 필요하면 matchInstallerCandidates 를 사용.
+ */
+export function matchInstaller(address: string): Installer {
+  return matchInstallerCandidates(address)[0]
 }
 
 // ============================================================
@@ -297,10 +314,33 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
   return result.recordset as DispatchRow[]
 }
 
-/** 조회된 행에 설치기사 매칭 + 품목 정보를 채워서 반환 */
+/**
+ * 조회된 행에 설치기사 매칭 + 품목 정보를 채워서 반환.
+ *
+ * 균등 분배 (배치 내 round-robin):
+ *   - 한 주소에 동점 후보 N 명이 있으면, 본 배치 내에서 1→2→...→N→1 순으로 순환.
+ *   - 동일 후보 set 마다 별도 카운터 (key = businessNumber 시퀀스).
+ *   - 배치 간에는 stateless (매 호출마다 0 부터). API 가 하루 1 번 호출되는
+ *     사용 패턴이라 장기적으로도 자연스럽게 균등화.
+ */
 export function assignDispatch(rows: DispatchRow[]): DispatchAssignment[] {
+  // key: candidates 의 businessNumber 시퀀스 (동점 그룹 식별자)
+  // val: 다음 라운드에 선택할 후보 index
+  const tieRotation = new Map<string, number>()
+
   return rows.map(row => {
-    const inst = matchInstaller(row.address ?? '')
+    const candidates = matchInstallerCandidates(row.address ?? '')
+
+    let inst: Installer
+    if (candidates.length <= 1) {
+      inst = candidates[0]
+    } else {
+      const key = candidates.map(c => c.businessNumber).join('|')
+      const next = tieRotation.get(key) ?? 0
+      inst = candidates[next % candidates.length]
+      tieRotation.set(key, next + 1)
+    }
+
     const item = determineItem(row.memo ?? '')
     return {
       ...row,
