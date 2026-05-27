@@ -1,33 +1,32 @@
 "use client";
 
 type Props = {
+  model: "L100" | "K100" | "U100";
   onClose: () => void;
 };
 
-// TODO: 이미지가 준비되면 SN_LOCATION_IMAGE_URL 을 실제 URL 또는
-// /public 경로의 정적 파일로 교체. 모델별로 다르면 props 에 model 추가.
-const SN_LOCATION_IMAGE_URL = "";
+export default function SnLocationModal({ model, onClose }: Props) {
+  const imageUrl = "/reg/sn-location.png";
 
-export default function SnLocationModal({ onClose }: Props) {
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontWeight: 800, marginBottom: 12 }}>
-          일련번호 위치 안내
+          {model} 일련번호 위치 안내
         </div>
 
-        {SN_LOCATION_IMAGE_URL ? (
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={SN_LOCATION_IMAGE_URL}
-            alt="제품 일련번호 위치"
+            src={imageUrl}
+            alt={`${model} 일련번호 위치`}
             style={imageStyle}
           />
         ) : (
           <div style={placeholderStyle}>
             <div style={{ fontSize: 48, marginBottom: 8 }}>📦</div>
             <div style={{ fontSize: 14, fontWeight: 600 }}>
-              일련번호 위치 이미지 준비 중
+              {model} 일련번호 위치 이미지 준비 중
             </div>
             <div style={{ fontSize: 12, color: "#71717a", marginTop: 6 }}>
               제품 또는 박스 라벨에 인쇄되어 있습니다.
@@ -42,6 +41,7 @@ export default function SnLocationModal({ onClose }: Props) {
     </div>
   );
 }
+
 
 const overlayStyle: React.CSSProperties = {
   position: "fixed",

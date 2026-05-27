@@ -214,7 +214,6 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           >
             <option value="L100">L100 도어락</option>
             <option value="K100">K100 도어락</option>
-            <option value="U100">U100 도어락</option>
           </select>
         </label>
 
@@ -449,7 +448,12 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       )}
 
       {/* 4) SN 위치 안내 모달 */}
-      {snHelpOpen && <SnLocationModal onClose={() => setSnHelpOpen(false)} />}
+      {snHelpOpen && (
+        <SnLocationModal
+          model={model}
+          onClose={() => setSnHelpOpen(false)}
+        />
+      )}
     </div>
   );
 }
