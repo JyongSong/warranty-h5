@@ -127,14 +127,14 @@ export default function InstallGuidePage() {
                         <li className="flex items-start gap-2.5">
                           <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 mt-1.5" />
                           <span>
-                            설치 기사님은 <strong>반드시 도어락 설치와 함께 앱 설치를 진행</strong>해야 합니다.
+                            설치 기사님은 <strong>도어락 설치와 함께 앱 설치를 진행</strong>해야 합니다.
                             <span className="block text-zinc-400 mt-0.5">(단, 고객이 생략을 요청한 경우에는 제외)</span>
                           </span>
                         </li>
                         <li className="flex items-start gap-2.5">
                           <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 mt-1.5" />
                           <span>
-                            <strong>L100 패키지 상품</strong>은 <strong>M200 허브 연동</strong>까지 반드시 진행해야 합니다.
+                            <strong>L100 패키지 상품</strong>은 <strong>M200 허브 연동</strong>까지 진행해야 합니다.
                             <span className="text-[#1d3129] font-bold block mt-1">
                               ※ 온습도 스위치 W100 등록은 매뉴얼에 따라 직접 진행하도록 고객에게 안내해 주세요.
                             </span>
@@ -142,6 +142,39 @@ export default function InstallGuidePage() {
                           </span>
                         </li>
                       </ul>
+
+                      {/* 추가 설치비 지급 안내 */}
+                      <div className="mt-4 p-4 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-3 text-xs">
+                        <div className="font-bold text-zinc-800 flex items-center gap-1.5">
+                          <span className="text-[#1d3129] font-mono">🎁</span>
+                          <span>앱 등록 추가 설치비 지급</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                          <div className="bg-white p-2.5 rounded-lg border border-zinc-100 shadow-sm flex flex-col justify-center">
+                            <span className="text-zinc-500 block text-[10px] mb-0.5">도어락 Aqara Home 앱 등록 시</span>
+                            <span className="font-bold text-[#1d3129] text-[13px]">+5,000원 추가 지급</span>
+                          </div>
+                          <div className="bg-white p-2.5 rounded-lg border border-zinc-100 shadow-sm flex flex-col justify-center">
+                            <span className="text-zinc-500 block text-[10px] mb-0.5">도어락 허브(M200) 등록 시</span>
+                            <span className="font-bold text-[#1d3129] text-[13px]">+20,000원 추가 지급</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-zinc-600 text-[11px] leading-relaxed">
+                          <p className="font-semibold text-zinc-700">
+                            ✓ 증빙 방법:
+                          </p>
+                          <p className="pl-3.5 relative">
+                            <span className="absolute left-1 top-1.5 w-1 h-1 rounded-full bg-zinc-400" />
+                            Aqara Home 앱 내 도어락 화면을 사진으로 촬영하여 이카운트에 업로드해 주시면 증빙으로 인정됩니다.
+                          </p>
+                          
+                          <p className="text-zinc-400 font-medium leading-relaxed mt-2 text-[10.5px]">
+                            ※ 단, 현장 여건상 진행이 어렵거나 인터넷 연결이 불가한 경우, 집주인이 현장에 없는 경우, 또는 고객님이 원하지 않는 경우에는 기본 설치만 진행해 주시면 됩니다.
+                          </p>
+                        </div>
+                      </div>
                     </section>
 
                     {/* 도어락 및 앱 설치 가이드 */}
