@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import QrScanModal from "./QrScanModal";
 import SnLocationModal from "./SnLocationModal";
@@ -347,31 +348,75 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           </label>
         ) : null}
 
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            style={{ marginTop: 3 }}
-          />
-          <span>
-            개인정보 수집 및 이용에 동의합니다.{" "}
-            <span style={{ color: "#b42318", fontWeight: 600 }}>(필수)</span>
-          </span>
-        </label>
+        {/* 5) 개인정보 수집 및 이용 동의 */}
+        <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: "pointer" }}
+            />
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              [필수] 개인정보 수집 및 이용 동의
+            </span>
+            <Link
+              href="/privacy"
+              target="_blank"
+              style={{
+                marginLeft: "auto",
+                fontSize: 12,
+                color: "#71717a",
+                textDecoration: "underline",
+              }}
+            >
+              약관 보기
+            </Link>
+          </label>
+          <div style={{
+            fontSize: 11,
+            color: "#71717a",
+            background: "#f4f4f5",
+            padding: "8px 12px",
+            borderRadius: 8,
+            lineHeight: 1.5,
+            border: "1px solid #e4e4e7"
+          }}>
+            • <b>수집/이용 목적:</b> 설치 등록 확인 및 2년 무상 A/S 혜택 제공<br />
+            • <b>수집 항목:</b> 휴대폰 번호, 제품 일련번호(SN), 설치일자, 기사 전화번호<br />
+            • <b>보유/이용 기간:</b> <b>무상 A/S 보증 기간 만료 시까지</b><br />
+            • 귀하는 동의를 거부할 권리가 있으나, 거부 시 무상 A/S 혜택 등록이 제한됩니다.
+          </div>
+        </div>
 
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <input
-            type="checkbox"
-            checked={consentMarketing}
-            onChange={(e) => setConsentMarketing(e.target.checked)}
-            style={{ marginTop: 3 }}
-          />
-          <span>
-            마케팅 정보 수신 동의{" "}
-            <span style={{ color: "#71717a", fontWeight: 600 }}>(선택)</span>
-          </span>
-        </label>
+        {/* 6) 마케팅 정보 수신 동의 */}
+        <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={consentMarketing}
+              onChange={(e) => setConsentMarketing(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: "pointer" }}
+            />
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              [선택] 마케팅 및 광고성 정보 수신 동의 (SMS)
+            </span>
+          </label>
+          <div style={{
+            fontSize: 11,
+            color: "#71717a",
+            background: "#f4f4f5",
+            padding: "8px 12px",
+            borderRadius: 8,
+            lineHeight: 1.5,
+            border: "1px solid #e4e4e7"
+          }}>
+            • <b>수집/이용 목적:</b> 신제품 및 서비스 안내, 이벤트/프로모션 혜택 전송<br />
+            • <b>수집 항목:</b> 휴대폰 번호<br />
+            • <b>보유/이용 기간:</b> <b>동의 철회 시 또는 서비스 종료 시까지</b><br />
+            • 동의하지 않으셔도 무상 A/S 혜택 등록 및 서비스 이용이 가능합니다.
+          </div>
+        </div>
 
         {error ? (
           <div style={{ color: "crimson", fontSize: 13 }}>{error}</div>
