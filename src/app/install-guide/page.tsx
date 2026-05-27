@@ -18,6 +18,16 @@ export default function InstallGuidePage() {
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("promo");
   const [activePromoTab, setActivePromoTab] = useState<PromoTabId>("basic");
 
+  const navigateToChapter = (chapterId: string) => {
+    setActiveMainTab("slides");
+    setTimeout(() => {
+      const el = document.getElementById(chapterId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 100);
+  };
+
   const mainTabs = [
     { id: "promo", label: "프로모션 서비스 안내" },
     { id: "slides", label: "상세 설치 가이드 (이미지)" },
@@ -118,7 +128,7 @@ export default function InstallGuidePage() {
                           <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 mt-1.5" />
                           <span>
                             설치 기사님은 <strong>반드시 도어락 설치와 함께 앱 설치를 진행</strong>해야 합니다.
-                            <span className="block text-zinc-400 mt-0.5">(단, 고객이 앱 설치 생략을 요청한 경우에는 제외)</span>
+                            <span className="block text-zinc-400 mt-0.5">(단, 고객이 생략을 요청한 경우에는 제외)</span>
                           </span>
                         </li>
                         <li className="flex items-start gap-2.5">
@@ -128,7 +138,7 @@ export default function InstallGuidePage() {
                             <span className="text-[#1d3129] font-bold block mt-1">
                               ※ 온습도 스위치 W100 등록은 매뉴얼에 따라 직접 진행하도록 고객에게 안내해 주세요.
                             </span>
-                            <span className="block text-zinc-400 mt-0.5">(단, 고객이 앱 설치 생략을 요청한 경우에는 제외)</span>
+                            <span className="block text-zinc-400 mt-0.5">(단, 고객이 생략을 요청한 경우에는 제외)</span>
                           </span>
                         </li>
                       </ul>
@@ -136,9 +146,21 @@ export default function InstallGuidePage() {
 
                     {/* 도어락 및 앱 설치 가이드 */}
                     <section className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-[0_4px_12px_rgba(0,0,0,0.02)] space-y-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1 h-5 bg-[#1d3129] rounded-full" />
-                        <h2 className="text-base font-bold text-zinc-800">2. 도어락 및 앱 설치</h2>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-1 h-5 bg-[#1d3129] rounded-full" />
+                          <h2 className="text-base font-bold text-zinc-800">2. 도어락 및 앱 설치</h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigateToChapter("ch1")}
+                          className="text-xs text-[#1d3129] hover:text-[#16251f] font-extrabold hover:underline cursor-pointer flex items-center gap-0.5"
+                        >
+                          가이드 보기
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </button>
                       </div>
 
                       {/* (1) 설치 전 고객 안내 */}
@@ -200,7 +222,7 @@ export default function InstallGuidePage() {
                             </div>
                           </div>
                           <p className="text-[11px] text-zinc-400 text-center">
-                            ※ 고객 요청 시 각 항목 추가 등록이 가능합니다.
+                            ※ 고객 요청 시 추가 등록
                           </p>
                         </div>
                       </div>
@@ -272,7 +294,7 @@ export default function InstallGuidePage() {
                           <span>⚠️ 3.3 노후 월패드 사전 고지 (필수)</span>
                         </div>
                         <p className="text-xs text-amber-700 leading-relaxed font-medium">
-                          사용 기간이 <strong>5년 이상인 노후 월패드</strong>는 점검 또는 설치 과정 중 고장이 발생할 수 있습니다.
+                          <strong>노후 월패드</strong>는 점검 또는 설치 과정 중 고장이 발생할 수 있습니다.
                         </p>
                         <p className="text-[11px] text-amber-900 font-semibold leading-relaxed">
                           해당 경우 설치 기사님 책임이 아님을 반드시 사전에 고객에게 안내하고 양해를 받아 주세요.
@@ -290,7 +312,7 @@ export default function InstallGuidePage() {
                             연동 가능 확인 후 월패드 연동기 및 설치 비용을 고객에게 안내합니다.
                           </p>
                           <div className="bg-white p-3 rounded-lg border border-zinc-200/60 shadow-sm flex flex-col items-center justify-center">
-                            <span className="text-[10px] text-zinc-400 font-bold block">총 비용 12만 원 초과 시</span>
+                            <span className="text-[10px] text-zinc-400 font-bold block">고객과 비용 협의가 어려운 경우</span>
                             <span className="text-sm font-extrabold text-[#992222] mt-1 text-center">
                               반드시 본사 담당자 확인 후<br />고객 안내 진행
                             </span>
@@ -327,10 +349,22 @@ export default function InstallGuidePage() {
 
                       {/* (2) M200 허브 연결 */}
                       <div className="space-y-1.5">
-                        <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-                          <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.2</span>
-                          M200 허브 연결
-                        </h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                            <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.2</span>
+                            M200 허브 연결
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => navigateToChapter("ch2")}
+                            className="text-[10px] text-[#1d3129] hover:text-[#16251f] font-extrabold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            가이드 보기
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                          </button>
+                        </div>
                         <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200/50 text-xs text-zinc-600 space-y-1">
                           <p>• M200 허브 전원을 연결합니다.</p>
                           <p>• 고객 무선공유기 <strong>Wi-Fi(2.4GHz 또는 5GHz)</strong>에 연결합니다.</p>
@@ -339,10 +373,22 @@ export default function InstallGuidePage() {
 
                       {/* (3) 원격 잠금해제 확인 */}
                       <div className="space-y-1.5">
-                        <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-                          <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.3</span>
-                          원격 잠금해제 확인
-                        </h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                            <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.3</span>
+                            원격 잠금해제 확인
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => navigateToChapter("ch3")}
+                            className="text-[10px] text-[#1d3129] hover:text-[#16251f] font-extrabold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            가이드 보기
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                          </button>
+                        </div>
                         <ol className="list-decimal list-inside text-xs text-zinc-600 space-y-1.5 bg-zinc-50 p-3 rounded-xl border border-zinc-200/50 pl-4">
                           <li>M200 허브에 도어락을 연결한 후 도어락의 <strong>&quot;원격 잠금 해제&quot; 기능을 켜주세요</strong>.</li>
                           <li>고객 휴대폰의 <strong>블루투스를 잠시 꺼주세요</strong>.</li>
@@ -350,21 +396,10 @@ export default function InstallGuidePage() {
                         </ol>
                       </div>
 
-                      {/* (4) 출입 기록 확인 */}
+                      {/* (4) W100 등록 안내 */}
                       <div className="space-y-1.5">
                         <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
                           <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.4</span>
-                          출입 기록 확인
-                        </h3>
-                        <p className="text-xs text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-200/50 font-medium">
-                          앱에 출입 기록을 고객에게 보여주세요.
-                        </p>
-                      </div>
-
-                      {/* (5) W100 등록 안내 */}
-                      <div className="space-y-1.5">
-                        <h3 className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-                          <span className="text-[10px] bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded font-mono">4.5</span>
                           온습도 스위치 W100 등록 안내
                         </h3>
                         <p className="text-xs text-zinc-600 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-200/50 font-medium">
@@ -471,12 +506,12 @@ export default function InstallGuidePage() {
                         </a>
 
                         <a
-                          href="tel:010-7199-3480"
+                          href="tel:010-7612-9632"
                           className="flex items-center justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100 active:scale-[0.98] transition-all duration-200"
                         >
                           <div className="text-left">
                             <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">2차 담당자</span>
-                            <span className="text-xs font-bold text-zinc-800">서다은 (010-7199-3480)</span>
+                            <span className="text-xs font-bold text-zinc-800">김지윤 (010-7612-9632)</span>
                           </div>
                           <div className="w-8 h-8 rounded-full bg-[#1d3129]/10 flex items-center justify-center text-[#1d3129]">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
