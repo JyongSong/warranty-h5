@@ -161,7 +161,7 @@ export default function InstallGuidePage() {
                           </div>
                         </div>
 
-                        <div className="space-y-1.5 text-zinc-600 text-[11px] leading-relaxed">
+                        <div className="space-y-2 text-zinc-600 text-[11px] leading-relaxed">
                           <p className="font-semibold text-zinc-700">
                             ✓ 증빙 방법:
                           </p>
@@ -170,6 +170,19 @@ export default function InstallGuidePage() {
                             Aqara Home 앱 내 도어락 화면을 사진으로 촬영하여 이카운트에 업로드해 주시면 증빙으로 인정됩니다.
                           </p>
                           
+                          {/* 증빙 화면 예시 이미지 */}
+                          <div className="bg-white p-2 rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-1 max-w-[200px] mx-auto">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src="/promo-guide/proof-app.png"
+                              alt="Aqara Home 앱 내 도어락 증빙 화면 예시"
+                              className="w-full h-auto rounded object-contain"
+                            />
+                            <p className="text-[9px] text-zinc-400 text-center mt-1">
+                              [증빙 화면 예시]
+                            </p>
+                          </div>
+
                           <p className="text-zinc-400 font-medium leading-relaxed mt-2 text-[10.5px]">
                             ※ 단, 현장 여건상 진행이 어렵거나 인터넷 연결이 불가한 경우, 집주인이 현장에 없는 경우, 또는 고객님이 원하지 않는 경우에는 기본 설치만 진행해 주시면 됩니다.
                           </p>
@@ -456,9 +469,14 @@ export default function InstallGuidePage() {
                       </div>
 
                       <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-200/50 space-y-3.5 text-xs text-zinc-600 leading-relaxed">
-                        <p className="font-semibold text-zinc-800">
-                          제품 패키지에 부착된 스티커를 통해 반드시 <span className="text-[#1d3129] font-bold underline">‘2년 무상 A/S 등록’</span>을 진행해 주세요.
-                        </p>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-zinc-800">
+                            제품 패키지에 부착된 스티커를 통해 반드시 <span className="text-[#1d3129] font-bold underline">‘2년 무상 A/S 등록’</span>을 진행해 주세요. <span className="text-zinc-500 font-medium">(소요시간: 약 1분)</span>
+                          </p>
+                          <p className="text-[11px] text-[#1d3129] font-bold leading-relaxed">
+                            ※ 5/28부터 출고되는 K100/L100 도어락은 &apos;제품 정보 등록 안내&apos; 스티커가 부착되어 출고됩니다.
+                          </p>
+                        </div>
                         
                         <div className="h-px bg-zinc-200" />
                         
@@ -469,19 +487,15 @@ export default function InstallGuidePage() {
                           </li>
                           <li className="flex items-start gap-2">
                             <span className="text-[#1d3129] font-bold font-mono">✓</span>
-                            <span><strong>고객 성함 및 연락처는 반드시 고객이 직접 입력</strong>하도록 안내해 주세요.</span>
+                            <span>고객 연락처, 설치일자 및 기사님 전화번호를 정확히 입력해 주세요.</span>
                           </li>
                           <li className="flex items-start gap-2">
                             <span className="text-[#1d3129] font-bold font-mono">✓</span>
-                            <span>개인정보 활용 동의 체크를 반드시 확인해 주세요.</span>
+                            <span>등록 완료 후 <strong>기사님 휴대폰으로 확인 링크 문자</strong>가 발송되며, 링크를 열어 확인 버튼을 누르셔야 최종 완료됩니다.</span>
                           </li>
                           <li className="flex items-start gap-2">
                             <span className="text-[#1d3129] font-bold font-mono">✓</span>
-                            <span>설치일자 및 기사님 전화를 정확히 입력해 주세요.</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#1d3129] font-bold font-mono">✓</span>
-                            <span>설치 완료 체크 항목을 모두 최종 확인 후 등록을 완료하고 서비스를 종료합니다.</span>
+                            <span>설치 완료 체크 항목을 모두 최종 확인하여 등록을 완료하고 서비스를 종료합니다.</span>
                           </li>
                         </ul>
                       </div>
