@@ -27,6 +27,7 @@ export default function SuccessPage() {
   const [stored, setStored] = useState<StoredState>(EMPTY_STATE);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(60);
 
   // sessionStorage 는 SSR 환경에서 사용 불가하므로 클라이언트 마운트 후 한 번 읽음.
   useEffect(() => {
@@ -38,6 +39,15 @@ export default function SuccessPage() {
       freeAsEndDate: sessionStorage.getItem("lastFreeAsEndDate") || "",
     });
   }, []);
+
+  // 1분(60초) 재전송 쿨다운 타이머
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
 
   const { link, regId, installType, freeAsEndDate } = stored;
   // self / external: 등록 즉시 완료
@@ -69,6 +79,7 @@ export default function SuccessPage() {
       setStored((s) => ({ ...s, link: j.confirmLink }));
       sessionStorage.setItem("lastConfirmLink", j.confirmLink);
       setMsg("확인 링크를 재전송했습니다.");
+      setCountdown(60);
     } catch (error: unknown) {
       setMsg(getErrorMessage(error, "재전송에 실패했습니다."));
     } finally {
@@ -129,53 +140,15 @@ export default function SuccessPage() {
 
           <button
             onClick={onResend}
-            disabled={loading}
-            style={resendBtnStyle(loading)}
+            disabled={loading || countdown > 0}
+            style={resendBtnStyle(loading || countdown > 0)}
           >
-            {loading ? "전송 중..." : "확인 링크 재전송"}
+            {loading
+              ? "전송 중..."
+              : countdown > 0
+              ? `확인 링크 재전송 (${countdown}초)`
+              : "확인 링크 재전송"}
           </button>
-
-          {link && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, marginBottom: 6, opacity: 0.85 }}>
-                예비 확인 링크:
-              </div>
-
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  id="confirmLinkInput"
-                  value={link}
-                  readOnly
-                  style={linkInputStyle}
-                />
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(link);
-                      setMsg("링크를 복사했습니다.");
-                    } catch {
-                      const el = document.getElementById(
-                        "confirmLinkInput"
-                      ) as HTMLInputElement | null;
-                      el?.focus();
-                      el?.select();
-                      document.execCommand("copy");
-                      setMsg("링크를 복사했습니다.");
-                    }
-                  }}
-                  style={copyBtnStyle}
-                >
-                  복사
-                </button>
-              </div>
-
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                <a href={link} target="_blank" rel="noreferrer">
-                  새 창에서 열기
-                </a>
-              </div>
-            </div>
-          )}
         </>
       )}
 
