@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -40,6 +40,14 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
     return d.toISOString().slice(0, 10);
   });
   const [userPhone, setUserPhone] = useState("");
+  const [smsSent, setSmsSent] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [smsTimer, setSmsTimer] = useState(0);
+  const [smsMessage, setSmsMessage] = useState<{ text: string; isError: boolean } | null>(null);
+
   const [installerPhone, setInstallerPhone] = useState("");
   const [selectedInstaller, setSelectedInstaller] = useState<InstallerItem | null>(null);
   const [verifyingInstaller, setVerifyingInstaller] = useState(false);
@@ -50,11 +58,114 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-   const canSubmit = useMemo(() => {
+
+  useEffect(() => {
+    if (smsTimer <= 0) return;
+    const timer = setInterval(() => {
+      setSmsTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setSmsMessage({ text: "인증시간이 초과되었습니다. 다시 시도해 주세요.", isError: true });
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [smsTimer]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handlePhoneChange = (val: string) => {
+    setUserPhone(val);
+    setSmsSent(false);
+    setVerificationCode("");
+    setIsPhoneVerified(false);
+    setSmsTimer(0);
+    setSmsMessage(null);
+  };
+
+  async function sendSmsCode() {
+    const phone = normalizePhone(userPhone);
+    if (phone.length < 9) {
+      setSmsMessage({ text: "올바른 전화번호를 입력해 주세요.", isError: true });
+      return;
+    }
+
+    setSendingSms(true);
+    setSmsMessage(null);
+
+    try {
+      const response = await fetch("/api/auth/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", phone }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "인증번호 발송에 실패했습니다.");
+      }
+
+      setSmsSent(true);
+      setVerificationCode("");
+      setIsPhoneVerified(false);
+      setSmsTimer(180); // 3 mins
+      setSmsMessage({ text: "인증번호가 발송되었습니다.", isError: false });
+    } catch (err: unknown) {
+      setSmsMessage({
+        text: getErrorMessage(err, "인증번호 발송에 실패했습니다."),
+        isError: true,
+      });
+    } finally {
+      setSendingSms(false);
+    }
+  }
+
+  async function verifySmsCode() {
+    const phone = normalizePhone(userPhone);
+    if (!verificationCode.trim()) {
+      setSmsMessage({ text: "인증번호를 입력해 주세요.", isError: true });
+      return;
+    }
+
+    setVerifyingCode(true);
+    setSmsMessage(null);
+
+    try {
+      const response = await fetch("/api/auth/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", phone, code: verificationCode }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "인증번호 확인에 실패했습니다.");
+      }
+
+      setIsPhoneVerified(true);
+      setSmsTimer(0);
+      setSmsMessage({ text: "인증되었습니다.", isError: false });
+    } catch (err: unknown) {
+      setSmsMessage({
+        text: getErrorMessage(err, "인증번호 확인에 실패했습니다."),
+        isError: true,
+      });
+    } finally {
+      setVerifyingCode(false);
+    }
+  }
+
+  const canSubmit = useMemo(() => {
     return (
       sn.trim().length >= 6 &&
       installDate.length === 10 &&
-      normalizePhone(userPhone).length >= 9 &&
+      isPhoneVerified &&
       (installType === "self" ||
         (normalizePhone(installerPhone).length >= 9 && installerCheckStatus !== "idle")) &&
       consent &&
@@ -63,7 +174,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   }, [
     sn,
     installDate,
-    userPhone,
+    isPhoneVerified,
     installerPhone,
     installerCheckStatus,
     installType,
@@ -266,13 +377,88 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
 
         <label style={{ display: "grid", gap: 6 }}>
           <span>전화번호</span>
-          <input
-            value={userPhone}
-            onChange={(e) => setUserPhone(e.target.value)}
-            placeholder="숫자만 입력"
-            style={inputStyle}
-          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={userPhone}
+              onChange={(e) => handlePhoneChange(e.target.value)}
+              placeholder="숫자만 입력 (예: 01012345678)"
+              disabled={isPhoneVerified}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            {isPhoneVerified ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPhoneVerified(false);
+                  setSmsSent(false);
+                  setVerificationCode("");
+                  setSmsTimer(0);
+                  setSmsMessage(null);
+                }}
+                style={minorButtonStyle(false)}
+              >
+                번호 변경
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={sendSmsCode}
+                disabled={sendingSms || normalizePhone(userPhone).length < 9}
+                style={minorButtonStyle(sendingSms || normalizePhone(userPhone).length < 9)}
+              >
+                {sendingSms ? "전송 중..." : smsSent ? "인증번호 재전송" : "인증번호 전송"}
+              </button>
+            )}
+          </div>
+          {isPhoneVerified && (
+            <div style={{ fontSize: 13, color: "#1d5e1d", fontWeight: "600", display: "flex", alignItems: "center", gap: 4 }}>
+              ✓ 인증이 완료되었습니다.
+            </div>
+          )}
+          {smsMessage && !isPhoneVerified && (
+            <div style={{ fontSize: 12, color: smsMessage.isError ? "#b42318" : "#1d5e1d" }}>
+              {smsMessage.text}
+            </div>
+          )}
         </label>
+
+        {smsSent && !isPhoneVerified && (
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>인증번호 입력</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ position: "relative", flex: 1 }}>
+                <input
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="6자리 인증번호"
+                  maxLength={6}
+                  style={{ ...inputStyle, width: "100%", paddingRight: 60 }}
+                />
+                {smsTimer > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#e11d48",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}>
+                    {formatTimer(smsTimer)}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={verifySmsCode}
+                disabled={verifyingCode || verificationCode.trim().length !== 6 || smsTimer === 0}
+                style={minorButtonStyle(verifyingCode || verificationCode.trim().length !== 6 || smsTimer === 0)}
+              >
+                {verifyingCode ? "확인 중..." : "인증 확인"}
+              </button>
+            </div>
+          </label>
+        )}
 
         {installType === "installer" ? (
           <label style={{ display: "grid", gap: 6 }}>
@@ -513,5 +699,20 @@ function primaryButtonStyle(disabled: boolean): React.CSSProperties {
     boxShadow: disabled ? "none" : PRIMARY_BUTTON_SHADOW,
     transform: disabled ? "none" : "translateY(-1px)",
     transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+  };
+}
+
+function minorButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    height: 40,
+    borderRadius: 10,
+    border: "1px solid #1d3129",
+    background: disabled ? "#f4f4f5" : "#1d3129",
+    color: disabled ? "#a1a1aa" : "#fff",
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    padding: "0 14px",
+    fontSize: 13,
+    transition: "background 120ms ease, color 120ms ease",
   };
 }
