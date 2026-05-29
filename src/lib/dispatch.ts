@@ -10,8 +10,9 @@ export type DispatchRow = {
   phone:         string | null
   address:       string | null
   order_numbers: string | null
-  memo:          string | null
+  no_girl:       string | null
   due_date:      string | null    // YYYYMMDD (group 내 가장 빠른 날짜)
+  memo:          string | null
 }
 
 export type DispatchAssignment = DispatchRow & {
@@ -205,10 +206,11 @@ export function determineItem(memo: string): { itemCode: string | null; itemName
   const hasComboK100 = memo.includes(COMBO_K100_KEY)
   const hasL100 = memo.includes('L100')
   const hasK100 = memo.includes('K100')
+  const hasU100 = memo.includes('U100')
 
   // qtyMatch: 콤보의 "설치비(K100)+월패드 연동(RF447) x1" 도 [^\/]* 로 인해 동일하게 매칭됨
-  const qtyMatch = memo.match(/설치비\s*\([KL]100\)[^\/]*x\s*(\d+)/i) ||
-                   memo.match(/[KL]100[^\/\n]*?x\s*(\d+)/i)
+  const qtyMatch = memo.match(/설치비\s*\([KLU]100\)[^\/]*x\s*(\d+)/i) ||
+                   memo.match(/[KLU]100[^\/\n]*?x\s*(\d+)/i)
   const quantity = qtyMatch ? Number(qtyMatch[1]) : null
 
   // 콤보 (월패드 연동) 우선 — bare K100/L100 보다 먼저 평가
@@ -216,6 +218,7 @@ export function determineItem(memo: string): { itemCode: string | null; itemName
   if (hasComboK100) return { itemCode: '00049', itemName: 'K100도어락설치+월패드연동설치', quantity }
   if (hasL100)      return { itemCode: '00047', itemName: 'L100도어락설치',                  quantity }
   if (hasK100)      return { itemCode: '00050', itemName: 'K100도어락설치',                  quantity }
+  if (hasU100)      return { itemCode: '00051', itemName: 'U100도어락 설치',                 quantity }
   return { itemCode: null, itemName: null, quantity }
 }
 
@@ -262,28 +265,85 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
           LTRIM(RTRIM(ISNULL(I.NM_ITEM, SOL.CD_ITEM))) AS NM_ITEM,
           CAST(SOL.QT_SO AS INT) AS QT,
           SOL.NO_ORDER_ON,
+          G.NO_GIR AS no_girl,
           SOL.DT_DUEDATE AS due_date,
           COALESCE(
             NULLIF(LTRIM(RTRIM(CZ.NO_HP2)),  ''),    -- 수령인 휴대폰 (우선)
             NULLIF(LTRIM(RTRIM(CZ.NO_HP1)),  ''),    -- 구매자 휴대폰 (대체)
             NULLIF(LTRIM(RTRIM(CZ.NO_TEL2)), ''),    -- 수령인 일반전화
-            NULLIF(LTRIM(RTRIM(CZ.NO_TEL1)), '')     -- 구매자 일반전화
+            NULLIF(LTRIM(RTRIM(CZ.NO_TEL1)), ''),    -- 구매자 일반전화
+            NULLIF(LTRIM(RTRIM(DLV.NO_TEL_D1)), ''),  -- 배송지 전화 1 (SA_SOL_DLV)
+            NULLIF(LTRIM(RTRIM(DLV.NO_TEL_D2)), ''),  -- 배송지 전화 2 (SA_SOL_DLV)
+            NULLIF(LTRIM(RTRIM(DLV.NO_TEL1)), ''),    -- 주문자 전화 1 (SA_SOL_DLV)
+            NULLIF(LTRIM(RTRIM(DLV.NO_TEL2)), '')     -- 주문자 전화 2 (SA_SOL_DLV)
           ) AS phone,
           COALESCE(
             NULLIF(LTRIM(RTRIM(CZ.NM_RECEIVE)), ''),
-            NULLIF(LTRIM(RTRIM(CZ.NM_CUST)),    '')
+            NULLIF(LTRIM(RTRIM(CZ.NM_CUST)),    ''),
+            NULLIF(LTRIM(RTRIM(DLV.NM_CUST_DLV)), ''), -- 수령인명 (SA_SOL_DLV)
+            NULLIF(LTRIM(RTRIM(DLV.NM_CUST)), '')      -- 주문자명 (SA_SOL_DLV)
           ) AS nm,
-          CZ.DC_ADDR1 AS addr
+          COALESCE(
+            NULLIF(LTRIM(RTRIM(CZ.DC_ADDR1)), ''),
+            NULLIF(LTRIM(RTRIM(ISNULL(DLV.ADDR1, '') + ' ' + ISNULL(DLV.ADDR2, ''))), '')
+          ) AS addr,
+          CZ.PRODUCT_NAME AS product_name
         FROM eligible e
         JOIN NEOE.SA_SOL SOL
           ON SOL.NO_SO = e.NO_SO AND SOL.CD_COMPANY = e.CD_COMPANY
          AND SOL.NO_HST = 0
+        LEFT JOIN (
+          SELECT NO_SO, SEQ_SO, CD_COMPANY, MAX(NO_GIR) AS NO_GIR
+          FROM NEOE.SA_GIRL
+          GROUP BY NO_SO, SEQ_SO, CD_COMPANY
+        ) G
+          ON G.NO_SO = SOL.NO_SO
+         AND G.SEQ_SO = SOL.SEQ_SO
+         AND G.CD_COMPANY = SOL.CD_COMPANY
         LEFT JOIN NEOE.CZ_SA_ORDER CZ
           ON CZ.NO_ORDER  = SOL.NO_SO
          AND CZ.SEQ_ORDER = SOL.SEQ_SO
          AND CZ.CD_COMPANY = SOL.CD_COMPANY
+        LEFT JOIN NEOE.SA_SOL_DLV DLV
+          ON DLV.NO_SO = SOL.NO_SO
+         AND DLV.SEQ_SO = SOL.SEQ_SO
+         AND DLV.CD_COMPANY = SOL.CD_COMPANY
         LEFT JOIN NEOE.MA_PITEM I
           ON I.CD_ITEM = SOL.CD_ITEM AND I.CD_COMPANY = '1000'
+
+        UNION ALL
+
+        -- CZ_PU_INOUT_CONF 에서 직접 가져오는 내부/인플루언서 단
+        SELECT
+          CONF.NO_RCV AS NO_SO,
+          CONF.NO_LINE AS SEQ_SO,
+          CONF.CD_COMPANY,
+          CONF.CD_ITEM,
+          LTRIM(RTRIM(ISNULL(I.NM_ITEM, CONF.CD_ITEM))) AS NM_ITEM,
+          CAST(CONF.QT_RCV AS INT) AS QT,
+          NULL AS NO_ORDER_ON, -- 내부단은 쇼핑몰 주문번호가 없음
+          CONF.NO_RCV AS no_girl, -- 내부단은 NO_RCV가 NO_GIRL임
+          CONF.DT_RCV AS due_date,
+          COALESCE(
+            NULLIF(LTRIM(RTRIM(CONF.NO_HP2)), ''),
+            NULLIF(LTRIM(RTRIM(CONF.NO_TEL2)), ''),
+            NULLIF(LTRIM(RTRIM(CONF.NO_HP1)), ''),
+            NULLIF(LTRIM(RTRIM(CONF.NO_TEL1)), '')
+          ) AS phone,
+          CONF.NM_CUST AS nm,
+          CONF.DC_ADDR1 AS addr,
+          CONF.DC_RMK_ORDER AS product_name
+        FROM NEOE.CZ_PU_INOUT_CONF CONF
+        LEFT JOIN NEOE.MA_PITEM I
+          ON I.CD_ITEM = CONF.CD_ITEM AND I.CD_COMPANY = '1000'
+        WHERE CONF.CD_COMPANY = '1000'
+          AND CONF.DT_RCV BETWEEN @dueDateFrom AND @dueDateTo
+          AND CONF.CD_STAT = '02'
+          AND EXISTS (
+            SELECT 1 FROM NEOE.CZ_PU_INOUT_CONF C2
+            WHERE C2.NO_RCV = CONF.NO_RCV AND C2.CD_COMPANY = CONF.CD_COMPANY
+              AND (C2.CD_ITEM = '00010' OR C2.CD_ITEM LIKE '00012%')
+          )
       )
       SELECT
         MAX(nm)        AS customer_name,
@@ -300,9 +360,29 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
           FOR XML PATH(''), TYPE
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS order_numbers,
         STUFF((
+          SELECT DISTINCT N', ' + l2.no_girl
+          FROM lines l2
+          WHERE l2.phone = l1.phone
+            AND l2.no_girl IS NOT NULL
+          FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS no_girl,
+        COALESCE(
+          (SELECT TOP 1 N'[잇섭PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'[잇섭PICK]', l2.product_name) > 0),
+          (SELECT TOP 1 N'[지니스펙트럼PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'[지니스펙트럼PICK]', l2.product_name) > 0),
+          (SELECT TOP 1 N'[스마트홈 여름 준비 패키지_앱+허브 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'스마트홈 여름 준비 패키지 (도어락 L100+안심설치+에어컨 제어)', l2.product_name) > 0),
+          N''
+        ) + 
+        STUFF((
           SELECT N' / ' + l2.NM_ITEM + N' x' + CAST(l2.QT AS NVARCHAR(10))
           FROM lines l2
           WHERE l2.phone = l1.phone
+          ORDER BY 
+            CASE 
+              WHEN (l2.CD_ITEM = '00010' OR l2.CD_ITEM LIKE '00012%' OR l2.NM_ITEM LIKE '%용역%') THEN 3
+              WHEN l2.NM_ITEM LIKE '%도어락%' THEN 1
+              ELSE 2
+            END,
+            l2.SEQ_SO
           FOR XML PATH(''), TYPE
         ).value('.', 'NVARCHAR(MAX)'), 1, 3, '') AS memo
       FROM lines l1
@@ -329,19 +409,24 @@ export function assignDispatch(rows: DispatchRow[]): DispatchAssignment[] {
   const tieRotation = new Map<string, number>()
 
   return rows.map(row => {
-    const candidates = matchInstallerCandidates(row.address ?? '')
+    const item = determineItem(row.memo ?? '')
+    const isU100 = (row.memo ?? '').includes('U100')
 
     let inst: Installer
-    if (candidates.length <= 1) {
-      inst = candidates[0]
+    if (isU100) {
+      inst = DEFAULT_INSTALLER
     } else {
-      const key = candidates.map(c => c.businessNumber).join('|')
-      const next = tieRotation.get(key) ?? 0
-      inst = candidates[next % candidates.length]
-      tieRotation.set(key, next + 1)
+      const candidates = matchInstallerCandidates(row.address ?? '')
+      if (candidates.length <= 1) {
+        inst = candidates[0]
+      } else {
+        const key = candidates.map(c => c.businessNumber).join('|')
+        const next = tieRotation.get(key) ?? 0
+        inst = candidates[next % candidates.length]
+        tieRotation.set(key, next + 1)
+      }
     }
 
-    const item = determineItem(row.memo ?? '')
     return {
       ...row,
       business_number: inst.businessNumber,

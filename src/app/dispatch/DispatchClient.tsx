@@ -7,6 +7,7 @@ type DispatchAssignment = {
   phone: string | null;
   address: string | null;
   order_numbers: string | null;
+  no_girl: string | null;
   memo: string | null;
   due_date: string | null;
   business_number: string;
@@ -210,9 +211,13 @@ export default function DispatchClient() {
                           {r.quantity ?? <span className="text-zinc-300">-</span>}
                         </td>
                         <td className="px-3 py-3 text-xs">
-                          {r.order_numbers && (
+                          {r.order_numbers ? (
                             <div className="text-blue-600 font-mono mb-1">
                               {r.order_numbers}
+                            </div>
+                          ) : (
+                            <div className="text-amber-600 font-semibold mb-1">
+                              비매출 {r.no_girl ? `(${r.no_girl})` : ""}
                             </div>
                           )}
                           {r.memo && <div className="text-zinc-500">{r.memo}</div>}
@@ -251,9 +256,13 @@ export default function DispatchClient() {
                         <span className="text-zinc-400">×{r.quantity ?? "?"}</span>
                       </p>
                     )}
-                    {r.order_numbers && (
+                    {r.order_numbers ? (
                       <p className="text-xs text-blue-600 font-mono mb-1">
                         {r.order_numbers}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-600 font-semibold mb-1">
+                        비매출 {r.no_girl ? `(${r.no_girl})` : ""}
                       </p>
                     )}
                     {r.memo && <p className="text-xs text-zinc-500 mt-1">📦 {r.memo}</p>}

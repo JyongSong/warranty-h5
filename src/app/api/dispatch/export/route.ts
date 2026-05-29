@@ -51,13 +51,16 @@ export async function GET(req: NextRequest) {
       set("G", DISPATCH_CONST.수리유형);
       set("H", row.customer_name);
       set("I", row.phone);
-      set("J", row.order_numbers);
+      set("J", row.order_numbers || row.no_girl);
       set("K", row.address);
       set("L", DISPATCH_CONST.설치완료여부);
       set("P", row.memo);
       set("Q", row.item_code);
       set("R", row.item_name);
       set("S", row.quantity);
+      if (!row.order_numbers || row.order_numbers.trim() === "") {
+        set("U", "비매출");
+      }
     });
 
     const lastRow = Math.max(rows.length + 1, 2);
