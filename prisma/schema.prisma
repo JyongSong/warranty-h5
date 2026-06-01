@@ -35,6 +35,8 @@ model WarrantyRegistration {
   confirmedBy           String?   @map("confirmed_by")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
+  surveySentAt          DateTime? @map("survey_sent_at")
+  survey                SatisfactionSurvey?
 
   @@index([status])
   @@map("warranty_registrations")
@@ -87,5 +89,22 @@ model SmsTemplate {
   updatedBy String?  @map("updated_by")
 
   @@map("sms_templates")
+}
+
+model SatisfactionSurvey {
+  id              String               @id @default(uuid())
+  registrationId  String               @unique @map("registration_id")
+  registration    WarrantyRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  q1_1            String               // 기사 방문 시간 (예/아니오/잘 모르겠어요)
+  q1_2            String               // 설치 품질 (예/아니오/잘 모르겠어요)
+  q1_3            String               // 제품 사용 설명 (예/아니오/잘 모르겠어요)
+  q2_1            String               // 앱 설치 편리성 (예/아니오/잘 모르겠어요)
+  q2_2            String               // 회원가입 및 기기등록 (예/아니오/잘 모르겠어요)
+  q2_3            String               // 앱 사용 만족도 (예/아니오/잘 모르겠어요)
+  q3_1            Int                  // 도어락 사용 만족도 (1점 ~ 5점)
+  comment         String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  @@map("satisfaction_surveys")
 }
 
