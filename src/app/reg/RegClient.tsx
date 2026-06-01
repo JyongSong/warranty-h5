@@ -25,6 +25,14 @@ type InstallerItem = {
 const EXTERNAL_INSTALLER_NOTICE =
   "본사 공인 설치 기사가 아닙니다. 본사 공인 기사가 시공해야 2년 무상 A/S 혜택을 받으실 수 있습니다.";
 
+function getTodayString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const router = useRouter();
 
@@ -33,6 +41,15 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   // 통합 스캐너: ZXing BrowserMultiFormatReader 로 QR + 1D 바코드 동시 인식.
   const [scanOpen, setScanOpen] = useState(false);
   const [snHelpOpen, setSnHelpOpen] = useState(false);
+
+  const [maxDate, setMaxDate] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMaxDate(getTodayString());
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [sn, setSn] = useState(initialSn);
   const [installDate, setInstallDate] = useState(() => {
@@ -162,9 +179,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   }
 
   const canSubmit = useMemo(() => {
+    const todayStr = getTodayString();
     return (
       sn.trim().length >= 6 &&
       installDate.length === 10 &&
+      installDate <= todayStr &&
       isPhoneVerified &&
       (installType === "self" ||
         (normalizePhone(installerPhone).length >= 9 && installerCheckStatus !== "idle")) &&
@@ -371,8 +390,14 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
             type="date"
             value={installDate}
             onChange={(e) => setInstallDate(e.target.value)}
+            max={maxDate || undefined}
             style={inputStyle}
           />
+          {maxDate && installDate > maxDate && (
+            <div style={{ color: "crimson", fontSize: 12 }}>
+              설치 완료일은 오늘 또는 과거 날짜여야 합니다.
+            </div>
+          )}
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
