@@ -339,6 +339,10 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
         WHERE CONF.CD_COMPANY = '1000'
           AND CONF.DT_RCV BETWEEN @dueDateFrom AND @dueDateTo
           AND CONF.CD_STAT = '02'
+          AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_GIR = CONF.NO_RCV AND G.CD_COMPANY = CONF.CD_COMPANY
+          )
           AND EXISTS (
             SELECT 1 FROM NEOE.CZ_PU_INOUT_CONF C2
             WHERE C2.NO_RCV = CONF.NO_RCV AND C2.CD_COMPANY = CONF.CD_COMPANY
