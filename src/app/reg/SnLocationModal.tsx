@@ -1,32 +1,31 @@
 "use client";
 
 type Props = {
-  model: "L100" | "K100" | "U100";
   onClose: () => void;
 };
 
-export default function SnLocationModal({ model, onClose }: Props) {
+export default function SnLocationModal({ onClose }: Props) {
   const imageUrl = "/reg/sn-location.png";
 
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontWeight: 800, marginBottom: 12 }}>
-          {model} 일련번호 위치 안내
+          아카라 스마트 도어락 SN (일련번호) 위치 안내
         </div>
 
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
-            alt={`${model} 일련번호 위치`}
+            alt="아카라 스마트 도어락 SN (일련번호) 위치"
             style={imageStyle}
           />
         ) : (
           <div style={placeholderStyle}>
             <div style={{ fontSize: 48, marginBottom: 8 }}>📦</div>
             <div style={{ fontSize: 14, fontWeight: 600 }}>
-              {model} 일련번호 위치 이미지 준비 중
+              아카라 스마트 도어락 SN (일련번호) 위치 이미지 준비 중
             </div>
             <div style={{ fontSize: 12, color: "#71717a", marginTop: 6 }}>
               제품 또는 박스 라벨에 인쇄되어 있습니다.

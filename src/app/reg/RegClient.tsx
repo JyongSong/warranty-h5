@@ -9,7 +9,6 @@ import SnLocationModal from "./SnLocationModal";
 import { getErrorMessage } from "@/lib/error";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
-type Model = "L100" | "K100" | "U100";
 type InstallType = "installer" | "self";
 type InstallerCheckStatus = "idle" | "registered" | "external";
 type InstallerItem = {
@@ -36,7 +35,6 @@ function getTodayString() {
 export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   const router = useRouter();
 
-  const [model, setModel] = useState<Model>("L100");
   const [installType, setInstallType] = useState<InstallType>("installer");
   // 통합 스캐너: ZXing BrowserMultiFormatReader 로 QR + 1D 바코드 동시 인식.
   const [scanOpen, setScanOpen] = useState(false);
@@ -274,7 +272,25 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       const data = await r.json().catch(() => ({}));
 
       if (!r.ok) {
-        setError(data?.error ?? "제출에 실패했습니다.");
+        const errorCode = data?.error;
+        const errorMap: Record<string, string> = {
+          SN_NOT_FOUND: "입력하신 SN(일련번호)이 올바르지 않습니다. 다시 확인해 주세요.",
+          ALREADY_CONFIRMED: "이미 등록 완료된 SN(일련번호)입니다.",
+          INVALID_SN: "올바르지 않은 SN(일련번호) 형식입니다.",
+          INVALID_INSTALL_DATE: "올바른 설치 완료일을 선택해 주세요.",
+          INSTALL_DATE_IN_FUTURE: "설치 완료일은 미래 날짜일 수 없습니다.",
+          INVALID_USER_PHONE: "올바른 전화번호를 입력해 주세요.",
+          INVALID_INSTALLER_PHONE: "올바른 기사님 전화번호를 입력해 주세요.",
+          INSTALLER_NOT_FOUND: "등록되지 않은 기사님 전화번호입니다.",
+          CONSENT_REQUIRED: "필수 개인정보 동의가 필요합니다.",
+        };
+
+        if (errorCode === "SN_NOT_FOUND") {
+          alert("SN (일련번호) 입력 오류\n\n입력하신 SN(일련번호)이 올바르지 않습니다. 기기 본체 또는 박스 라벨의 일련번호를 다시 확인해 주세요.");
+          setError("SN (일련번호) 입력 오류: 일련번호를 다시 확인해 주세요.");
+        } else {
+          setError(errorMap[errorCode] ?? errorCode ?? "제출에 실패했습니다.");
+        }
         return;
       }
 
@@ -335,35 +351,23 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
           </div>
         </label>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>제품 모델</span>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value as Model)}
-            style={inputStyle}
-          >
-            <option value="L100">L100 도어락</option>
-            <option value="K100">K100 도어락</option>
-          </select>
-        </label>
-
-        {/* 2) 일련번호 입력 + 스캔 버튼 */}
+        {/* 2) 제품 SN 입력 + 스캔 버튼 */}
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            제품 일련번호
+            제품 SN (일련번호)
             <button
               type="button"
               onClick={() => setSnHelpOpen(true)}
               style={snHelpLinkStyle}
             >
-              일련번호 위치 확인
+              SN (일련번호) 위치 확인
             </button>
           </span>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={sn}
               onChange={(e) => setSn(e.target.value)}
-              placeholder={model === "K100" ? "예: AKSXXXXXXX" : "예: A1B2C3D4..."}
+              placeholder="예: A1B2C3D4... 또는 AKSXXXXXXX"
               style={{ ...inputStyle, flex: 1 }}
             />
             <button
@@ -376,11 +380,11 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
                 cursor: "pointer",
               }}
             >
-              📷 일련번호 스캔
+              📷 SN 스캔
             </button>
           </div>
           <div style={{ fontSize: 12, opacity: 0.7, lineHeight: 1.4 }}>
-            QR 또는 바코드를 카메라에 비춰 일련번호를 자동 입력합니다.
+            QR 또는 바코드를 카메라에 비춰 SN을 자동 입력합니다.
           </div>
         </label>
 
@@ -649,7 +653,7 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       {/* 3) 스캔 모달 */}
       {scanOpen && (
         <QrScanModal
-          title={`${model} 일련번호 스캔`}
+          title="스마트 도어락 SN 스캔"
           onClose={() => setScanOpen(false)}
           onResult={(value) => {
             setSn(value);
@@ -661,7 +665,6 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
       {/* 4) SN 위치 안내 모달 */}
       {snHelpOpen && (
         <SnLocationModal
-          model={model}
           onClose={() => setSnHelpOpen(false)}
         />
       )}
