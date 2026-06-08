@@ -18,6 +18,19 @@ export default function QrScanModal({
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [err, setErr] = useState<string>("");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const [currentActiveId, setCurrentActiveId] = useState<string | null>(null);
+
+  const handleSwitchCamera = () => {
+    if (devices.length <= 1) return;
+    const currentId = currentActiveId || activeDeviceId || devices[0].deviceId;
+    const currentIndex = devices.findIndex((d) => d.deviceId === currentId);
+    const nextIndex = (currentIndex + 1) % devices.length;
+    const nextDevice = devices[nextIndex];
+    setActiveDeviceId(nextDevice.deviceId);
+    setCurrentActiveId(nextDevice.deviceId);
+  };
 
   // 화면 탭 → single-shot focus + pointOfInterest 좌표 → 800ms 후 continuous 복귀.
   // 일부 안드로이드 (특히 삼성) 자동초점 미동작 시 수동 대응.
@@ -67,14 +80,16 @@ export default function QrScanModal({
 
     async function start() {
       try {
-        // 방안 A: getUserMedia top-level focusMode (일부 안드로이드 대응)
+        const videoConstraints: MediaTrackConstraints = activeDeviceId
+          ? { deviceId: { exact: activeDeviceId } }
+          : { facingMode: { ideal: "environment" } };
+
+        videoConstraints.width = { ideal: 1920 };
+        videoConstraints.height = { ideal: 1080 };
+        (videoConstraints as Record<string, unknown>).focusMode = { ideal: "continuous" };
+
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            ...({ focusMode: { ideal: "continuous" } } as object),
-          } as MediaTrackConstraints,
+          video: videoConstraints,
         });
 
         if (cancelled) {
@@ -82,62 +97,90 @@ export default function QrScanModal({
           return;
         }
 
-        // 방안 B: 시작 후 capabilities 기반 추가 조정.
-        //   B-1 continuous focus
-        //   B-2 근접 hint 0.15m (15cm)   ← capabilities 노출 시에만
-        //   B-3 적정 zoom 1.5x           ← capabilities 노출 시에만
-        // iOS Safari 는 focusDistance / zoom 노출 안 함 → 자동 skip (기존 동작 유지).
         const track = stream.getVideoTracks()[0];
         trackRef.current = track ?? null;
         if (track) {
-          const cap = (track.getCapabilities?.() ?? {}) as Record<
-            string,
-            unknown
-          >;
-
-          const modes = cap.focusMode as string[] | undefined;
-          if (modes?.includes("continuous")) {
-            await track
-              .applyConstraints({
-                advanced: [
-                  { focusMode: "continuous" },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
-          }
-
-          const fd = cap.focusDistance as
-            | { min: number; max: number }
-            | undefined;
-          if (
-            fd &&
-            typeof fd.min === "number" &&
-            typeof fd.max === "number"
-          ) {
-            const nearFocus = Math.max(fd.min, Math.min(0.15, fd.max));
-            await track
-              .applyConstraints({
-                advanced: [
-                  { focusMode: "continuous", focusDistance: nearFocus },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
-          }
-
-          const zoomCap = cap.zoom as
-            | { min: number; max: number; step?: number }
-            | undefined;
-          if (zoomCap && typeof zoomCap.max === "number" && zoomCap.max >= 1.5) {
-            const targetZoom = Math.min(1.5, zoomCap.max);
-            await track
-              .applyConstraints({
-                advanced: [
-                  { zoom: targetZoom },
-                ] as unknown as MediaTrackConstraintSet[],
-              })
-              .catch(() => {});
+          const settings = track.getSettings?.() || {};
+          if (settings.deviceId) {
+            setCurrentActiveId(settings.deviceId);
           }
         }
+
+        // Fetch and filter camera devices to prioritize rear cameras
+        try {
+          const allDevices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+          const rearDevices = videoDevices.filter((d) => {
+            const label = d.label.toLowerCase();
+            return (
+              !label.includes("front") &&
+              !label.includes("앞") &&
+              !label.includes("selfie")
+            );
+          });
+          const finalDevices = rearDevices.length > 0 ? rearDevices : videoDevices;
+          setDevices(finalDevices);
+        } catch (e) {
+          console.error("Failed to enumerate devices", e);
+        }
+
+        // Apply advanced camera configurations with a delay of 600ms.
+        // This is crucial for Android Chrome/Samsung devices to properly apply constraints.
+        const constraintTimeout = setTimeout(async () => {
+          if (cancelled || !track) return;
+          try {
+            const cap = (track.getCapabilities?.() ?? {}) as Record<
+              string,
+              unknown
+            >;
+            interface ExtendedMediaTrackConstraintSet extends MediaTrackConstraintSet {
+              focusMode?: string;
+              focusDistance?: number;
+              zoom?: number;
+            }
+            const advancedConstraints: ExtendedMediaTrackConstraintSet = {};
+            let hasAdvanced = false;
+
+            const modes = cap.focusMode as string[] | undefined;
+            if (modes?.includes("continuous")) {
+              advancedConstraints.focusMode = "continuous";
+              hasAdvanced = true;
+            }
+
+            const fd = cap.focusDistance as
+              | { min: number; max: number }
+              | undefined;
+            if (
+              fd &&
+              typeof fd.min === "number" &&
+              typeof fd.max === "number"
+            ) {
+              advancedConstraints.focusDistance = Math.max(fd.min, Math.min(0.15, fd.max));
+              hasAdvanced = true;
+            }
+
+            const zoomCap = cap.zoom as
+              | { min: number; max: number; step?: number }
+              | undefined;
+            if (zoomCap && typeof zoomCap.max === "number") {
+              if (zoomCap.max >= 1.8) {
+                advancedConstraints.zoom = 1.8;
+                hasAdvanced = true;
+              } else if (zoomCap.max >= 1.5) {
+                advancedConstraints.zoom = zoomCap.max;
+                hasAdvanced = true;
+              }
+            }
+
+            if (hasAdvanced) {
+              await track.applyConstraints({
+                advanced: [advancedConstraints] as unknown as MediaTrackConstraintSet[],
+              });
+            }
+          } catch (err) {
+            console.warn("Failed to apply delayed constraints", err);
+          }
+        }, 600);
 
         // ZXing 디코더 (QR + 1D 동시 인식)
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
@@ -163,6 +206,7 @@ export default function QrScanModal({
         const reader = new BrowserMultiFormatReader(hints);
 
         if (cancelled || !videoRef.current) {
+          clearTimeout(constraintTimeout);
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
@@ -181,6 +225,7 @@ export default function QrScanModal({
         );
 
         cleanupRef.current = () => {
+          clearTimeout(constraintTimeout);
           controls.stop();
           stream.getTracks().forEach((t) => t.stop());
           trackRef.current = null;
@@ -209,9 +254,8 @@ export default function QrScanModal({
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-    // onResult 가 매 렌더 새 reference 여도 카메라를 다시 열 필요 없음.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeDeviceId]);
 
   const handleClose = () => {
     cleanupRef.current?.();
@@ -262,6 +306,11 @@ export default function QrScanModal({
           </>
         )}
 
+        {devices.length > 1 && (
+          <button onClick={handleSwitchCamera} style={switchBtnStyle}>
+            🔄 카메라 전환 ({Math.max(0, devices.findIndex((d) => d.deviceId === currentActiveId)) + 1} / {devices.length})
+          </button>
+        )}
         <button onClick={handleClose} style={closeBtnStyle}>
           닫기
         </button>
@@ -356,6 +405,18 @@ const hintSubStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#a1a1aa",
   marginTop: 0,
+};
+
+const switchBtnStyle: React.CSSProperties = {
+  width: "100%",
+  marginTop: 12,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  background: "#f3f4f6",
+  color: "#1f2937",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const closeBtnStyle: React.CSSProperties = {
