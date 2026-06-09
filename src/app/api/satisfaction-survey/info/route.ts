@@ -33,10 +33,20 @@ export async function GET(request: Request) {
 
     const model = shipped?.model || (registration.sn.startsWith("AKS") ? "K100" : "L100");
 
+    // Mask phone number for privacy
+    const cleanPhone = registration.userPhone.replace(/[^0-9]/g, "");
+    let maskedPhone = registration.userPhone;
+    if (cleanPhone.length === 11) {
+      maskedPhone = `${cleanPhone.slice(0, 3)}-****-${cleanPhone.slice(7)}`;
+    } else if (cleanPhone.length === 10) {
+      maskedPhone = `${cleanPhone.slice(0, 3)}-***-${cleanPhone.slice(6)}`;
+    }
+
     return NextResponse.json({
       alreadySubmitted: false,
       model,
       installDate: registration.installDate,
+      userPhone: maskedPhone,
     });
   } catch (error: unknown) {
     console.error("[Survey Info API] Error:", error);

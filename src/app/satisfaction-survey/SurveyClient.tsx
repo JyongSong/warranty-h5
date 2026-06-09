@@ -21,6 +21,9 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [model, setModel] = useState("아카라 스마트 도어락");
   const [success, setSuccess] = useState(false);
+  const [userPhone, setUserPhone] = useState("");
+  const [installDate, setInstallDate] = useState("");
+  const [consentEvent, setConsentEvent] = useState(false);
 
   // Form values
   const [q1_1, setQ1_1] = useState<QuestionValue>("");
@@ -54,6 +57,12 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
           if (data.model) {
             setModel(`${data.model} 도어락`);
           }
+          if (data.userPhone) {
+            setUserPhone(data.userPhone);
+          }
+          if (data.installDate) {
+            setInstallDate(data.installDate);
+          }
         }
       } catch (err: unknown) {
         setError(getErrorMessage(err, "설문 정보를 불러올 수 없습니다. 링크를 확인해 주세요."));
@@ -73,6 +82,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
     q2_2 !== "" &&
     q2_3 !== "" &&
     q3_1 > 0 &&
+    consentEvent &&
     !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -241,8 +251,14 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
           아카라 스마트 <b>{model}</b>을 이용해 주셔서 진심으로 감사드립니다.
         </p>
         <p style={{ fontSize: 13, color: "#3f3f46", lineHeight: 1.6, marginTop: 6, marginBottom: 0 }}>
-          고객님께서 사용하며 느끼신 생생한 목소리를 반영하여 더 나은 품질과 서비스로 보답하고자 간단한 설문을 진행합니다. 참여해 주신 분들께는 소정의 감사 선물을 제공해 드릴 예정이오니 잠시만 시간 내어 참여 부탁드립니다.
+          고객님께서 사용하며 느끼신 생생한 목소리를 반영하여 더 나은 품질과 서비스로 보답하고자 간단한 설문을 진행합니다. 참여해 주신 분들께는 소정의 감사 선물 (커피 쿠폰)을 제공해 드릴 예정이오니 잠시만 시간 내어 참여 부탁드립니다.
         </p>
+        {(userPhone || installDate) && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #e4e4e7", fontSize: 12, color: "#71717a", display: "grid", gap: 3 }}>
+            {userPhone && <div>• 휴대폰 번호: {userPhone}</div>}
+            {installDate && <div>• 설치 일자: {installDate}</div>}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
@@ -317,6 +333,56 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
               rows={4}
               style={textareaStyle}
             />
+          </div>
+        </div>
+
+        {/* Privacy Consent Checkbox */}
+        <div style={{
+          background: "#f8faf9",
+          border: "1px solid #e1e9e5",
+          borderRadius: 12,
+          padding: 14,
+          marginTop: 10,
+          marginBottom: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <input
+              type="checkbox"
+              id="consentEvent"
+              checked={consentEvent}
+              onChange={(e) => setConsentEvent(e.target.checked)}
+              style={{
+                marginTop: 3,
+                accentColor: "#1d3129",
+                cursor: "pointer",
+                width: 16,
+                height: 16,
+              }}
+            />
+            <label htmlFor="consentEvent" style={{ fontSize: 13, fontWeight: 700, color: "#1d3129", cursor: "pointer", userSelect: "none" }}>
+              (필수) 만족도 조사 참여 및 커피 쿠폰 발송을 위한 개인정보 수집·이용 동의
+            </label>
+          </div>
+          <div style={{
+            marginTop: 10,
+            padding: 10,
+            background: "#fff",
+            border: "1px solid #e4e4e7",
+            borderRadius: 8,
+            fontSize: 11,
+            color: "#71717a",
+            lineHeight: 1.6,
+            maxHeight: 110,
+            overflowY: "auto",
+          }}>
+            <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "#27272a" }}>[개인정보 수집 및 이용 동의]</p>
+            <p style={{ margin: "0 0 4px 0" }}>아카라 라이프는 만족도 조사 참여 혜택(커피 쿠폰) 제공을 위해 아래와 같이 고객님의 개인정보를 수집 및 이용합니다.</p>
+            <ul style={{ margin: 0, paddingLeft: 14 }}>
+              <li><b>수집 및 이용 목적:</b> 만족도 조사 참여자 식별 및 모바일 커피 쿠폰 발송</li>
+              <li><b>수집하는 개인정보 항목:</b> 휴대폰 번호</li>
+              <li><b>개인정보의 보유 및 이용 기간:</b> <span style={{ color: "#1d3129", fontWeight: 700 }}>커피 쿠폰 발송 완료 후 최대 7영업일 이내 지체 없이 파기</span></li>
+              <li><b>동의 거부 권리:</b> 귀하는 동의를 거부할 권리가 있으며, 거부 시에도 설문 조사는 참여할 수 있으나 커피 쿠폰 발송 대상에서 제외됩니다.</li>
+            </ul>
           </div>
         </div>
 
