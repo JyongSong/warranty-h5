@@ -109,6 +109,30 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [sendingSurvey, setSendingSurvey] = useState(false);
+
+  async function handleSendSurvey(registrationId: string) {
+    if (sendingSurvey) return;
+    setSendingSurvey(true);
+    try {
+      const r = await fetch("/api/admin/send-survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(data?.error ?? "설문 발송에 실패했습니다.");
+      }
+      alert("만족도 조사 설문 링크가 성공적으로 발송되었습니다.");
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, "설문 발송에 실패했습니다."));
+    } finally {
+      setSendingSurvey(false);
+    }
+  }
 
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId) ?? items[0] ?? null,
@@ -156,7 +180,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, selectedId]);
+  }, [query, selectedId, refreshTrigger]);
 
   async function onLogout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
@@ -636,6 +660,22 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                             ? "설치 확정 후 7영업일이 경과하여 발송 대기 중인 상태입니다. 매일 오전 10시 30분 시스템 스케줄러(Cron)가 돌 때 자동으로 발송 링크가 나갑니다."
                             : "설치 확인 완료 후 영업일 기준 7일이 경과해야 설문조사 링크가 자동으로 발송됩니다. 주말 및 국가 공휴일은 발송 대기 일수 계산에서 자동 제외됩니다."}
                         </p>
+                        {(selectedItem.surveyStatus === "READY" || selectedItem.surveyStatus === "SENT") && (
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSendSurvey(selectedItem.id)}
+                              disabled={sendingSurvey}
+                              className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                              {sendingSurvey
+                                ? "발송 중..."
+                                : selectedItem.surveyStatus === "SENT"
+                                ? "설문 링크 재발송 (重新发送)"
+                                : "설문 링크 발송 (发送问卷)"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
