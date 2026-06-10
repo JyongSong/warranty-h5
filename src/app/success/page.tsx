@@ -8,6 +8,7 @@ type StoredState = {
   regId: string;
   installType: string;
   freeAsEndDate: string;
+  registrationStatus: string;
 };
 
 const EMPTY_STATE: StoredState = {
@@ -15,6 +16,7 @@ const EMPTY_STATE: StoredState = {
   regId: "",
   installType: "",
   freeAsEndDate: "",
+  registrationStatus: "",
 };
 
 const INSTALL_TYPE_LABEL_KO: Record<string, string> = {
@@ -37,6 +39,7 @@ export default function SuccessPage() {
       regId: sessionStorage.getItem("lastRegistrationId") || "",
       installType: sessionStorage.getItem("lastInstallType") || "",
       freeAsEndDate: sessionStorage.getItem("lastFreeAsEndDate") || "",
+      registrationStatus: sessionStorage.getItem("lastRegistrationStatus") || "",
     });
   }, []);
 
@@ -49,11 +52,11 @@ export default function SuccessPage() {
     return () => clearInterval(timer);
   }, [countdown]);
 
-  const { link, regId, installType, freeAsEndDate } = stored;
+  const { link, regId, installType, freeAsEndDate, registrationStatus } = stored;
   // self / external: 등록 즉시 완료
   // installer:        기사 confirm 후 완료 (이 페이지에서는 컨펌 대기 안내)
-  const isImmediate = installType === "self" || installType === "external";
-  const isInstallerPending = installType === "installer";
+  const isImmediate = installType === "self" || installType === "external" || registrationStatus === "confirmed";
+  const isInstallerPending = installType === "installer" && registrationStatus !== "confirmed";
   const installTypeLabel = INSTALL_TYPE_LABEL_KO[installType] ?? installType;
 
   async function onResend() {

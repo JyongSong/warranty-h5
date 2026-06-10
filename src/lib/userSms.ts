@@ -17,7 +17,7 @@ export function buildUserCompletionSms(input: {
   installerPhone: string | null;
 }): string {
   const lines = [
-    "[Aqara] 제품정보 등록이 완료되었습니다.",
+    "[Aqara] 도어락 제품정보 등록이 완료되었습니다.",
     `설치 유형: ${INSTALL_TYPE_LABEL[input.installType]}`,
     `무상 A/S 종료일: ${input.freeAsEndDate}`,
   ];
