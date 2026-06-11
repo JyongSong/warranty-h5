@@ -251,7 +251,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
           아카라 스마트 <b>{model}</b>을 이용해 주셔서 진심으로 감사드립니다.
         </p>
         <p style={{ fontSize: 13, color: "#3f3f46", lineHeight: 1.6, marginTop: 6, marginBottom: 0 }}>
-          고객님께서 사용하며 느끼신 생생한 목소리를 반영하여 더 나은 품질과 서비스로 보답하고자 간단한 설문을 진행합니다. 참여해 주신 분들께는 소정의 감사 선물 (커피 쿠폰)을 제공해 드릴 예정이오니 잠시만 시간 내어 참여 부탁드립니다.
+          고객님께서 사용하며 느끼신 생생한 목소리를 반영하여 더 나은 품질과 서비스로 보답하고자 간단한 설문을 진행합니다. 설문에 참여해 주신 모든 분들께 커피 쿠폰을 선물로 드릴 예정이오니 잠시만 시간 내어 참여 부탁드립니다.
         </p>
         {(userPhone || installDate) && (
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #e4e4e7", fontSize: 12, color: "#71717a", display: "grid", gap: 3 }}>
