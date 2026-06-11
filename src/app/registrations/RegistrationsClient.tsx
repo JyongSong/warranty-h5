@@ -35,6 +35,8 @@ type RegistrationItem = {
   surveyStatus: "NONE" | "WAITING" | "READY" | "SENT" | "COMPLETED";
   survey: SurveyItem | null;
   surveySentAt: string | null;
+  installerName?: string | null;
+  installerBranch?: string | null;
 };
 
 function installTypeLabel(type: string) {
@@ -419,6 +421,14 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                         selectedItem.installerPhone ? formatKrPhone(selectedItem.installerPhone) : "-"
                       }
                     />
+                    <InfoCard
+                      label="기사 성명"
+                      value={selectedItem.installerName ?? "-"}
+                    />
+                    <InfoCard
+                      label="소속 지사"
+                      value={selectedItem.installerBranch ?? "-"}
+                    />
                     <InfoCard label="접수 시각" value={formatDateTime(selectedItem.submittedAt)} />
                     <InfoCard label="확인 완료 시각" value={formatDateTime(selectedItem.confirmedAt)} />
                     <InfoCard label="확인 주체" value={selectedItem.confirmedBy ?? "-"} />
@@ -568,6 +578,12 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                         고객 연락처: {formatKrPhone(selectedItem.userPhone)} | 설치 확인:{" "}
                         {formatDateTime(selectedItem.confirmedAt)}
                       </p>
+                      {selectedItem.installerPhone && (
+                        <p className="text-xs text-zinc-600 mt-2 bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-2 inline-flex items-center gap-1.5 font-medium">
+                          <span className="w-2 h-2 rounded-full bg-emerald-700"></span>
+                          담당 설치 기사: {selectedItem.installerName ?? "미등록"} {selectedItem.installerBranch ? `(${selectedItem.installerBranch})` : ""} | {formatKrPhone(selectedItem.installerPhone)}
+                        </p>
+                      )}
                     </div>
 
                     {/* Conditional rendering depending on surveyStatus */}

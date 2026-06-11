@@ -87,6 +87,22 @@ export async function GET(req: Request) {
       take: 200,
     });
 
+    const installerPhones = Array.from(new Set(
+      rows.map((r) => r.installerPhone).filter((phone): phone is string => !!phone)
+    ));
+
+    const installers = installerPhones.length > 0
+      ? await prisma.installer.findMany({
+          where: { phone: { in: installerPhones } },
+          select: { phone: true, name: true, branch: true },
+        })
+      : [];
+
+    const installerMap = new Map<string, { name: string; branch: string | null }>();
+    for (const inst of installers) {
+      installerMap.set(inst.phone, { name: inst.name, branch: inst.branch });
+    }
+
     const items = rows.map((row) => {
       let surveyStatus = "NONE";
 
@@ -99,9 +115,13 @@ export async function GET(req: Request) {
         }
       }
 
+      const instInfo = row.installerPhone ? installerMap.get(row.installerPhone) : null;
+
       return {
         ...row,
         surveyStatus,
+        installerName: instInfo?.name || null,
+        installerBranch: instInfo?.branch || null,
       };
     });
 
