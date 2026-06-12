@@ -15,9 +15,10 @@ export function buildUserCompletionSms(input: {
   installType: InstallType;
   freeAsEndDate: string;
   installerPhone: string | null;
-}): string {
+}) {
+  const subject = "[Aqara]";
   const lines = [
-    "[Aqara] 도어락 제품정보 등록이 완료되었습니다.",
+    "도어락 제품정보 등록이 완료되었습니다.",
     `설치 유형: ${INSTALL_TYPE_LABEL[input.installType]}`,
     `무상 A/S 종료일: ${input.freeAsEndDate}`,
   ];
@@ -28,5 +29,8 @@ export function buildUserCompletionSms(input: {
 
   lines.push("", "문의: https://o8znz.channel.io", "※ 발신전용");
 
-  return lines.join("\n");
+  return {
+    subject,
+    text: lines.join("\n"),
+  };
 }

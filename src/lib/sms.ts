@@ -22,7 +22,8 @@ function normalizeKr(input: string): string {
 
 export async function sendSms(
   to: string | null | undefined,
-  text: string
+  text: string,
+  subject?: string
 ): Promise<void> {
   if (!to) return;
   const from = process.env.SOLAPI_SENDER;
@@ -35,7 +36,7 @@ export async function sendSms(
   if (!normalized) return;
 
   try {
-    await service.send({ to: normalized, from, text });
+    await service.send({ to: normalized, from, text, subject });
   } catch (e) {
     console.error("[SMS] 발송 실패:", e);
   }

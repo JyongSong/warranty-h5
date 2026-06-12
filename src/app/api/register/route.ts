@@ -125,12 +125,12 @@ export async function POST(req: Request) {
         // 자가/외부 기사: 등록 즉시 완료 → 사용자에게 SMS 발송.
         // 인증 기사: 기사 confirm 후 (/api/confirm) 에서 사용자 SMS 발송.
         if (installType === "self" || installType === "external") {
-            const userSmsText = buildUserCompletionSms({
+            const userSmsObj = buildUserCompletionSms({
                 installType,
                 freeAsEndDate: freeEnd,
                 installerPhone: null,
             });
-            await sendSms(userPhone, userSmsText);
+            await sendSms(userPhone, userSmsObj.text, userSmsObj.subject);
             console.log("[SMS SENT][REGISTER→USER]", { to: userPhone, installType });
 
             return NextResponse.json({
@@ -144,8 +144,14 @@ export async function POST(req: Request) {
 
         // 인증 기사: 기사에게 confirm link SMS
         const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token as string)}`;
-        const installerSmsText = `[Aqara] 설치 확인이 필요합니다.\n72시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.\n\n${confirmLink}\n\n※ 발신전용`;
-        await sendSms(installerPhone, installerSmsText);
+        const installerSubject = "[Aqara]";
+        const installerSmsText = `설치 확인이 필요합니다.
+72시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.
+
+${confirmLink}
+
+※ 발신전용`;
+        await sendSms(installerPhone, installerSmsText, installerSubject);
 
         console.log("[SMS SENT][REGISTER→INSTALLER]", { to: installerPhone, link: confirmLink });
 

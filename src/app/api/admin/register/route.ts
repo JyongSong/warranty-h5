@@ -137,12 +137,12 @@ export async function POST(req: Request) {
         });
 
         // 异步发送用户质保完成短信（在 transaction 外发，防止失败回滚）
-        const userSmsText = buildUserCompletionSms({
+        const userSmsObj = buildUserCompletionSms({
             installType: finalInstallType,
             freeAsEndDate: freeEnd,
             installerPhone: finalInstallType === "installer" ? installerPhoneValue : null,
         });
-        await sendSms(userPhone, userSmsText);
+        await sendSms(userPhone, userSmsObj.text, userSmsObj.subject);
         console.log("[SMS SENT][ADMIN_REGISTER→USER]", { to: userPhone, installType: finalInstallType });
 
         return NextResponse.json({

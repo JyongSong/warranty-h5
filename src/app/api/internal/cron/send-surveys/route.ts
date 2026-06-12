@@ -93,7 +93,8 @@ async function handleCronRequest(request: Request) {
     for (const reg of dueRegistrations) {
       const surveyLink = `${getBaseUrl()}/satisfaction-survey?id=${reg.id}`;
 
-      const smsText = `[아카라 라이프] 설문 참여하고 커피 쿠폰 받으세요! ☕
+      const subject = "[Aqara]";
+      const smsText = `설문 참여하고 커피 쿠폰 받으세요!
 
 안녕하세요, 고객님.
 아카라 스마트 도어락을 이용해주셔서 감사합니다.
@@ -109,7 +110,7 @@ async function handleCronRequest(request: Request) {
 ※ 발신전용`;
 
       // Send SMS via solapi
-      await sendSms(reg.userPhone, smsText);
+      await sendSms(reg.userPhone, smsText, subject);
 
       // Log sending to server terminal
       console.log(`[SURVEY SMS SENT] Phone: ${reg.userPhone}, Link: ${surveyLink}`);

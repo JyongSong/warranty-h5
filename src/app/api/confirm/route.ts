@@ -71,12 +71,12 @@ export async function POST(req: Request) {
       rec.userPhone &&
       rec.freeAsEndDate
     ) {
-      const userSmsText = buildUserCompletionSms({
+      const userSmsObj = buildUserCompletionSms({
         installType: "installer",
         freeAsEndDate: rec.freeAsEndDate,
         installerPhone: rec.installerPhone,
       });
-      await sendSms(rec.userPhone, userSmsText);
+      await sendSms(rec.userPhone, userSmsObj.text, userSmsObj.subject);
       console.log("[SMS SENT][CONFIRM→USER]", { to: rec.userPhone });
     }
 
