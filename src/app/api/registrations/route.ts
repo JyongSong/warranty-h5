@@ -84,7 +84,7 @@ export async function GET(req: Request) {
         survey: true,
       },
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: 5000,
     });
 
     const installerPhones = Array.from(new Set(
