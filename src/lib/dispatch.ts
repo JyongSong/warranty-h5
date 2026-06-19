@@ -63,7 +63,7 @@ const INSTALLERS: readonly Installer[] = [
   { businessNumber: '124-28-81512', branchName: '화성/신영통열쇠',              phone: '010-3602-3477', installationRegion: '경기도',   possibleRegion: '화성시, 동탄시, 수원 영통구',         impossibleRegion: '' },
   { businessNumber: '134-24-54294', branchName: '안산/24시열쇠나라',            phone: '010-4733-5445', installationRegion: '경기도',   possibleRegion: '안산시',     impossibleRegion: '' },
   { businessNumber: '126-12-75562', branchName: '경기광주/청도열쇠상사e',       phone: '010-3364-8385', installationRegion: '경기도',   possibleRegion: '광주시',                               impossibleRegion: '' },
-  { businessNumber: '130-14-95576', branchName: '경기열쇠상사',                 phone: '010-2245-2222', installationRegion: '전국',     possibleRegion: '인천, 부천, 전지역',                  impossibleRegion: '' },  // 기본/Fallback
+  { businessNumber: '130-14-95576', branchName: '경기열쇠상사',                 phone: '010-2245-2222', installationRegion: '전국',     possibleRegion: '인천, 부천, 전지역',                  impossibleRegion: '연천군, 가장군' },  // 기본/Fallback
   { businessNumber: '136-46-00419', branchName: '의정부/롯데마트 장암점',       phone: '010-4819-4568', installationRegion: '경기도',   possibleRegion: '의정부시',                             impossibleRegion: '' },
   { businessNumber: '856-21-00558', branchName: '대전/영신열쇠',                phone: '010-3444-8981', installationRegion: '충청남도', possibleRegion: '대전',                                 impossibleRegion: '' },
   { businessNumber: '605-23-84667', branchName: '부산/열쇠특공대',              phone: '010-8542-5122', installationRegion: '경상북도', possibleRegion: '부산',                                 impossibleRegion: '강서구, 부산' },
@@ -71,6 +71,14 @@ const INSTALLERS: readonly Installer[] = [
 ]
 
 const DEFAULT_INSTALLER: Installer = INSTALLERS.find(i => i.businessNumber === '130-14-95576') ?? INSTALLERS[0]
+const IMPOSSIBLE_INSTALLER: Installer = {
+  businessNumber: '000-00-00000',
+  branchName: '설치불가 지역',
+  phone: '',
+  installationRegion: '',
+  possibleRegion: '',
+  impossibleRegion: ''
+}
 
 /** 지점명으로 설치기사 조회. 정확히 일치하지 않으면 null 반환. */
 export function findInstallerByBranch(branchName: string): { branchName: string; phone: string } | null {
@@ -172,7 +180,12 @@ export function matchInstallerCandidates(address: string): Installer[] {
     .filter(m => m.score > 0)
     .sort((a, b) => b.score - a.score || a.idx - b.idx)
 
-  if (scored.length === 0) return [DEFAULT_INSTALLER]
+  if (scored.length === 0) {
+    if (impossibleRegionMatchesAddress(DEFAULT_INSTALLER, n)) {
+      return [IMPOSSIBLE_INSTALLER]
+    }
+    return [DEFAULT_INSTALLER]
+  }
   const maxScore = scored[0].score
   return scored.filter(m => m.score === maxScore).map(m => m.inst)
 }
