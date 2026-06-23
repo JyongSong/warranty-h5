@@ -58,7 +58,7 @@ const INSTALLERS: readonly Installer[] = [
   { businessNumber: '204-27-28418', branchName: '동대문/24시출장열쇠',          phone: '010-2122-9140', installationRegion: '서울',     possibleRegion: '동대문구, 중랑구, 성동구, 광진구',   impossibleRegion: '' },
   { businessNumber: '868-88-00353', branchName: '서울경기포항/24시출장열쇠5G',  phone: '010-6530-6760', installationRegion: '서울',     possibleRegion: '광진구, 하남시',                       impossibleRegion: '' },
   { businessNumber: '112-48-04825', branchName: '관악/신우열쇠',                phone: '010-4003-1382', installationRegion: '서울',     possibleRegion: '영등포구, 동작구, 관악구',            impossibleRegion: '' },
-  { businessNumber: '519-19-02649', branchName: '키플레이',                phone: '010-9220-3336', installationRegion: '경기도',     possibleRegion: '하남시, 성남시, 용인시, 수원시, 안성시, 평택시',            impossibleRegion: '' },
+  { businessNumber: '519-19-02649', branchName: '키플레이',                phone: '010-8220-3336', installationRegion: '경기도',     possibleRegion: '하남시, 성남시, 용인시, 수원시, 안성시, 평택시',            impossibleRegion: '' },
   { businessNumber: '110-17-24326', branchName: '용인/24시출장열쇠',            phone: '010-2084-5500', installationRegion: '경기도',   possibleRegion: '용인시, 수원시',                       impossibleRegion: '수원시 영통구' },
   { businessNumber: '124-28-81512', branchName: '화성/신영통열쇠',              phone: '010-3602-3477', installationRegion: '경기도',   possibleRegion: '화성시, 동탄시, 수원 영통구',         impossibleRegion: '' },
   { businessNumber: '134-24-54294', branchName: '안산/24시열쇠나라',            phone: '010-4733-5445', installationRegion: '경기도',   possibleRegion: '안산시',     impossibleRegion: '' },
@@ -384,8 +384,8 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
           FOR XML PATH(''), TYPE
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS no_girl,
         COALESCE(
-          (SELECT TOP 1 N'[잇섭PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'[잇섭PICK]', l2.product_name) > 0),
-          (SELECT TOP 1 N'[지니스펙트럼PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'[지니스펙트럼PICK]', l2.product_name) > 0),
+          (SELECT TOP 1 N'[잇섭PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND (CHARINDEX(N'[잇섭PICK]', l2.product_name) > 0 OR CHARINDEX(N'스마트 도어락 K100+설치포함 안심패키지 (지문+음성+애플,삼성홈키+푸시풀+iot 연동)', l2.product_name) > 0)),
+          (SELECT TOP 1 N'[지니스펙트럼PICK_앱 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND (CHARINDEX(N'[지니스펙트럼PICK]', l2.product_name) > 0 OR CHARINDEX(N'스마트 도어락 L100+설치포함 안심패키지 (지문+음성+애플,삼성홈키+무타공+Iot연동)', l2.product_name) > 0)),
           (SELECT TOP 1 N'[스마트홈 여름 준비 패키지_앱+허브 설치] ' FROM lines l2 WHERE l2.phone = l1.phone AND CHARINDEX(N'스마트홈 여름 준비 패키지 (도어락 L100+안심설치+에어컨 제어)', l2.product_name) > 0),
           N''
         ) + 
