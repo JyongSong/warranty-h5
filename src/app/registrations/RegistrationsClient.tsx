@@ -107,12 +107,22 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
   const [activeTab, setActiveTab] = useState<"query" | "survey">("query");
   const [query, setQuery] = useState("");
   const [surveyFilter, setSurveyFilter] = useState<string>("ALL");
+  const [ratingFilter, setRatingFilter] = useState<number | "ALL">("ALL");
+  const [selectedSurveyIds, setSelectedSurveyIds] = useState<string[]>([]);
   const [items, setItems] = useState<RegistrationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [sendingSurvey, setSendingSurvey] = useState(false);
+
+  // Reset states when filters/tabs change
+  useEffect(() => {
+    setSelectedSurveyIds([]);
+    if (surveyFilter !== "COMPLETED") {
+      setRatingFilter("ALL");
+    }
+  }, [surveyFilter, activeTab, query]);
 
   async function handleSendSurvey(registrationId: string) {
     if (sendingSurvey) return;
@@ -131,6 +141,36 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       alert(getErrorMessage(err, "설문 발송에 실패했습니다."));
+    } finally {
+      setSendingSurvey(false);
+    }
+  }
+
+  async function handleBatchSendSurvey() {
+    if (sendingSurvey || selectedSurveyIds.length === 0) return;
+    if (
+      !confirm(
+        `선택한 ${selectedSurveyIds.length}명의 고객에게 만족도 조사 설문 링크를 일괄 발송하시겠습니까?`
+      )
+    ) {
+      return;
+    }
+    setSendingSurvey(true);
+    try {
+      const r = await fetch("/api/admin/send-survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationIds: selectedSurveyIds }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(data?.error ?? "설문 일괄 발송에 실패했습니다.");
+      }
+      alert(`성공적으로 ${data.sentCount}건의 설문 링크가 발송되었습니다.`);
+      setSelectedSurveyIds([]);
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, "설문 일괄 발송에 실패했습니다."));
     } finally {
       setSendingSurvey(false);
     }
@@ -213,12 +253,17 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
 
   // Filter items for Survey Dashboard
   const filteredSurveyItems = useMemo(() => {
-    const candidates = items.filter(
+    let candidates = items.filter(
       (item) => item.installType === "installer" && item.status === "confirmed"
     );
-    if (surveyFilter === "ALL") return candidates;
-    return candidates.filter((item) => item.surveyStatus === surveyFilter);
-  }, [items, surveyFilter]);
+    if (surveyFilter !== "ALL") {
+      candidates = candidates.filter((item) => item.surveyStatus === surveyFilter);
+    }
+    if (surveyFilter === "COMPLETED" && ratingFilter !== "ALL") {
+      candidates = candidates.filter((item) => item.survey?.q3_1 === ratingFilter);
+    }
+    return candidates;
+  }, [items, surveyFilter, ratingFilter]);
 
   function renderStars(rating: number) {
     return (
@@ -513,47 +558,170 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                   </div>
                 </div>
 
-                <div className="mb-3 text-xs text-zinc-500 font-semibold">
-                  검색 결과: {filteredSurveyItems.length}건
+                {surveyFilter === "COMPLETED" && (
+                  <div className="mb-4 border-t border-zinc-100 pt-3">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                      평점 필터
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { key: "ALL", label: "전체" },
+                        { key: 5, label: "5점" },
+                        { key: 4, label: "4점" },
+                        { key: 3, label: "3점" },
+                        { key: 2, label: "2점" },
+                        { key: 1, label: "1점" },
+                      ].map((r) => (
+                        <button
+                          key={r.key}
+                          type="button"
+                          onClick={() => setRatingFilter(r.key as number | "ALL")}
+                          className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1 transition ${
+                            ratingFilter === r.key
+                              ? "bg-amber-500 text-white"
+                              : "bg-zinc-50 border border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+                          }`}
+                        >
+                          {r.label}
+                          {typeof r.key === "number" && (
+                            <svg
+                              className={`h-3 w-3 ${
+                                ratingFilter === r.key
+                                  ? "fill-white text-white"
+                                  : "fill-amber-400 text-amber-400"
+                              }`}
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {surveyFilter === "READY" && selectedSurveyIds.length > 0 && (
+                  <div className="mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 flex flex-col gap-2.5 transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-900">
+                        {selectedSurveyIds.length}개 선택됨
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSurveyIds([])}
+                        className="text-[11px] font-semibold text-emerald-800 hover:underline"
+                      >
+                        선택 해제
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={sendingSurvey}
+                      onClick={handleBatchSendSurvey}
+                      className="w-full h-10 rounded-xl bg-emerald-800 text-white font-bold text-xs hover:bg-emerald-900 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      {sendingSurvey ? (
+                        "발송 중..."
+                      ) : (
+                        <>
+                          <svg
+                            className="h-4 w-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path
+                              d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          선택한 설문 일괄 발송
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                <div className="mb-3 flex items-center justify-between text-xs text-zinc-500 font-semibold">
+                  <span>검색 결과: {filteredSurveyItems.length}건</span>
+                  {surveyFilter === "READY" && filteredSurveyItems.length > 0 && (
+                    <label className="flex items-center gap-1.5 cursor-pointer hover:text-zinc-800 transition">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedSurveyIds.length === filteredSurveyItems.length &&
+                          filteredSurveyItems.length > 0
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSurveyIds(filteredSurveyItems.map((item) => item.id));
+                          } else {
+                            setSelectedSurveyIds([]);
+                          }
+                        }}
+                        className="rounded border-zinc-300 text-emerald-800 focus:ring-emerald-800 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <span>전체 선택</span>
+                    </label>
+                  )}
                 </div>
 
                 <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
                   {filteredSurveyItems.map((item) => {
                     const active = item.id === selectedId;
+                    const isChecked = selectedSurveyIds.includes(item.id);
                     return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedId(item.id)}
-                        className={`w-full rounded-2xl border p-4 text-left transition ${
-                          active
-                            ? "border-emerald-800 bg-emerald-900 text-white shadow-md shadow-emerald-900/10"
-                            : "border-zinc-200 bg-white hover:border-zinc-300"
-                        }`}
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div className="font-bold text-sm">{item.sn}</div>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                              active
-                                ? "bg-white/20 text-white border border-white/10"
-                                : surveyStatusStyle(item.surveyStatus)
-                            }`}
-                          >
-                            {surveyStatusLabel(item.surveyStatus)}
-                          </span>
-                        </div>
-                        <div className={`text-xs ${active ? "text-white/80" : "text-zinc-600"}`}>
-                          고객: {formatKrPhone(item.userPhone)}
-                        </div>
-                        <div
-                          className={`mt-1 text-[11px] ${
-                            active ? "text-white/60" : "text-zinc-400"
+                      <div key={item.id} className="flex items-center gap-2">
+                        {surveyFilter === "READY" && (
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedSurveyIds((prev) => [...prev, item.id]);
+                              } else {
+                                setSelectedSurveyIds((prev) => prev.filter((id) => id !== item.id));
+                              }
+                            }}
+                            className="rounded border-zinc-300 text-emerald-800 focus:ring-emerald-800 h-4.5 w-4.5 shrink-0 cursor-pointer ml-1"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(item.id)}
+                          className={`flex-1 rounded-2xl border p-4 text-left transition ${
+                            active
+                              ? "border-emerald-800 bg-emerald-900 text-white shadow-md shadow-emerald-900/10"
+                              : "border-zinc-200 bg-white hover:border-zinc-300"
                           }`}
                         >
-                          설치일: {item.installDate} | 확정일: {item.confirmedAt ? item.confirmedAt.slice(0, 10) : "-"}
-                        </div>
-                      </button>
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <div className="font-bold text-sm">{item.sn}</div>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                                active
+                                  ? "bg-white/20 text-white border border-white/10"
+                                  : surveyStatusStyle(item.surveyStatus)
+                              }`}
+                            >
+                              {surveyStatusLabel(item.surveyStatus)}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${active ? "text-white/80" : "text-zinc-600"}`}>
+                            고객: {formatKrPhone(item.userPhone)}
+                          </div>
+                          <div
+                            className={`mt-1 text-[11px] ${
+                              active ? "text-white/60" : "text-zinc-400"
+                            }`}
+                          >
+                            설치일: {item.installDate} | 확정일: {item.confirmedAt ? item.confirmedAt.slice(0, 10) : "-"}
+                          </div>
+                        </button>
+                      </div>
                     );
                   })}
 
