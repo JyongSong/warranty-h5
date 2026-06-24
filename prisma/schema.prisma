@@ -8,42 +8,46 @@ datasource db {
 }
 
 model ShippedDevice {
-  id          String    @id @default(uuid())
-  sn          String    @unique
+  id          String  @id @default(dbgenerated("(gen_random_uuid())::text"))
+  sn          String  @unique
   model       String?
-  shippedDate String?  @map("shipped_date")
-  batchId     String?   @map("batch_id")
+  shippedDate String? @map("shipped_date")
+  batchId     String? @map("batch_id")
 
   @@map("shipped_devices")
 }
 
 model WarrantyRegistration {
-  id                    String    @id @default(uuid())
-  sn                    String    @unique
-  installType           String    @default("installer") @map("install_type")
-  installDate           String    @map("install_date")
-  userPhone             String    @map("user_phone")
-  installerPhone        String?   @map("installer_phone")
-  consentPrivacy        Boolean   @map("consent_privacy")
-  consentMarketing      Boolean   @default(false) @map("consent_marketing")
-  status                String    @default("submitted")
-  confirmToken          String?   @unique @map("confirm_token")
-  confirmTokenExpiresAt DateTime? @map("confirm_token_expires_at")
-  freeAsEndDate         String?   @map("free_as_end_date")
-  submittedAt           DateTime  @default(now()) @map("submitted_at")
-  confirmedAt           DateTime? @map("confirmed_at")
-  confirmedBy           String?   @map("confirmed_by")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-  surveySentAt          DateTime? @map("survey_sent_at")
+  id                    String              @id @default(dbgenerated("(gen_random_uuid())::text"))
+  sn                    String              @unique
+  installType           String              @default("installer") @map("install_type")
+  installDate           String              @map("install_date")
+  userPhone             String              @map("user_phone")
+  installerPhone        String?             @map("installer_phone")
+  consentPrivacy        Boolean             @map("consent_privacy")
+  status                String              @default("submitted")
+  confirmToken          String?             @unique @map("confirm_token")
+  confirmTokenExpiresAt DateTime?           @map("confirm_token_expires_at") @db.Timestamptz(6)
+  freeAsEndDate         String?             @map("free_as_end_date")
+  submittedAt           DateTime            @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  confirmedAt           DateTime?           @map("confirmed_at") @db.Timestamptz(6)
+  confirmedBy           String?             @map("confirmed_by")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  consentMarketing      Boolean             @default(false) @map("consent_marketing")
+  surveySentAt          DateTime?           @map("survey_sent_at")
   survey                SatisfactionSurvey?
 
   @@index([status])
+  @@index([installerPhone], map: "idx_reg_installer_phone")
+  @@index([sn], map: "idx_reg_sn")
+  @@index([status], map: "idx_reg_status")
+  @@index([submittedAt], map: "idx_reg_submitted_at")
   @@map("warranty_registrations")
 }
 
 model Installer {
-  id                   String   @id @default(uuid())
+  id                   String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   name                 String
   phone                String   @unique
   branch               String?
@@ -55,28 +59,31 @@ model Installer {
   installCount         Int?     @map("install_count")
   happyCallLt          Int?     @map("happy_call_lt")
   defectCount          Int?     @map("defect_count")
-  dissatisfactionNote  String?  @db.Text @map("dissatisfaction_note")
+  dissatisfactionNote  String?  @map("dissatisfaction_note")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   serviceAreas         String[] @default([]) @map("service_areas")
   capabilities         String[] @default([]) @map("capabilities")
   aqaraAppCapability   String   @default("NONE") @map("aqara_app_capability")
   hasAqaraHubInventory Boolean  @default(false) @map("has_aqara_hub_inventory")
   monthlyDispatchCount Int      @default(0) @map("monthly_dispatch_count")
   active               Boolean  @default(true) @map("active")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@index([branch])
   @@index([region])
+  @@index([active])
+  @@index([capabilities], map: "installers_capabilities_gin_idx", type: Gin)
+  @@index([serviceAreas], map: "installers_service_areas_gin_idx", type: Gin)
   @@map("installers")
 }
 
 model Admin {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   loginCode String   @unique @map("login_code")
   name      String
   level     Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([level])
   @@map("admins")
@@ -84,7 +91,7 @@ model Admin {
 
 model SmsTemplate {
   key       String   @id
-  body      String   @db.Text
+  body      String
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
 
@@ -92,19 +99,195 @@ model SmsTemplate {
 }
 
 model SatisfactionSurvey {
-  id              String               @id @default(uuid())
-  registrationId  String               @unique @map("registration_id")
-  registration    WarrantyRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  q1_1            String               // 기사 방문 시간 (예/아니오/잘 모르겠어요)
-  q1_2            String               // 설치 품질 (예/아니오/잘 모르겠어요)
-  q1_3            String               // 제품 사용 설명 (예/아니오/잘 모르겠어요)
-  q2_1            String               // 앱 설치 편리성 (예/아니오/잘 모르겠어요)
-  q2_2            String               // 회원가입 및 기기등록 (예/아니오/잘 모르겠어요)
-  q2_3            String               // 앱 사용 만족도 (예/아니오/잘 모르겠어요)
-  q3_1            Int                  // 도어락 사용 만족도 (1점 ~ 5점)
-  comment         String?              @db.Text
-  createdAt       DateTime             @default(now()) @map("created_at")
+  id             String               @id @default(uuid())
+  registrationId String               @unique @map("registration_id")
+  q1_1           String
+  q1_2           String
+  q1_3           String
+  q2_1           String
+  q2_2           String
+  q2_3           String
+  q3_1           Int
+  comment        String?
+  createdAt      DateTime             @default(now()) @map("created_at")
+  registration   WarrantyRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@map("satisfaction_surveys")
 }
 
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model app_settings {
+  settings_key   String @id
+  settings_value String
+}
+
+model cafe24_tokens {
+  id                       String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  mall_id                  String   @unique
+  access_token             String
+  refresh_token            String
+  expires_at               DateTime @db.Timestamptz(6)
+  refresh_token_expires_at DateTime @db.Timestamptz(6)
+  client_id                String?
+  scope                    String?
+  created_at               DateTime @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_feature_upgrades {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sn                String    @unique
+  contact           String?
+  purchase_status   String    @default("pending")
+  feature_code      String    @default("zigbee")
+  payment_provider  String    @default("demo")
+  paid_at           DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
+  last_hub_bound_at DateTime? @db.Timestamptz(6)
+
+  @@index([purchase_status], map: "idx_device_feature_upgrades_purchase_status")
+}
+
+model lumi_product_sn {
+  id      BigInt   @id @default(autoincrement())
+  lumi_sn String   @unique
+  time    DateTime @db.Timestamptz(6)
+
+  @@index([lumi_sn], map: "idx_lumi_product_sn_lumi_sn")
+  @@index([time], map: "idx_lumi_product_sn_time")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model production_lumiSN {
+  id         BigInt   @id @default(autoincrement())
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model production_records {
+  id              BigInt          @id @default(autoincrement())
+  lumi_sn         String
+  solity_sn       String
+  production_time String
+  operator_name   String?         @default("")
+  note            String?         @default("")
+  used_sn_codes   used_sn_codes[]
+
+  @@unique([lumi_sn, solity_sn])
+  @@index([lumi_sn], map: "idx_production_records_lumi_sn")
+  @@index([solity_sn], map: "idx_production_records_solity_sn")
+  @@index([production_time(sort: Desc)], map: "idx_production_records_time")
+}
+
+model survey_responses {
+  id                       Int                  @id @default(autoincrement())
+  attendance_status        attendance_status
+  business_name            String               @db.VarChar(200)
+  contact_name             String               @db.VarChar(100)
+  contact_phone            String               @db.VarChar(30)
+  email                    String?              @db.VarChar(320)
+  sales_experience         sales_experience
+  annual_sales_volume      annual_sales_volume
+  sales_target             sales_target
+  installation_method      installation_method
+  installation_staff       installation_staff
+  iot_expansion_intent     iot_expansion_intent
+  attendance_purpose       String
+  attendance_purpose_other String?
+  interested_products      String?
+  additional_inquiry       String?
+  submitted_at             DateTime             @default(now()) @db.Timestamp(6)
+  ip_address               String?              @db.VarChar(45)
+  contact_position         String?              @db.VarChar(100)
+  business_zipcode         String?              @db.VarChar(10)
+  business_address         String?              @db.VarChar(300)
+  business_address_detail  String?              @db.VarChar(200)
+
+  @@index([submitted_at], map: "idx_survey_responses_submitted_at")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model used_sn_codes {
+  sn_value           String             @id
+  record_id          BigInt
+  sn_role            String
+  production_records production_records @relation(fields: [record_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model users {
+  id             Int      @id @default(autoincrement())
+  open_id        String   @unique @db.VarChar(64)
+  name           String?
+  email          String?  @db.VarChar(320)
+  login_method   String?  @db.VarChar(64)
+  role           role     @default(user)
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+  updated_at     DateTime @default(now()) @db.Timestamp(6)
+  last_signed_in DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([open_id], map: "idx_users_open_id")
+}
+
+enum annual_sales_volume {
+  under100
+  to300    @map("100to300")
+  to500    @map("300to500")
+  to1000   @map("500to1000")
+  over1000
+}
+
+enum attendance_status {
+  attend
+  not_attend
+  reviewing
+}
+
+enum installation_method {
+  own_team
+  outsource
+  mixed
+}
+
+enum installation_staff {
+  none
+  to2    @map("1to2")
+  to5    @map("3to5")
+  to10   @map("6to10")
+  over10
+}
+
+enum iot_expansion_intent {
+  already
+  reviewing
+  interested
+  none
+}
+
+enum reg_status {
+  submitted
+  confirmed
+  void
+}
+
+enum role {
+  user
+  admin
+}
+
+enum sales_experience {
+  under1
+  to3    @map("1to3")
+  to5    @map("3to5")
+  to10   @map("5to10")
+  over10
+}
+
+enum sales_target {
+  enduser
+  b2b
+  both
+}
