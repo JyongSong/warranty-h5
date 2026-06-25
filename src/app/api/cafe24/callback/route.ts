@@ -6,11 +6,32 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const mallId = searchParams.get("mall_id");
+    let mallId = searchParams.get("mall_id");
+
+    // Fallback 1: Extract mall_id from iss (e.g., "https://aqarakr.cafe24api.com")
+    const iss = searchParams.get("iss");
+    if (!mallId && iss) {
+      try {
+        const issUrl = new URL(iss);
+        mallId = issUrl.hostname.split(".")[0];
+      } catch (e) {
+        console.warn("Failed to parse iss parameter:", e);
+      }
+    }
+
+    // Fallback 2: Extract mall_id from state (if passed as mall_id)
+    const state = searchParams.get("state");
+    if (!mallId && state && /^[a-zA-Z0-9_-]+$/.test(state)) {
+      mallId = state;
+    }
 
     if (!code || !mallId) {
       return NextResponse.json(
-        { error: "CODE_OR_MALL_ID_MISSING", message: "code 및 mall_id 파라미터가 누락되었습니다." },
+        { 
+          error: "CODE_OR_MALL_ID_MISSING", 
+          message: "code 및 mall_id 파라미터가 누락되었습니다.",
+          received: { code: !!code, mall_id: mallId, iss, state }
+        },
         { status: 400 }
       );
     }
