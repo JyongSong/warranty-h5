@@ -229,6 +229,10 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
     window.location.href = "/auth";
   }
 
+  function handleExportExcel() {
+    window.location.href = `/api/registrations/export?query=${encodeURIComponent(query)}`;
+  }
+
   // Calculate stats for Dashboard
   const stats = useMemo(() => {
     const installerItems = items.filter(
@@ -334,26 +338,49 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {/* Tab Selector */}
-        <div className="mb-8 flex border-b border-zinc-200">
+        <div className="mb-8 flex border-b border-zinc-200 items-center justify-between">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("query")}
+              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
+                activeTab === "query"
+                  ? "border-emerald-800 text-emerald-800"
+                  : "border-transparent text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              설치 정보 조회 (기존)
+            </button>
+            <button
+              onClick={() => setActiveTab("survey")}
+              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
+                activeTab === "survey"
+                  ? "border-emerald-800 text-emerald-800"
+                  : "border-transparent text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              만족도 조사 대시보드
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveTab("query")}
-            className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-              activeTab === "query"
-                ? "border-emerald-800 text-emerald-800"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
-            }`}
+            type="button"
+            onClick={handleExportExcel}
+            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-bold text-zinc-700 transition hover:bg-zinc-50 active:scale-95 flex items-center gap-1.5 shadow-sm -mb-px"
           >
-            설치 정보 조회 (기존)
-          </button>
-          <button
-            onClick={() => setActiveTab("survey")}
-            className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-              activeTab === "survey"
-                ? "border-emerald-800 text-emerald-800"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
-            }`}
-          >
-            만족도 조사 대시보드
+            <svg
+              className="h-4 w-4 text-emerald-700"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            엑셀 다운로드 (导出 Excel)
           </button>
         </div>
 
