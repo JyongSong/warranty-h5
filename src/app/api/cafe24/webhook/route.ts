@@ -10,20 +10,30 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     console.log("[Cafe24 Webhook] Received webhook notification:", body);
 
-    const { mall_id, event, resource, resource_id } = body;
+    let parsedEvent = body.event;
+    let parsedResourceId = body.resource_id;
+    let parsedMallId = body.mall_id;
 
-    // 1. 验证事件是否为订单付款完成 (order.paid) 或 订单创建 (order.create / order.create_order, 用于即时付款成功的订单)
-    const isValidEvent = (event === "order.paid" || event === "order.create" || event === "order.create_order") && resource === "orders" && resource_id;
+    // 兼容后台手动配置的 webhook 嵌套格式
+    if (body.resource && typeof body.resource === 'object' && body.resource.order_id) {
+      parsedEvent = body.resource.event_code || parsedEvent;
+      parsedResourceId = body.resource.order_id;
+      parsedMallId = body.resource.mall_id || parsedMallId;
+    }
+
+    // 1. 验证事件是否为订单付款完成 (order.paid) 或 订单创建 (order.create / create_order)
+    const isValidEvent = (parsedEvent === "order.paid" || parsedEvent === "order.create" || parsedEvent === "create_order") && parsedResourceId;
     if (!isValidEvent) {
-      console.log(`[Cafe24 Webhook] Ignored event: ${event} for resource: ${resource}`);
+      const resLog = typeof body.resource === 'object' ? JSON.stringify(body.resource) : body.resource;
+      console.log(`[Cafe24 Webhook] Ignored event: ${parsedEvent} for resource: ${resLog}`);
       return NextResponse.json({ ok: true, message: "Ignored event" });
     }
 
-    const orderId = resource_id;
-    console.log(`[Cafe24 Webhook] Processing event ${event} for Order ID: ${orderId} (Mall: ${mall_id})`);
+    const orderId = parsedResourceId;
+    console.log(`[Cafe24 Webhook] Processing event ${parsedEvent} for Order ID: ${orderId} (Mall: ${parsedMallId})`);
 
     // 2. 调用 API 获取完整的订单详情 (包含订单项 items)
-    const order = await fetchOrderDetails(mall_id, orderId);
+    const order = await fetchOrderDetails(parsedMallId, orderId);
 
     if (!order) {
       throw new Error(`Order ${orderId} details not found on Cafe24.`);
