@@ -39,11 +39,11 @@ export async function POST(req: Request) {
       throw new Error(`Order ${orderId} details not found on Cafe24.`);
     }
 
-    // 3. 校验订单支付状态 (paid / N10 결제완료)
-    // Cafe24 订单支付状态可能为 'paid'
-    const isPaid = order.payment_status === "paid" || order.order_status === "N10";
+    // 3. 校验订单支付状态 (paid === "T" / N10 결제완료)
+    // Cafe24 订单支付状态为 paid: "T"
+    const isPaid = order.paid === "T" || (order.items && order.items.some((item: any) => item.order_status === "N10"));
     if (!isPaid) {
-      console.warn(`[Cafe24 Webhook] Order ${orderId} is not fully paid yet. Status: ${order.payment_status}`);
+      console.warn(`[Cafe24 Webhook] Order ${orderId} is not fully paid yet. Status: ${order.paid}`);
       return NextResponse.json({ ok: true, message: "Order not paid yet" });
     }
 
