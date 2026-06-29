@@ -12,14 +12,15 @@ export async function POST(req: Request) {
 
     const { mall_id, event, resource, resource_id } = body;
 
-    // 1. 验证事件是否为订单付款完成 (order.paid 或类似事件)
-    if (event !== "order.paid" || resource !== "orders" || !resource_id) {
+    // 1. 验证事件是否为订单付款完成 (order.paid) 或 订单创建 (order.create / order.create_order, 用于即时付款成功的订单)
+    const isValidEvent = (event === "order.paid" || event === "order.create" || event === "order.create_order") && resource === "orders" && resource_id;
+    if (!isValidEvent) {
       console.log(`[Cafe24 Webhook] Ignored event: ${event} for resource: ${resource}`);
       return NextResponse.json({ ok: true, message: "Ignored event" });
     }
 
     const orderId = resource_id;
-    console.log(`[Cafe24 Webhook] Processing payment complete for Order ID: ${orderId} (Mall: ${mall_id})`);
+    console.log(`[Cafe24 Webhook] Processing event ${event} for Order ID: ${orderId} (Mall: ${mall_id})`);
 
     // 2. 调用 API 获取完整的订单详情 (包含订单项 items)
     const order = await fetchOrderDetails(mall_id, orderId);
