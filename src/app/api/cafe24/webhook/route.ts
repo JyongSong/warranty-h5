@@ -65,11 +65,12 @@ export async function POST(req: Request) {
           continue;
         }
 
-        // 解析 SN 码 (例如 optionValue 可能是 "기기 SN: A01460/LS1ELU01801" 或直接是 SN)
+        // 解析 SN 码 (例如 optionValue 可能是 "기기 SN=A01460..." 或 "기기 SN: A01460...")
         let sn = String(optionValue).trim();
-        if (sn.includes(":")) {
-          const parts = sn.split(":");
-          sn = parts.length > 1 ? parts[1].trim() : sn;
+        if (sn.includes("=")) {
+          sn = sn.substring(sn.indexOf("=") + 1).trim();
+        } else if (sn.includes(":")) {
+          sn = sn.substring(sn.indexOf(":") + 1).trim();
         }
         sn = sn.toUpperCase();
 

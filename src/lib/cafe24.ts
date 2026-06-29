@@ -145,7 +145,7 @@ export async function getInitialTokens(mallId: string, code: string): Promise<vo
  */
 export async function fetchOrderDetails(mallId: string, orderId: string) {
   const accessToken = await getValidAccessToken(mallId);
-  const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders/${orderId}?embed=items`;
+  const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders/${orderId}?embed=items,buyer`;
 
   const response = await fetch(url, {
     method: "GET",
