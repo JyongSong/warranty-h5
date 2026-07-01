@@ -17,6 +17,16 @@ interface Cafe24TokenResponse {
 }
 
 /**
+ * 解析 Cafe24 返回的 KST 时间字符串（通常无时区后缀）为正确的 UTC Date 对象
+ */
+function parseKstDate(dateString: string): Date {
+  if (dateString.includes("+") || dateString.endsWith("Z")) {
+    return new Date(dateString);
+  }
+  return new Date(`${dateString}+09:00`);
+}
+
+/**
  * 获取有效的 Cafe24 Access Token
  * 如果已过期或即将过期（5分钟内），则自动调用 refresh_token 进行刷新并存入数据库
  */
@@ -75,8 +85,8 @@ async function refreshAccessToken(mallId: string, refreshToken: string): Promise
     data: {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
-      expires_at: new Date(tokenData.expires_at),
-      refresh_token_expires_at: new Date(tokenData.refresh_token_expires_at),
+      expires_at: parseKstDate(tokenData.expires_at),
+      refresh_token_expires_at: parseKstDate(tokenData.refresh_token_expires_at),
       updated_at: new Date(),
     },
   });
@@ -120,8 +130,8 @@ export async function getInitialTokens(mallId: string, code: string): Promise<vo
     update: {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
-      expires_at: new Date(tokenData.expires_at),
-      refresh_token_expires_at: new Date(tokenData.refresh_token_expires_at),
+      expires_at: parseKstDate(tokenData.expires_at),
+      refresh_token_expires_at: parseKstDate(tokenData.refresh_token_expires_at),
       scope: tokenData.scopes ? tokenData.scopes.join(",") : null,
       client_id: tokenData.client_id,
       updated_at: new Date(),
@@ -130,8 +140,8 @@ export async function getInitialTokens(mallId: string, code: string): Promise<vo
       mall_id: mallId,
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
-      expires_at: new Date(tokenData.expires_at),
-      refresh_token_expires_at: new Date(tokenData.refresh_token_expires_at),
+      expires_at: parseKstDate(tokenData.expires_at),
+      refresh_token_expires_at: parseKstDate(tokenData.refresh_token_expires_at),
       scope: tokenData.scopes ? tokenData.scopes.join(",") : null,
       client_id: tokenData.client_id,
     },
