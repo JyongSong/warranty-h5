@@ -49,10 +49,7 @@ export default function AdminRegClient({ initialSn = "" }: { initialSn?: string 
   }, []);
 
   const [sn, setSn] = useState(initialSn);
-  const [installDate, setInstallDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
+  const [installDate, setInstallDate] = useState(() => getTodayString());
   const [userPhone, setUserPhone] = useState("");
 
   const [installerPhone, setInstallerPhone] = useState("");

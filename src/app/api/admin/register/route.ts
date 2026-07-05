@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(installDate))
             return NextResponse.json({ error: "INVALID_INSTALL_DATE" }, { status: 400 });
 
-        const today = new Date().toISOString().slice(0, 10);
+        const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
         if (installDate > today) return NextResponse.json({ error: "INSTALL_DATE_IN_FUTURE" }, { status: 400 });
 
         if (userPhone.length < 9) return NextResponse.json({ error: "INVALID_USER_PHONE" }, { status: 400 });
