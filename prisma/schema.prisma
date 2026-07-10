@@ -68,6 +68,9 @@ model Installer {
   hasAqaraHubInventory Boolean  @default(false) @map("has_aqara_hub_inventory")
   monthlyDispatchCount Int      @default(0) @map("monthly_dispatch_count")
   active               Boolean  @default(true) @map("active")
+  currentOrders        InstallationOrder[] @relation("CurrentInstaller")
+  assignmentAttempts   InstallationInstallerAssignmentAttempt[] @relation("InstallerAssignmentAttempts")
+  candidateRunResults  InstallationInstallerCandidateRunResult[]
 
   @@index([branch])
   @@index([region])
@@ -290,4 +293,340 @@ enum sales_target {
   enduser
   b2b
   both
+}
+
+enum InstallationOrderStatus {
+  CUSTOMER_INPUT_SMS_REQUIRED
+  WAITING_CUSTOMER_INPUT
+  READY_FOR_CANDIDATE_SELECTION
+  WAITING_ADMIN_REVIEW
+  WAITING_INSTALLER_RESPONSE
+  INSTALLER_ASSIGNED
+  CANCELLED
+  COMPLETED
+}
+
+enum InstallationCustomerRequestStatus {
+  PENDING_INPUT
+  SUBMITTED
+  FALLBACK_USED
+  CANCELLED
+}
+
+enum InstallationInstallerAssignmentStatus {
+  WAITING_ADMIN_REVIEW
+  WAITING_INSTALLER_RESPONSE
+  INSTALLER_ACCEPTED
+  INSTALLER_REJECTED
+  INSTALLER_RESPONSE_TIMED_OUT
+  ADMIN_MANUAL_OVERRIDDEN
+  ADMIN_COMPLETED
+  SYSTEM_SMS_RETRY_PENDING
+  SYSTEM_SMS_FAILED
+}
+
+enum InstallationNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum InstallationIssueType {
+  ORDER_CUSTOMER_PHONE_MISSING
+  ORDER_CUSTOMER_PHONE_INVALID
+  ORDER_PRODUCT_REQUIREMENT_UNMAPPED
+  CUSTOMER_INPUT_NOT_SUBMITTED
+  CUSTOMER_INPUT_ADDRESS_UNPARSABLE
+  CUSTOMER_INPUT_LINK_SMS_SEND_FAILED
+  INSTALLER_CANDIDATE_NOT_FOUND
+  INSTALLER_CANDIDATE_EXHAUSTED
+  INSTALLER_NOT_ASSIGNED
+  INSTALLATION_NOT_COMPLETED
+  INSTALLER_ASSIGNMENT_SMS_SEND_FAILED
+  CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED
+}
+
+enum InstallationIssueStatus {
+  OPEN
+  RESOLVED
+}
+
+model CronJobRunLock {
+  key         String   @id
+  lockedUntil DateTime @map("locked_until")
+  lockedBy    String?  @map("locked_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("cron_job_run_locks")
+}
+
+model CronJobStatus {
+  key            String    @id
+  path           String
+  schedule       String?
+  lastCalledAt   DateTime? @map("last_called_at")
+  lastStartedAt  DateTime? @map("last_started_at")
+  lastFinishedAt DateTime? @map("last_finished_at")
+  lastStatus     String?   @map("last_status")
+  lastDurationMs Int?      @map("last_duration_ms")
+  lastErrorCode  String?   @map("last_error_code")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("cron_job_statuses")
+}
+
+model BackofficeSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("backoffice_settings")
+}
+
+model BackofficeUser {
+  id             String   @id @default(uuid())
+  supabaseUserId String?  @unique @map("supabase_user_id")
+  emailEncrypted String   @unique @map("email_encrypted")
+  emailHash      String?  @unique @map("email_hash")
+  level          Int      @default(0)
+  lastLoginAt    DateTime @default(now()) @map("last_login_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([level])
+  @@map("backoffice_users")
+}
+
+model InstallationOrder {
+  id                      String                                   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  sourceId                String?                                  @unique @map("source_id")
+  source                  InstallationOrderSource?                 @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  status                  InstallationOrderStatus                  @default(CUSTOMER_INPUT_SMS_REQUIRED)
+  activeCustomerRequestId String?                                  @map("active_customer_request_id")
+  activeCustomerRequest   InstallationCustomerRequest?             @relation("ActiveCustomerRequest", fields: [activeCustomerRequestId], references: [id], onDelete: SetNull)
+  activeAssignmentId      String?                                  @map("active_assignment_id")
+  activeAssignment        InstallationInstallerAssignmentAttempt?  @relation("ActiveAssignment", fields: [activeAssignmentId], references: [id], onDelete: SetNull)
+  currentInstallerId      String?                                  @map("current_installer_id")
+  currentInstaller        Installer?                               @relation("CurrentInstaller", fields: [currentInstallerId], references: [id], onDelete: SetNull)
+  hasOpenIssue            Boolean                                  @default(false) @map("has_open_issue")
+  lastIssueId             String?                                  @map("last_issue_id")
+  lastIssue               InstallationIssue?                       @relation("LastIssue", fields: [lastIssueId], references: [id], onDelete: SetNull)
+  cancelledAt             DateTime?                                @map("cancelled_at")
+  cancelReason            String?                                  @map("cancel_reason")
+  statusChangedAt         DateTime                                 @default(now()) @map("status_changed_at")
+  createdAt               DateTime                                 @default(now()) @map("created_at")
+  updatedAt               DateTime                                 @updatedAt @map("updated_at")
+  customerRequests        InstallationCustomerRequest[]            @relation("InstallationOrderCustomerRequests")
+  assignmentAttempts      InstallationInstallerAssignmentAttempt[] @relation("InstallationOrderAssignmentAttempts")
+  candidateRuns           InstallationInstallerCandidateRun[]
+  statusEvents            InstallationOrderStatusEvent[]
+  issues                  InstallationIssue[]                      @relation("InstallationOrderIssues")
+  notifications           InstallationNotification[]
+
+  @@index([status, createdAt])
+  @@index([status, statusChangedAt])
+  @@map("installation_orders")
+}
+
+model InstallationOrderSource {
+  id                    String             @id @default(dbgenerated("(gen_random_uuid())::text"))
+  sourceKey             String             @unique @map("source_key")
+  customerNameEncrypted String?            @map("customer_name_encrypted")
+  customerNameHash      String?            @map("customer_name_hash")
+  phoneEncrypted        String?            @map("phone_encrypted")
+  phoneHash             String?            @map("phone_hash")
+  addressEncrypted      String?            @map("address_encrypted")
+  dueDate               String?            @map("due_date")
+  orderNumbers          String?            @map("order_numbers")
+  noGirl                String?            @map("no_girl")
+  memo                  String?            @db.Text
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  order                 InstallationOrder?
+
+  @@index([dueDate])
+  @@map("installation_order_sources")
+}
+
+model InstallationCustomerRequest {
+  id                            String                                   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId           String                                   @map("installation_order_id")
+  installationOrder             InstallationOrder                        @relation("InstallationOrderCustomerRequests", fields: [installationOrderId], references: [id], onDelete: Cascade)
+  requestNumber                 Int                                      @map("request_number")
+  customerNameEncrypted         String?                                  @map("customer_name_encrypted")
+  customerNameHash              String?                                  @map("customer_name_hash")
+  customerPhoneEncrypted        String?                                  @map("customer_phone_encrypted")
+  customerPhoneHash             String?                                  @map("customer_phone_hash")
+  customerPhoneSource           String                                   @default("PENDING_CUSTOMER") @map("customer_phone_source")
+  installAddressEncrypted       String?                                  @map("install_address_encrypted")
+  installAddressDetailEncrypted String?                                  @map("install_address_detail_encrypted")
+  installAddress1Encrypted      String?                                  @map("install_address1_encrypted")
+  installAddress2Encrypted      String?                                  @map("install_address2_encrypted")
+  installDate                   String?                                  @map("install_date")
+  installTimeSlot               String?                                  @map("install_time_slot")
+  customerNote                  String?                                  @map("customer_note")
+  customerTokenHash             String                                   @unique @map("customer_token_hash")
+  customerTokenExpiresAt        DateTime                                 @map("customer_token_expires_at")
+  customerSubmittedAt           DateTime?                                @map("customer_submitted_at")
+  fallbackUsed                  Boolean                                  @default(false) @map("fallback_used")
+  status                        InstallationCustomerRequestStatus        @default(PENDING_INPUT)
+  createdAt                     DateTime                                 @default(now()) @map("created_at")
+  updatedAt                     DateTime                                 @updatedAt @map("updated_at")
+  activeForOrders               InstallationOrder[]                      @relation("ActiveCustomerRequest")
+  assignmentAttempts            InstallationInstallerAssignmentAttempt[]
+  notifications                 InstallationNotification[]
+  candidateRuns                 InstallationInstallerCandidateRun[]
+
+  @@unique([installationOrderId, requestNumber])
+  @@unique([id, installationOrderId])
+  @@index([status])
+  @@map("installation_customer_requests")
+}
+
+model InstallationInstallerAssignmentAttempt {
+  id                      String                                @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId     String                                @map("installation_order_id")
+  installationOrder       InstallationOrder                     @relation("InstallationOrderAssignmentAttempts", fields: [installationOrderId], references: [id], onDelete: Cascade)
+  customerRequestId       String?                               @map("customer_request_id")
+  customerRequest         InstallationCustomerRequest?          @relation(fields: [customerRequestId], references: [id], onDelete: SetNull)
+  installerId             String                                @map("installer_id")
+  installer               Installer                             @relation("InstallerAssignmentAttempts", fields: [installerId], references: [id], onDelete: Restrict)
+  assignmentNumber        Int                                   @map("assignment_number")
+  assignmentSource        String                                @default("AUTO") @map("assignment_source")
+  matchTier               String?                               @map("match_tier")
+  candidateRank           Int?                                  @map("candidate_rank")
+  selectionSnapshot       Json?                                 @map("selection_snapshot")
+  installerTokenHash      String?                               @unique @map("installer_token_hash")
+  installerTokenExpiresAt DateTime?                             @map("installer_token_expires_at")
+  status                  InstallationInstallerAssignmentStatus @default(WAITING_INSTALLER_RESPONSE)
+  installerNotifiedAt     DateTime?                             @map("installer_notified_at")
+  acceptedAt              DateTime?                             @map("accepted_at")
+  rejectedAt              DateTime?                             @map("rejected_at")
+  rejectReason            String?                               @map("reject_reason")
+  timedOutAt              DateTime?                             @map("timed_out_at")
+  createdByAdminId        String?                               @map("created_by_admin_id")
+  approvedByAdminId       String?                               @map("approved_by_admin_id")
+  cancelledByAdminId      String?                               @map("cancelled_by_admin_id")
+  createdAt               DateTime                              @default(now()) @map("created_at")
+  updatedAt               DateTime                              @updatedAt @map("updated_at")
+  activeForOrders         InstallationOrder[]                   @relation("ActiveAssignment")
+  notifications           InstallationNotification[]
+
+  @@unique([installationOrderId, assignmentNumber])
+  @@unique([id, installationOrderId])
+  @@index([status, createdAt])
+  @@index([installerId, createdAt])
+  @@map("installation_installer_assignment_attempts")
+}
+
+model InstallationInstallerCandidateRun {
+  id                  String                                    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId String                                    @map("installation_order_id")
+  installationOrder   InstallationOrder                         @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  customerRequestId   String?                                   @map("customer_request_id")
+  customerRequest     InstallationCustomerRequest?              @relation(fields: [customerRequestId], references: [id], onDelete: SetNull)
+  assignmentSource    String                                    @default("AUTO") @map("assignment_source")
+  reasonCode          String?                                   @map("reason_code")
+  inputSnapshot       Json?                                     @map("input_snapshot")
+  createdAt           DateTime                                  @default(now()) @map("created_at")
+  candidates          InstallationInstallerCandidateRunResult[]
+
+  @@index([installationOrderId, createdAt])
+  @@map("installation_installer_candidate_runs")
+}
+
+model InstallationInstallerCandidateRunResult {
+  id                     String                            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  candidateRunId         String                            @map("candidate_run_id")
+  candidateRun           InstallationInstallerCandidateRun @relation(fields: [candidateRunId], references: [id], onDelete: Cascade)
+  installerId            String                            @map("installer_id")
+  installer              Installer                         @relation(fields: [installerId], references: [id], onDelete: Restrict)
+  rank                   Int?
+  isAutoRequestCandidate Boolean                           @default(false) @map("is_auto_request_candidate")
+  regionTier             String?                           @map("region_tier")
+  monthlyDispatchCount   Int                               @default(0) @map("monthly_dispatch_count")
+  lastRequestedAt        DateTime?                         @map("last_requested_at")
+  excludedReason         String?                           @map("excluded_reason")
+  decisionReason         String                            @map("decision_reason")
+  createdAt              DateTime                          @default(now()) @map("created_at")
+
+  @@index([candidateRunId, rank])
+  @@index([installerId])
+  @@map("installation_installer_candidate_run_results")
+}
+
+model InstallationNotification {
+  id                      String                                  @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId     String                                  @map("installation_order_id")
+  installationOrder       InstallationOrder                       @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  customerRequestId       String?                                 @map("customer_request_id")
+  customerRequest         InstallationCustomerRequest?            @relation(fields: [customerRequestId], references: [id], onDelete: SetNull)
+  assignmentAttemptId     String?                                 @map("installation_assignment_id")
+  assignmentAttempt       InstallationInstallerAssignmentAttempt? @relation(fields: [assignmentAttemptId], references: [id], onDelete: SetNull)
+  smsType                 String                                  @map("sms_type")
+  recipientType           String                                  @map("recipient_type")
+  recipientPhoneEncrypted String?                                 @map("recipient_phone_encrypted")
+  recipientPhoneHash      String?                                 @map("recipient_phone_hash")
+  smsTemplateKey          String?                                 @map("sms_template_key")
+  smsBody                 String                                  @map("sms_body")
+  provider                String                                  @default("solapi")
+  providerMessageId       String?                                 @map("provider_message_id")
+  providerStatus          String?                                 @map("provider_status")
+  providerStatusCode      String?                                 @map("provider_status_code")
+  providerReason          String?                                 @map("provider_reason")
+  providerReportedAt      DateTime?                               @map("provider_reported_at")
+  providerCheckedAt       DateTime?                               @map("provider_checked_at")
+  status                  InstallationNotificationStatus          @default(PENDING)
+  errorCode               String?                                 @map("error_code")
+  errorMessage            String?                                 @map("error_message")
+  idempotencyKey          String                                  @unique @map("idempotency_key")
+  retryCount              Int                                     @default(0) @map("retry_count")
+  sentAt                  DateTime?                               @map("sent_at")
+  createdAt               DateTime                                @default(now()) @map("created_at")
+  updatedAt               DateTime                                @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([status, providerCheckedAt])
+  @@map("installation_notifications")
+}
+
+model InstallationOrderStatusEvent {
+  id                  String                   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId String                   @map("installation_order_id")
+  installationOrder   InstallationOrder        @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  fromStatus          InstallationOrderStatus? @map("from_status")
+  toStatus            InstallationOrderStatus  @map("to_status")
+  eventType           String                   @map("event_type")
+  actorType           String                   @map("actor_type")
+  actorId             String?                  @map("actor_id")
+  reason              String?
+  metadata            Json?
+  createdAt           DateTime                 @default(now()) @map("created_at")
+
+  @@index([installationOrderId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("installation_order_status_events")
+}
+
+model InstallationIssue {
+  id                  String                  @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId String                  @map("installation_order_id")
+  installationOrder   InstallationOrder       @relation("InstallationOrderIssues", fields: [installationOrderId], references: [id], onDelete: Cascade)
+  type                InstallationIssueType
+  title               String
+  description         String?
+  metadata            Json?
+  status              InstallationIssueStatus @default(OPEN)
+  resolvedByAdminId   String?                 @map("resolved_by_admin_id")
+  resolvedAt          DateTime?               @map("resolved_at")
+  resolutionNote      String?                 @map("resolution_note")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  lastForOrders       InstallationOrder[]     @relation("LastIssue")
+
+  @@unique([id, installationOrderId])
+  @@index([status, createdAt])
+  @@map("installation_issues")
 }

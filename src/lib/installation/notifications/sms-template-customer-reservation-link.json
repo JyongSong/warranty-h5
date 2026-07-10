@@ -1,0 +1,3 @@
+{
+  "content": "[아카라 라이프]\n설치 예약 정보를 입력해 주세요.\n아래 링크에서 설치 희망 정보를 입력해 주세요.\n\n주문 상품:\n{productSummary}\n\n{reservationUrl}\n\n※ 발신전용"
+}

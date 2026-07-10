@@ -1,0 +1,303 @@
+[
+  {
+    "erp_order_no": "ONS20260604942",
+    "customer_name": "홍길동",
+    "phone": "010-1111-1111",
+    "address": "인천 연수구 송도문화로28번길 27 1동 1호",
+    "order_date": "20260616",
+    "external_order_numbers": "20260615-0000145",
+    "no_girl": "ISU20260601974",
+    "items_json": "[{\"item_code\":\"00012-1\",\"item_name\":\"용역 도어락 설치비(K100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "[지니스펙트럼PICK_앱 설치] 용역 도어락 설치비(K100) x1 / 용역 출장비 x1",
+    "item_code": "00012-1",
+    "item_name": "용역 도어락 설치비(K100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-1",
+        "item_name": "용역 도어락 설치비(K100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604943",
+    "customer_name": "김철수",
+    "phone": "010-2222-2222",
+    "address": "서울 강남구 테헤란로 152 2동 2호",
+    "order_date": "20260616",
+    "external_order_numbers": "20260615-0000146",
+    "no_girl": "ISU20260601975",
+    "items_json": "[{\"item_code\":\"00012-2\",\"item_name\":\"용역 도어락 설치비(L100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "[잇섭PICK_앱 설치] 용역 도어락 설치비(L100) x1 / 용역 출장비 x1",
+    "item_code": "00012-2",
+    "item_name": "용역 도어락 설치비(L100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-2",
+        "item_name": "용역 도어락 설치비(L100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604944",
+    "customer_name": "이영희",
+    "phone": "010-3333-3333",
+    "address": "경기 성남시 분당구 판교역로 235 3동 3호",
+    "order_date": "20260616",
+    "external_order_numbers": "20260615-0000147",
+    "no_girl": "ISU20260601976",
+    "items_json": "[{\"item_code\":\"00012-1\",\"item_name\":\"용역 도어락 설치비(K100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1},{\"item_code\":\"RF447\",\"item_name\":\"월패드 연동(RF447)\",\"quantity\":1}]",
+    "memo": "[스마트홈 여름 준비 패키지_앱+허브 설치] 용역 도어락 설치비(K100) x1 / 용역 출장비 x1 / 월패드 연동(RF447) x1",
+    "item_code": "00012-1",
+    "item_name": "용역 도어락 설치비(K100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-1",
+        "item_name": "용역 도어락 설치비(K100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      },
+      {
+        "item_code": "RF447",
+        "item_name": "월패드 연동(RF447)",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604945",
+    "customer_name": "박민수",
+    "phone": "010-4444-4444",
+    "address": "서울 송파구 올림픽로 300 4동 4호",
+    "order_date": "20260616",
+    "external_order_numbers": "20260615-0000148",
+    "no_girl": "ISU20260601977",
+    "items_json": "[{\"item_code\":\"00012-3\",\"item_name\":\"용역 도어락 설치비(U100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "용역 도어락 설치비(U100) x1 / 용역 출장비 x1",
+    "item_code": "00012-3",
+    "item_name": "용역 도어락 설치비(U100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-3",
+        "item_name": "용역 도어락 설치비(U100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604946",
+    "customer_name": "최영수",
+    "phone": "010-5555-5555",
+    "address": "경기 용인시 수지구 광교중앙로 338 5동 5호",
+    "order_date": "20260617",
+    "external_order_numbers": "20260616-0000021",
+    "no_girl": "ISU20260601978",
+    "items_json": "[{\"item_code\":\"00012-1\",\"item_name\":\"용역 도어락 설치비(K100)\",\"quantity\":2},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "[지니스펙트럼PICK_앱 설치] 용역 도어락 설치비(K100) x2 / 용역 출장비 x1",
+    "item_code": "00012-1",
+    "item_name": "용역 도어락 설치비(K100)",
+    "quantity": 2,
+    "items": [
+      {
+        "item_code": "00012-1",
+        "item_name": "용역 도어락 설치비(K100)",
+        "quantity": 2
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604947",
+    "customer_name": "정순자",
+    "phone": "010-6666-6666",
+    "address": "서울 마포구 월드컵북로 396 6동 6호",
+    "order_date": "20260617",
+    "external_order_numbers": "20260616-0000022",
+    "no_girl": "ISU20260601979",
+    "items_json": "[{\"item_code\":\"00012-2\",\"item_name\":\"용역 도어락 설치비(L100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1},{\"item_code\":\"RF447\",\"item_name\":\"월패드 연동(RF447)\",\"quantity\":1}]",
+    "memo": "용역 도어락 설치비(L100) x1 / 용역 출장비 x1 / 월패드 연동(RF447) x1",
+    "item_code": "00012-2",
+    "item_name": "용역 도어락 설치비(L100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-2",
+        "item_name": "용역 도어락 설치비(L100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      },
+      {
+        "item_code": "RF447",
+        "item_name": "월패드 연동(RF447)",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604948",
+    "customer_name": "한미영",
+    "phone": "010-7777-7777",
+    "address": "부산 해운대구 센텀중앙로 97 7동 7호",
+    "order_date": "20260617",
+    "external_order_numbers": "20260616-0000023",
+    "no_girl": "ISU20260601980",
+    "items_json": "[{\"item_code\":\"00012-1\",\"item_name\":\"용역 도어락 설치비(K100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "[잇섭PICK_앱 설치] 용역 도어락 설치비(K100) x1 / 용역 출장비 x1",
+    "item_code": "00012-1",
+    "item_name": "용역 도어락 설치비(K100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-1",
+        "item_name": "용역 도어락 설치비(K100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604949",
+    "customer_name": "오상훈",
+    "phone": "010-8888-8888",
+    "address": "대전 유성구 대학로 291 8동 8호",
+    "order_date": "20260618",
+    "external_order_numbers": "20260617-0000054",
+    "no_girl": "ISU20260601981",
+    "items_json": "[{\"item_code\":\"00012-3\",\"item_name\":\"용역 도어락 설치비(U100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "용역 도어락 설치비(U100) x1 / 용역 출장비 x1",
+    "item_code": "00012-3",
+    "item_name": "용역 도어락 설치비(U100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-3",
+        "item_name": "용역 도어락 설치비(U100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604950",
+    "customer_name": "서민정",
+    "phone": "010-9999-9999",
+    "address": "대구 수성구 동대구로 300 9동 9호",
+    "order_date": "20260618",
+    "external_order_numbers": "20260617-0000055",
+    "no_girl": "ISU20260601982",
+    "items_json": "[{\"item_code\":\"00012-2\",\"item_name\":\"용역 도어락 설치비(L100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "[지니스펙트럼PICK_앱 설치] 용역 도어락 설치비(L100) x1 / 용역 출장비 x1",
+    "item_code": "00012-2",
+    "item_name": "용역 도어락 설치비(L100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-2",
+        "item_name": "용역 도어락 설치비(L100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604951",
+    "customer_name": "문영호",
+    "phone": "010-0000-0000",
+    "address": "광주 서구 상무중앙로 110 10동 10호",
+    "order_date": "20260618",
+    "external_order_numbers": "20260617-0000056",
+    "no_girl": "ISU20260601983",
+    "items_json": "[{\"item_code\":\"00012-1\",\"item_name\":\"용역 도어락 설치비(K100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1},{\"item_code\":\"RF447\",\"item_name\":\"월패드 연동(RF447)\",\"quantity\":1}]",
+    "memo": "[스마트홈 여름 준비 패키지_앱+허브 설치] 용역 도어락 설치비(K100) x1 / 용역 출장비 x1 / 월패드 연동(RF447) x1",
+    "item_code": "00012-1",
+    "item_name": "용역 도어락 설치비(K100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-1",
+        "item_name": "용역 도어락 설치비(K100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      },
+      {
+        "item_code": "RF447",
+        "item_name": "월패드 연동(RF447)",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "erp_order_no": "ONS20260604952",
+    "customer_name": "윤정희",
+    "phone": "010-1212-1212",
+    "address": "제주 제주시 첨단로 242 11동 11호",
+    "order_date": "20260619",
+    "external_order_numbers": "20260618-0000019",
+    "no_girl": "ISU20260601984",
+    "items_json": "[{\"item_code\":\"00012-3\",\"item_name\":\"용역 도어락 설치비(U100)\",\"quantity\":1},{\"item_code\":\"00010\",\"item_name\":\"용역 출장비\",\"quantity\":1}]",
+    "memo": "용역 도어락 설치비(U100) x1 / 용역 출장비 x1",
+    "item_code": "00012-3",
+    "item_name": "용역 도어락 설치비(U100)",
+    "quantity": 1,
+    "items": [
+      {
+        "item_code": "00012-3",
+        "item_name": "용역 도어락 설치비(U100)",
+        "quantity": 1
+      },
+      {
+        "item_code": "00010",
+        "item_name": "용역 출장비",
+        "quantity": 1
+      }
+    ]
+  }
+]

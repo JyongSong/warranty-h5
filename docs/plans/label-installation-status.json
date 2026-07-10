@@ -1,0 +1,10 @@
+{
+  "CUSTOMER_INPUT_SMS_REQUIRED": "고객 문자 발송 필요",
+  "WAITING_CUSTOMER_INPUT": "고객 입력 대기",
+  "READY_FOR_CANDIDATE_SELECTION": "후보 선정 가능",
+  "WAITING_ADMIN_REVIEW": "관리자 검토 대기",
+  "WAITING_INSTALLER_RESPONSE": "기사 응답 대기",
+  "INSTALLER_ASSIGNED": "기사 배정 완료",
+  "CANCELLED": "취소",
+  "COMPLETED": "설치 완료"
+}

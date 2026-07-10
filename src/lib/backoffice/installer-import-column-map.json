@@ -1,0 +1,9 @@
+{
+  "name": "성명",
+  "phone": "전화번호",
+  "branch": ["지점", "지점명"],
+  "region": "광역",
+  "coverage": "지역",
+  "address": "주소",
+  "category": "소속 조직"
+}
