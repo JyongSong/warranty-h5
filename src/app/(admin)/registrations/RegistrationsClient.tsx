@@ -357,26 +357,15 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
         {/* Tab Selector */}
         <div className="mb-8 flex border-b border-zinc-200 items-center justify-between">
           <div className="flex">
-            <button
-              onClick={() => setActiveTab("query")}
-              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-                activeTab === "query"
-                  ? "border-emerald-800 text-emerald-800"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800"
-              }`}
-            >
-              설치 정보 조회 (기존)
-            </button>
-            <button
-              onClick={() => setActiveTab("survey")}
-              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-                activeTab === "survey"
-                  ? "border-emerald-800 text-emerald-800"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800"
-              }`}
-            >
-              만족도 조사 대시보드
-            </button>
+            {activeTab === "query" ? (
+              <div className="px-5 py-3 font-semibold text-sm -mb-px border-b-2 border-emerald-800 text-emerald-800">
+                설치 정보 조회 (기존)
+              </div>
+            ) : (
+              <div className="px-5 py-3 font-semibold text-sm -mb-px border-b-2 border-emerald-800 text-emerald-800">
+                만족도 조사 대시보드
+              </div>
+            )}
           </div>
 
           <button
