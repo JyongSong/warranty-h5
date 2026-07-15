@@ -34,7 +34,7 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
     주문: true,
     "A/S 관리": true,
     기사: true,
-    설치정보: true,
+    "Open 패이지": true,
   });
 
   const toggleCategory = (label: string) => {
@@ -112,11 +112,6 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
           href: "/installers",
         },
         {
-          label: "기사 등록 (survey)",
-          href: "/survey",
-          newTab: true,
-        },
-        {
           label: "기사 정산",
           href: "/installers/settlement",
         },
@@ -127,29 +122,24 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
       ],
     },
     {
-      label: "설치정보",
+      label: "설치 정보 조회",
       icon: (
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       ),
-      subItems: [
-        {
-          label: "설치 등록 (reg)",
-          href: "/reg",
-          newTab: true,
-        },
-        {
-          label: "설치 정보 조회",
-          href: "/registrations?tab=query",
-          isActive: (path, params) => path === "/registrations" && params.get("tab") !== "survey",
-        },
-        {
-          label: "만족도 조사 대시보드",
-          href: "/registrations?tab=survey",
-          isActive: (path, params) => path === "/registrations" && params.get("tab") === "survey",
-        },
-      ],
+      href: "/registrations?tab=query",
+      isActive: (path, params) => path === "/registrations" && params.get("tab") !== "survey",
+    },
+    {
+      label: "만족도 조사 대시보드",
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+      href: "/registrations?tab=survey",
+      isActive: (path, params) => path === "/registrations" && params.get("tab") === "survey",
     },
     {
       label: "기사배정 임시",
@@ -170,14 +160,29 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
       href: "/send-assignment-sms",
     },
     {
-      label: "BLE 업그레이드 임시",
+      label: "Open 패이지",
       icon: (
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
         </svg>
       ),
-      href: "/ble_upgrade",
-      newTab: true,
+      subItems: [
+        {
+          label: "기사 등록",
+          href: "/survey",
+          newTab: true,
+        },
+        {
+          label: "설치 등록",
+          href: "/reg",
+          newTab: true,
+        },
+        {
+          label: "BLE 업그레이드",
+          href: "/ble_upgrade",
+          newTab: true,
+        },
+      ],
     },
     {
       label: "설정",
@@ -229,7 +234,7 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 font-extrabold text-white text-base">
             AQ
           </span>
-          <span className="text-[15px] font-semibold uppercase tracking-wider">Warranty Portal</span>
+          <span className="text-[15px] font-semibold uppercase tracking-wider">Aqaralife Service</span>
         </Link>
       </div>
 
@@ -377,7 +382,7 @@ export default function PortalSidebar({ userEmail }: { userEmail?: string }) {
           <span className="flex h-7 w-7 items-center justify-center rounded bg-emerald-600 font-extrabold text-white text-xs">
             AQ
           </span>
-          <span className="text-sm tracking-wider uppercase">Warranty Portal</span>
+          <span className="text-sm tracking-wider uppercase">Aqaralife Service</span>
         </Link>
         <button
           type="button"
