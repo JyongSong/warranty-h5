@@ -154,16 +154,40 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
   if (!order) return null;
 
   const {
+    id,
+    status,
+    activeCustomerRequestId,
+    activeAssignmentId,
+    currentInstallerId,
+    currentInstaller,
+    hasOpenIssue,
+    lastIssueId,
+    statusChangedAt,
     source,
     customerRequests,
     notifications,
-    ...orderFields
+    candidateRuns,
+    statusEvents,
+    assignmentAttempts,
+    issues,
   } = order;
 
   const dispatchRequirement = inferDispatchRequirementFromMemo(source?.memo);
 
   return {
-    ...orderFields,
+    id,
+    status,
+    activeCustomerRequestId,
+    activeAssignmentId,
+    currentInstallerId,
+    currentInstaller,
+    hasOpenIssue,
+    lastIssueId,
+    statusChangedAt,
+    candidateRuns,
+    statusEvents,
+    assignmentAttempts,
+    issues,
     sourceErpOrderNo: source?.sourceKey ?? "",
     sourceExternalOrderNumbers: source?.orderNumbers ?? null,
     sourceNoGirl: source?.noGirl ?? null,

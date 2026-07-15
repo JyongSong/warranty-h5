@@ -5,8 +5,17 @@ import {
   DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
   SMS_TEMPLATE_KEYS,
 } from "@/lib/smsTemplate";
+import { decryptPii } from "@/lib/piiCrypto";
 
 export const dynamic = "force-dynamic";
+
+function tryDecryptBackofficeEmail(emailEncrypted: string) {
+  try {
+    return decryptPii(emailEncrypted);
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULTS: Record<string, string> = {
   [SMS_TEMPLATE_KEYS.ASSIGNMENT]: DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
@@ -29,14 +38,25 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   }
 
   const row = await prisma.smsTemplate.findUnique({ where: { key } });
-  const updatedByName = row?.updatedBy
-    ? (
+  let updatedByName: string | null = null;
+  if (row?.updatedBy) {
+    const boUser = await prisma.backofficeUser.findUnique({
+      where: { id: row.updatedBy },
+      select: { emailEncrypted: true },
+    });
+    if (boUser) {
+      const email = tryDecryptBackofficeEmail(boUser.emailEncrypted);
+      updatedByName = email ? email.split("@")[0] : null;
+    } else {
+      updatedByName = (
         await prisma.admin.findUnique({
           where: { id: row.updatedBy },
           select: { name: true },
         })
-      )?.name ?? null
-    : null;
+      )?.name ?? null;
+    }
+  }
+
 
   return NextResponse.json({
     key,

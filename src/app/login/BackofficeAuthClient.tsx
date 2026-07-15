@@ -5,19 +5,25 @@ import { useSearchParams } from "next/navigation";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
 import { getErrorMessage } from "@/lib/error";
 
-const DEFAULT_BACKOFFICE_NEXT_PATH = "/backoffice/installations";
-
 export function getSafeBackofficeNextPath(nextPath: string | null) {
-  if (!nextPath?.startsWith("/backoffice")) {
-    return DEFAULT_BACKOFFICE_NEXT_PATH;
+  if (!nextPath || !nextPath.startsWith("/")) {
+    return "/";
   }
 
-  if (nextPath.startsWith("/backoffice/auth") || nextPath.startsWith("/login")) {
-    return DEFAULT_BACKOFFICE_NEXT_PATH;
+  if (nextPath.startsWith("//")) {
+    return "/";
+  }
+
+  if (
+    nextPath.startsWith("/login") ||
+    nextPath.startsWith("/auth")
+  ) {
+    return "/";
   }
 
   return nextPath;
 }
+
 
 export default function BackofficeAuthClient() {
   const searchParams = useSearchParams();
