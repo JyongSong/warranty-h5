@@ -12,6 +12,7 @@ vi.mock("./actions", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/backoffice/installations",
   useRouter: () => ({
     refresh: vi.fn(),
   }),
@@ -90,7 +91,6 @@ describe("InstallationOrderList", () => {
     );
 
     const expectedHeaders = [
-      "선택",
       "주문-주문번호",
       "설치-희망일",
       "설치-희망시간",
@@ -103,7 +103,8 @@ describe("InstallationOrderList", () => {
       "주문-고객 전화",
       "주문-고객주소",
       "주문-메모",
-      "운영-확인 필요",
+      "운영-처리 사유",
+      "운영-다음 조치",
       "운영-상태",
     ];
 
@@ -126,7 +127,6 @@ describe("InstallationOrderList", () => {
     );
 
     const expectedHeaders = [
-      "선택",
       "주문-주문번호",
       "설치-희망일",
       "설치-희망시간",
@@ -139,7 +139,8 @@ describe("InstallationOrderList", () => {
       "주문-고객 전화",
       "주문-고객주소",
       "주문-메모",
-      "운영-확인 필요",
+      "운영-처리 사유",
+      "운영-다음 조치",
       "운영-상태",
       "처리일",
       "최종 기사",
@@ -150,6 +151,24 @@ describe("InstallationOrderList", () => {
     expect(headerIndexes).toEqual([...headerIndexes].sort((left, right) => left - right));
     expect(html).not.toContain("처리-결과");
     expect(html).not.toContain("처리-변경 시각");
+  });
+
+  it("shows a concrete operational reason and next action for open installer SMS issues", () => {
+    const html = renderToStaticMarkup(
+      createElement(InstallationOrderList, {
+        initialItems: [
+          createItem({
+            status: "READY_FOR_CANDIDATE_SELECTION",
+            hasOpenIssue: true,
+            issueCodes: ["INSTALLER_ASSIGNMENT_SMS_SEND_FAILED"],
+          }),
+        ],
+      }),
+    );
+
+    expect(html).toContain("기사 배정 SMS 확인");
+    expect(html).toContain("SMS 확인 후 기사 재배정");
+    expect(html).not.toContain(">관리자 확인<");
   });
 
   it("shows bulk customer input SMS controls for selectable waiting orders", () => {
@@ -371,9 +390,12 @@ describe("InstallationOrderList", () => {
     expect(html).not.toContain("검색 조건");
     expect(html).toContain("처리 필요/예외");
     expect(html).toContain("고객 입력 대기");
+    expect(html).toContain('class="@container"');
+    expect(html).toContain("flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between");
+    expect(html).toContain('class="self-end"');
   });
 
-  it("places search, status filters, bulk SMS action, and column controls in order", () => {
+  it("places column controls beside search and before status filters and bulk actions", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, {
         initialItems: [createItem()],
@@ -386,10 +408,13 @@ describe("InstallationOrderList", () => {
     );
 
     expect(html).not.toContain("조회 조건");
-    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("선택 문자 발송"));
+    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 보기"));
+    expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("고객 문자 발송 필요"));
     expect(html.indexOf("고객 문자 발송 필요")).toBeLessThan(html.indexOf("선택 문자 발송"));
-    expect(html.indexOf("선택 문자 발송")).toBeLessThan(html.indexOf("컬럼 선택"));
-    expect(html.indexOf("컬럼 선택")).toBeLessThan(html.indexOf("컬럼 순서"));
+    expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("컬럼 순서"));
+    expect(html).toContain('class="@container"');
+    expect(html).toContain("flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between");
+    expect(html).toContain('class="self-end"');
     expect(html).not.toContain("상태:");
   });
 
@@ -422,7 +447,7 @@ describe("InstallationOrderList", () => {
     expect(html).not.toContain("닫기");
   });
 
-  it("keeps the keyword search field in a vertical label layout", () => {
+  it("keeps the keyword search field responsive inside the search container", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, {
         initialItems: [createItem()],
@@ -430,12 +455,14 @@ describe("InstallationOrderList", () => {
       }),
     );
 
-    expect(html).toContain('class="flex min-w-72 flex-1 flex-col gap-1"');
+    expect(html).toContain("grid grid-cols-2 items-end gap-3 @3xl:grid-cols-[minmax(11rem,auto)_minmax(0,1fr)_auto_auto]");
+    expect(html).toContain("col-span-2 flex min-w-0 flex-col gap-1 @3xl:col-span-1");
+    expect(html).toContain("col-span-2 text-xs leading-5 text-zinc-500 @3xl:col-span-4");
     expect(html).toContain('name="searchKeyword"');
     expect(html).toMatch(/<input(?=[^>]*name="searchKeyword")(?=[^>]*required="")[^>]*>/);
   });
 
-  it("places column controls before the table after the filters", () => {
+  it("places column controls beside search and before filters and the table", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, {
         initialItems: [createItem()],
@@ -447,10 +474,11 @@ describe("InstallationOrderList", () => {
     );
 
     expect(html).not.toContain("조회 조건");
-    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 선택"));
-    expect(html.indexOf("처리 필요/예외")).toBeLessThan(html.indexOf("컬럼 선택"));
+    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 보기"));
+    expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("처리 필요/예외"));
     expect(html.indexOf("컬럼 순서")).toBeLessThan(html.indexOf("주문-주문번호"));
-    expect(html).toContain("items-end justify-between");
+    expect(html).toContain('class="@container"');
+    expect(html).toContain("flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between");
     expect(html).toContain("min-w-0 flex-1");
   });
 

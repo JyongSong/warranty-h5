@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
+import { getBackofficeButtonClass } from "../backoffice-button-styles";
 import {
   formatBackofficeDateTime,
   formatBackofficePhone,
@@ -117,6 +118,7 @@ export default function InstallationOrderList({
   searchCondition,
   statusView = "all",
   basePath = "/backoffice/installations",
+  detailSearchQuery = "",
   historyDateRange,
   statusFilterItems,
   pagination,
@@ -130,6 +132,7 @@ export default function InstallationOrderList({
   searchCondition?: InstallationOrderSearchCondition;
   statusView?: InstallationOrderStatusView;
   basePath?: string;
+  detailSearchQuery?: string;
   historyDateRange?: HistoryDateRange;
   statusFilterItems?: Array<{ statusView: InstallationOrderStatusView; label: string; count?: number; href?: string }>;
   pagination?: BackofficeTablePaginationModel;
@@ -138,6 +141,8 @@ export default function InstallationOrderList({
   emptyMessage?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const selectedInstallationId = getSelectedInstallationId(pathname, basePath);
   const isTerminalView = statusView === "completed" || statusView === "cancelled";
   const showBulkCustomerInputSmsControls = statusView === "customerInputSmsRequired";
   const showBulkAssignmentApprovalControls = statusView === "waitingAdminReview";
@@ -329,7 +334,8 @@ export default function InstallationOrderList({
           minSize: 120,
           cell: ({ row }) => (
             <Link
-              href={`${basePath}/${row.original.id}`}
+              href={`${basePath}/${row.original.id}${detailSearchQuery ? `?${detailSearchQuery}` : ""}`}
+              aria-current={selectedInstallationId === row.original.id ? "page" : undefined}
               className="font-semibold text-blue-700 underline decoration-blue-200 underline-offset-2 transition hover:text-blue-900 hover:decoration-blue-500"
             >
               {row.original.erpOrderNo}
@@ -376,7 +382,7 @@ export default function InstallationOrderList({
           size: 420,
           minSize: 180,
           cell: ({ row }) => (
-            <div className="whitespace-nowrap leading-5 text-zinc-800">
+            <div className="truncate leading-5 text-zinc-800" title={formatText(row.original.sourceAddress)}>
               {formatText(row.original.sourceAddress)}
             </div>
           ),
@@ -423,7 +429,10 @@ export default function InstallationOrderList({
           size: 420,
           minSize: 180,
           cell: ({ row }) => (
-            <div className="whitespace-nowrap leading-5 text-zinc-800">
+            <div
+              className="truncate leading-5 text-zinc-800"
+              title={formatText(getInstallationOrderAddress(row.original))}
+            >
               {formatText(getInstallationOrderAddress(row.original))}
             </div>
           ),
@@ -476,13 +485,32 @@ export default function InstallationOrderList({
         {
           id: "adminAttention",
           accessorFn: (row) => getAdminAttentionLabel(row),
-          header: "운영-확인 필요",
+          header: "운영-처리 사유",
           enableHiding: false,
-          size: 140,
-          minSize: 110,
+          size: 190,
+          minSize: 150,
           cell: ({ row }) => (
-            <span className={getAdminAttentionTextClassName(row.original)}>
-              {getAdminAttentionLabel(row.original)}
+            <div className="space-y-0.5">
+              <div className={getAdminAttentionTextClassName(row.original)}>
+                {getAdminAttentionLabel(row.original)}
+              </div>
+              <div className="text-[11px] font-medium text-zinc-500">
+                다음: {getNextActionLabel(row.original)}
+              </div>
+            </div>
+          ),
+          sortingFn: "alphanumeric",
+        },
+        {
+          id: "nextAction",
+          accessorFn: (row) => getNextActionLabel(row),
+          header: "운영-다음 조치",
+          enableHiding: false,
+          size: 190,
+          minSize: 150,
+          cell: ({ row }) => (
+            <span className="text-xs font-semibold text-zinc-800">
+              {getNextActionLabel(row.original)}
             </span>
           ),
           sortingFn: "alphanumeric",
@@ -548,11 +576,13 @@ export default function InstallationOrderList({
        allSelectableOrdersSelected,
        allSelectableAssignmentsSelected,
        basePath,
+       detailSearchQuery,
        isBulkAssignmentPending,
        isTerminalView,
        selectableAssignmentIds.length,
        selectableOrderIds.length,
        selectedAssignmentIds,
+       selectedInstallationId,
       selectedOrderIds,
       showBulkAssignmentApprovalControls,
       showBulkSelectionControls,
@@ -569,7 +599,7 @@ export default function InstallationOrderList({
         type="button"
         onClick={sendBulkCustomerInputSms}
         disabled={selectedSelectableOrderIds.length === 0 || isBulkSmsPending}
-        className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+        className={getBackofficeButtonClass("primary")}
       >
         {isBulkSmsPending ? "발송 요청 중..." : `선택 문자 발송 (${selectedSelectableOrderIds.length})`}
       </button>
@@ -582,13 +612,17 @@ export default function InstallationOrderList({
         type="button"
         onClick={approveBulkAssignments}
         disabled={selectedSelectableAssignmentIds.length === 0 || isBulkAssignmentPending}
-        className="inline-flex h-9 items-center rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+        className={getBackofficeButtonClass("primary")}
       >
         {isBulkAssignmentPending ? "일괄 승인 중..." : `선택 일괄 승인 (${selectedSelectableAssignmentIds.length})`}
       </button>
       {bulkAssignmentMessage ? <span className="text-xs font-semibold text-zinc-600">{bulkAssignmentMessage}</span> : null}
     </>
   ) : null;
+  const shouldRenderSecondaryControls =
+    !showSearchControls ||
+    Boolean(showStatusFilters && statusFilterItems?.length) ||
+    Boolean(bulkSmsAction || bulkAssignmentAction);
 
   return (
     <section>
@@ -602,40 +636,55 @@ export default function InstallationOrderList({
           storageKey={TABLE_PREFS_KEY}
           lockedLeadingColumnIds={lockedLeadingColumnIds}
           getRowId={(row) => row.id}
-          getRowClassName={getInstallationOrderRowClassName}
+          getRowClassName={(row) =>
+            selectedInstallationId === row.id
+              ? `${getInstallationOrderRowClassName(row)} ring-2 ring-inset ring-blue-300`
+              : getInstallationOrderRowClassName(row)
+          }
           cellClassName="align-top px-4 py-3 text-zinc-600"
           renderBeforeTable={(columnControls) => (
             <div className="mb-5">
               {showSearchControls ? (
-                <InstallationOrderInlineSearchForm
-                  basePath={basePath}
-                  historyDateRange={historyDateRange}
-                  pageSize={pagination?.pageSize}
-                  searchCondition={searchCondition}
-                  statusView={statusView}
-                />
-              ) : null}
-              <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {showStatusFilters && statusFilterItems?.length ? (
-                    <InstallationOrderStatusViewTabs
-                      activeStatusView={statusView}
-                      basePath={basePath}
-                      items={statusFilterItems}
-                      searchCondition={searchCondition}
-                      searchQuery={searchQuery}
-                      pageSize={pagination?.pageSize}
-                    />
-                  ) : null}
-                  {bulkSmsAction || bulkAssignmentAction ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {bulkSmsAction}
-                      {bulkAssignmentAction}
+                <div className="@container">
+                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
+                    <div className="w-full min-w-0 flex-1">
+                      <InstallationOrderInlineSearchForm
+                        basePath={basePath}
+                        historyDateRange={historyDateRange}
+                        pageSize={pagination?.pageSize}
+                        searchCondition={searchCondition}
+                        statusView={statusView}
+                      />
                     </div>
-                  ) : null}
+                    <div className="self-end">{columnControls}</div>
+                  </div>
                 </div>
-                {columnControls}
-              </div>
+              ) : null}
+              {shouldRenderSecondaryControls ? (
+                <div className={`${showSearchControls ? "mt-4 " : ""}@container`}>
+                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
+                    <div className="w-full min-w-0 flex-1">
+                      {showStatusFilters && statusFilterItems?.length ? (
+                        <InstallationOrderStatusViewTabs
+                          activeStatusView={statusView}
+                          basePath={basePath}
+                          items={statusFilterItems}
+                          searchCondition={searchCondition}
+                          searchQuery={searchQuery}
+                          pageSize={pagination?.pageSize}
+                        />
+                      ) : null}
+                      {bulkSmsAction || bulkAssignmentAction ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {bulkSmsAction}
+                          {bulkAssignmentAction}
+                        </div>
+                      ) : null}
+                    </div>
+                    {!showSearchControls ? <div className="self-end">{columnControls}</div> : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         />
@@ -678,7 +727,11 @@ function InstallationOrderInlineSearchForm({
 
   return (
     <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3">
-      <form action={basePath} method="get" className="flex flex-wrap items-end gap-3">
+      <form
+        action={basePath}
+        method="get"
+        className="grid grid-cols-2 items-end gap-3 @3xl:grid-cols-[minmax(11rem,auto)_minmax(0,1fr)_auto_auto]"
+      >
         {statusView !== "all" ? <input type="hidden" name="statusView" value={statusView} /> : null}
         {pageSize ? <input type="hidden" name="pageSize" value={pageSize} /> : null}
         {historyDateRange ? (
@@ -687,7 +740,7 @@ function InstallationOrderInlineSearchForm({
             <input type="hidden" name="to" value={historyDateRange.to} />
             </>
         ) : null}
-        <label className="flex min-w-44 flex-col gap-1">
+        <label className="col-span-2 flex min-w-0 flex-col gap-1 @3xl:col-span-1">
           <span className="text-xs font-semibold text-zinc-600">검색 조건</span>
           <select
             name="searchField"
@@ -703,7 +756,7 @@ function InstallationOrderInlineSearchForm({
           </select>
         </label>
         {isDateField ? (
-          <div className="grid min-w-72 flex-1 gap-2 sm:grid-cols-2">
+          <div className="col-span-2 grid min-w-0 grid-cols-2 gap-2 @3xl:col-span-1">
             <label className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-zinc-600">시작일</span>
               <input
@@ -728,7 +781,7 @@ function InstallationOrderInlineSearchForm({
             </label>
           </div>
         ) : (
-          <label className="flex min-w-72 flex-1 flex-col gap-1">
+          <label className="col-span-2 flex min-w-0 flex-col gap-1 @3xl:col-span-1">
             <span className="text-xs font-semibold text-zinc-600">키워드</span>
             <input
               type="search"
@@ -742,17 +795,17 @@ function InstallationOrderInlineSearchForm({
         )}
         <SearchSubmitButton
           type="submit"
-          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+          className={`${getBackofficeButtonClass("primary")} w-full @3xl:w-auto`}
         >
           검색
         </SearchSubmitButton>
         <Link
           href={buildSearchResetHref(basePath, statusView, pageSize)}
-          className="inline-flex h-9 items-center rounded-md border border-zinc-300 px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950"
+          className={`${getBackofficeButtonClass("secondary")} w-full @3xl:w-auto`}
         >
           초기화
         </Link>
-        <p className="basis-full text-xs leading-5 text-zinc-500">
+        <p className="col-span-2 text-xs leading-5 text-zinc-500 @3xl:col-span-4">
           고객명과 고객전화번호는 정확히 일치해야 합니다. 주문번호는 ERP 주문번호, 외부 주문번호, NO_GIRL 일부 검색을 지원합니다.
         </p>
       </form>
@@ -1056,11 +1109,58 @@ function getInstallationOrderDate(row: InstallationOrderListItem) {
 }
 
 function getAdminAttentionLabel(row: InstallationOrderListItem) {
-  if (row.hasOpenIssue) return "관리자 확인";
+  if (row.hasOpenIssue) return formatOpenIssueReason(row.issueCodes);
   if (row.status === "CUSTOMER_INPUT_SMS_REQUIRED") return "-";
   if (row.status === "WAITING_CUSTOMER_INPUT") return "-";
 
   return formatScheduleAttentionLabel(getInstallationOrderDate(row));
+}
+
+function formatOpenIssueReason(issueCodes: string[]) {
+  const issueLabels: Record<string, string> = {
+    CUSTOMER_INPUT_LINK_SMS_SEND_FAILED: "고객 입력 SMS 확인",
+    CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED: "고객 배정 SMS 확인",
+    INSTALLER_ASSIGNMENT_SMS_SEND_FAILED: "기사 배정 SMS 확인",
+    INSTALLER_CANDIDATE_NOT_FOUND: "기사 후보 없음",
+    INSTALLER_CANDIDATE_EXHAUSTED: "기사 후보 소진",
+    INSTALLER_NOT_ASSIGNED: "기사 미배정",
+  };
+  const labels = [...new Set(issueCodes.map((code) => issueLabels[code] ?? "운영 예외 확인"))];
+  if (labels.length === 0) return "열린 예외 확인";
+  if (labels.length === 1) return labels[0];
+  return `${labels[0]} 외 ${labels.length - 1}건`;
+}
+
+function getNextActionLabel(row: InstallationOrderListItem) {
+  if (row.hasOpenIssue) {
+    if (row.issueCodes.includes("INSTALLER_ASSIGNMENT_SMS_SEND_FAILED")) return "SMS 확인 후 기사 재배정";
+    if (
+      row.issueCodes.includes("CUSTOMER_INPUT_LINK_SMS_SEND_FAILED") ||
+      row.issueCodes.includes("CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED")
+    ) {
+      return "SMS 확인 또는 재발송";
+    }
+    if (
+      row.issueCodes.includes("INSTALLER_CANDIDATE_NOT_FOUND") ||
+      row.issueCodes.includes("INSTALLER_CANDIDATE_EXHAUSTED") ||
+      row.issueCodes.includes("INSTALLER_NOT_ASSIGNED")
+    ) {
+      return "기사 후보 다시 찾기";
+    }
+    return "열린 예외 확인";
+  }
+
+  const nextActionLabels: Record<string, string> = {
+    CUSTOMER_INPUT_SMS_REQUIRED: "고객 입력 문자 발송",
+    WAITING_CUSTOMER_INPUT: "고객 입력 대기",
+    READY_FOR_CANDIDATE_SELECTION: "기사 후보 선정",
+    WAITING_ADMIN_REVIEW: "후보 검토 및 승인",
+    WAITING_INSTALLER_RESPONSE: "기사 응답 대기",
+    INSTALLER_ASSIGNED: "설치 진행 확인",
+    COMPLETED: "처리 완료",
+    CANCELLED: "처리 종료",
+  };
+  return nextActionLabels[row.status] ?? "상태 확인";
 }
 
 function formatScheduleAttentionLabel(value: string | null | undefined) {
@@ -1109,6 +1209,20 @@ function getInstallationOrderRowClassName(row: InstallationOrderListItem) {
   }
 
   return `${baseClassName} hover:bg-zinc-50`;
+}
+
+function getSelectedInstallationId(pathname: string, basePath: string) {
+  const detailPathPrefix = `${basePath}/`;
+  if (!pathname.startsWith(detailPathPrefix)) return null;
+
+  const detailSegment = pathname.slice(detailPathPrefix.length).split("/")[0];
+  if (!detailSegment) return null;
+
+  try {
+    return decodeURIComponent(detailSegment);
+  } catch {
+    return detailSegment;
+  }
 }
 
 function getAdminAttentionTextClassName(row: InstallationOrderListItem) {

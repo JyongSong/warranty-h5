@@ -30,6 +30,7 @@ type DispatchDetail = {
   installDate: string;
   timeWindow: string;
   address: string;
+  customerPhone: string;
   productItems: { name: string; quantity: number }[];
   requiredCapabilities: string[];
   notes: string[];
@@ -199,6 +200,9 @@ function buildDispatchDetail(
     installDate: request?.installDate ?? "",
     timeWindow: request?.installTimeSlot ?? "고객과 확인 전화에서 조율",
     address: formatInstallAddress(request),
+    customerPhone: formatPhoneNumber(
+      request?.customerPhone ?? assignment?.installationOrder.sourcePhone,
+    ),
     productItems: parseProductSummaryItems(assignment?.installationOrder.productSummary),
     requiredCapabilities: assignment?.installationOrder.requiredCapabilities ?? [],
     notes: responseConfig.dispatchNotes,
@@ -216,6 +220,22 @@ function formatInstallAddress(
     .map((value) => value?.trim() ?? "")
     .filter(Boolean)
     .join(" ") || "-";
+}
+
+function formatPhoneNumber(phone: string | null | undefined) {
+  const digits = phone?.replace(/\D/g, "") ?? "";
+
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  }
+
+  if (digits.length === 10) {
+    return digits.startsWith("02")
+      ? digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3")
+      : digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+
+  return phone?.trim() || "-";
 }
 
 function shouldShowResponseSection(status: ResponseStatus) {
@@ -391,6 +411,7 @@ function DispatchDetailSections({ detail }: { detail: DispatchDetail }) {
           />
           <InlineSummaryRow label="설치 시간" value={detail.timeWindow} />
           <InlineSummaryRow label="주소" value={detail.address} />
+          <InlineSummaryRow label="고객 전화번호" value={detail.customerPhone} />
         </div>
       </Section>
 

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
+import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import { importBackofficeDataAction } from "./actions";
 import { initialDataImportActionState } from "./state";
 import {
@@ -238,7 +239,7 @@ function ImportSection({
             type="submit"
             loading={pending}
             loadingLabel="저장 중..."
-            className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={getBackofficeButtonClass("primary", "lg")}
           >
             저장
           </LoadingButton>

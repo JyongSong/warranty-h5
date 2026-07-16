@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type CronJobLastStatus = "SUCCESS" | "DISABLED" | "LOCKED" | "FAILED";
+export type CronJobLastStatus = "SUCCESS" | "DEGRADED" | "DISABLED" | "LOCKED" | "FAILED";
 
 export type CronJobDefinition = {
   key: string;
@@ -71,7 +71,7 @@ export async function recordCronJobSkipped(
 
 export async function recordCronJobFinished(
   job: CronJobDefinition,
-  status: Extract<CronJobLastStatus, "SUCCESS" | "FAILED">,
+  status: Extract<CronJobLastStatus, "SUCCESS" | "DEGRADED" | "FAILED">,
   startedAt: Date,
   errorCode: string | null,
   finishedAt = new Date(),

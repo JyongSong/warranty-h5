@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
+import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import { getErrorMessage } from "@/lib/error";
 import {
   formatBackofficeDateTime,
   formatBackofficePhone,
+  formatInstallationMatchTier,
 } from "@/lib/backoffice/table-formatting";
 import installationEventLabels from "@/lib/installation/orders/views/label-installation-event.json";
 import installationStatusLabels from "@/lib/installation/orders/views/label-installation-status.json";
@@ -18,7 +20,7 @@ import {
   resolveInstallationIssueAction,
   retryInstallationOrderAssignmentByAdminAction,
   retrySmsNotificationAction,
-  sendSmsNotificationAction,
+  sendCustomerInputSmsForInstallationOrdersAction,
   switchInstallationOrderToManualRequiredAction,
 } from "../actions";
 
@@ -78,7 +80,10 @@ export type InstallationOrderDetailItem = {
     toStatus: string;
     eventType: string;
     actorType: string;
-    actorId: string | null;
+    actorEmail: string | null;
+    actorInstallerName: string | null;
+    actorInstallerBranch: string | null;
+    actorInstallerPhone: string | null;
     reason: string | null;
     metadata: Record<string, unknown> | null;
     createdAt: string;
@@ -87,7 +92,10 @@ export type InstallationOrderDetailItem = {
     id: string;
     eventType: string;
     actorType: string;
-    actorId: string | null;
+    actorEmail: string | null;
+    actorInstallerName: string | null;
+    actorInstallerBranch: string | null;
+    actorInstallerPhone: string | null;
     metadata: Record<string, unknown> | null;
     createdAt: string;
   }>;
@@ -124,9 +132,9 @@ export type InstallationOrderDetailItem = {
     id: string;
     businessEvent: string;
     recipientType: string;
-    recipientId: string | null;
+    recipientName: string | null;
+    recipientBranch: string | null;
     recipientPhone: string | null;
-    assignmentId: string | null;
     status: string;
     providerStatus: string | null;
     providerStatusCode: string | null;
@@ -136,6 +144,7 @@ export type InstallationOrderDetailItem = {
     retryable: boolean;
     failureReason: string | null;
     retryCount: number;
+    deliveryCheckCount: number;
     sentAt: string | null;
     createdAt: string;
   }>;
@@ -167,8 +176,9 @@ export type InstallationOrderDetailItem = {
 
 const statusLabels: Record<string, string> = installationStatusLabels;
 const eventLabels: Record<string, string> = installationEventLabels;
+const CANDIDATE_RUN_HISTORY_PAGE_SIZE = 10;
 const detailTabs = [
-  { key: "orderStatus", label: "주문 진행 상태" },
+  { key: "orderStatus", label: "상태 액션" },
   { key: "orderInfo", label: "주문 정보" },
   { key: "customerRequests", label: "고객 요청" },
   { key: "assignment", label: "기사 후보/배정" },
@@ -177,7 +187,20 @@ const detailTabs = [
   { key: "timeline", label: "진행 이력" },
 ] as const;
 
+type DetailTabKey = (typeof detailTabs)[number]["key"];
+
+type OperationalDecision = {
+  tone: "neutral" | "warning" | "danger";
+  eyebrow: string;
+  title: string;
+  description: string;
+  recommendation: string;
+  primaryTab: DetailTabKey;
+  primaryLabel: string;
+};
+
 type AdminDialogState =
+  | { kind: "sendCustomerInputSms" }
   | { kind: "manualAssignment"; installerId: string; manualReason: string }
   | { kind: "switchToManual"; reason: string }
   | { kind: "adminRetryAssignment"; reason: string }
@@ -189,9 +212,11 @@ type AdminDialogState =
 export default function InstallationOrderDetail({
   item,
   returnPath = "/backoffice/installations",
+  displayMode = "page",
 }: {
   item: InstallationOrderDetailItem;
   returnPath?: string;
+  displayMode?: "page" | "panel";
 }) {
   const router = useRouter();
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
@@ -200,33 +225,34 @@ export default function InstallationOrderDetail({
   const [dialog, setDialog] = useState<AdminDialogState | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const pending = pendingActionKey !== null;
-  const openIssues = sortByIssueTimelineAsc(
+  const openIssues = sortByIssueTimelineDesc(
     item.issues.filter((issue) => issue.status === "OPEN" && !issue.resolvedAt),
   );
-  const resolvedIssues = sortByIssueTimelineAsc(
+  const resolvedIssues = sortByIssueTimelineDesc(
     item.issues.filter((issue) => issue.status !== "OPEN" || issue.resolvedAt),
   );
-  const statusEvents = sortByCreatedAtAsc(item.statusEvents);
-  const assignmentAttempts = sortByCreatedAtAsc(item.assignmentAttempts);
-  const customerRequests = sortByCreatedAtAsc(item.customerRequests);
-  const candidateRuns = sortByCreatedAtAsc(item.candidateRuns);
-  const smsNotifications = sortByNotificationTimelineAsc(item.smsNotifications);
+  const statusEvents = sortByCreatedAtDesc(item.statusEvents);
+  const groupedStatusEvents = groupEquivalentStatusEvents(statusEvents);
+  const assignmentAttempts = sortByCreatedAtDesc(item.assignmentAttempts);
+  const customerRequests = sortByCreatedAtDesc(item.customerRequests);
+  const candidateRuns = sortByCreatedAtDesc(item.candidateRuns);
+  const smsNotifications = sortByNotificationTimelineDesc(item.smsNotifications);
+  const operationalDecision = getOperationalDecision(item);
   const currentInstallerName = formatInstallerName(item.currentInstallerId, item.currentInstaller?.name);
   const currentInstallerBranch = formatText(item.currentInstaller?.branch);
   const activeCustomerRequest =
     customerRequests.find((request) => request.id === item.activeCustomerRequestId) ??
-    customerRequests.at(-1) ??
+    customerRequests[0] ??
     null;
   const sourceProductItems = parseSourceProductItems(item.sourceItemsJsonText);
   const operationSummaryRows = [
+    { label: "주문번호", value: item.sourceErpOrderNo },
     { label: "현재 상태", value: statusLabels[item.status] ?? item.status },
-    { label: "고객", value: formatText(item.sourceCustomerName) },
-    { label: "전화", value: formatBackofficePhone(activeCustomerRequest?.customerPhone ?? item.sourcePhone) },
-    { label: "희망일", value: formatText(activeCustomerRequest?.installDate) },
-    { label: "희망시간", value: formatText(activeCustomerRequest?.installTimeSlot) },
-    { label: "현재 기사", value: currentInstallerName },
-    { label: "기사 브랜치", value: currentInstallerBranch },
-    { label: "예외", value: item.hasOpenIssue ? "열린 예외 있음" : "없음" },
+    { label: "예외", value: openIssues.length > 0 ? `열린 예외 ${openIssues.length}건` : "없음", colSpan: 2 as const },
+    { label: "설치 희망", value: formatInstallSchedule(activeCustomerRequest?.installDate, activeCustomerRequest?.installTimeSlot) },
+    { label: "설치 주소", value: formatText(activeCustomerRequest?.installAddress) },
+    { label: "설치 기사 이름", value: currentInstallerName },
+    { label: "설치 기사 브랜치", value: currentInstallerBranch },
   ];
   const customerInfoRows = [
     { label: "고객명", value: formatText(item.sourceCustomerName) },
@@ -249,6 +275,10 @@ export default function InstallationOrderDetail({
 
   function manualAssign() {
     openDialog({ kind: "manualAssignment", installerId: "", manualReason: "" });
+  }
+
+  function sendCustomerInputSms() {
+    openDialog({ kind: "sendCustomerInputSms" });
   }
 
   function switchToManual() {
@@ -277,10 +307,6 @@ export default function InstallationOrderDetail({
     await runAction(`sms:${notificationId}`, () => retrySmsNotificationAction(notificationId));
   }
 
-  async function sendSms(notificationId: string) {
-    await runAction(`sms:${notificationId}`, () => sendSmsNotificationAction(notificationId));
-  }
-
   function resolveIssue(issueId: string) {
     openDialog({ kind: "resolveIssue", issueId, note: "" });
   }
@@ -294,6 +320,21 @@ export default function InstallationOrderDetail({
   async function submitDialog() {
     if (!dialog) return;
     setDialogError(null);
+
+    if (dialog.kind === "sendCustomerInputSms") {
+      const ok = await runAction("sendCustomerInputSms", async () => {
+        const result = await sendCustomerInputSmsForInstallationOrdersAction({ installationIds: [item.id] });
+        if (!result.ok) return result;
+        if (result.processedCount > 0) return { ok: true };
+        if (result.failedCount > 0) return { ok: false, error: "CUSTOMER_INPUT_SMS_QUEUE_FAILED" };
+        if (result.skippedAlreadyRequestedCount > 0) {
+          return { ok: false, error: "CUSTOMER_INPUT_SMS_ALREADY_REQUESTED" };
+        }
+        return { ok: false, error: "CUSTOMER_INPUT_SMS_INVALID_STATE" };
+      });
+      if (ok) setDialog(null);
+      return;
+    }
 
     if (dialog.kind === "manualAssignment") {
       const installerId = dialog.installerId.trim();
@@ -388,7 +429,9 @@ export default function InstallationOrderDetail({
       router.refresh();
       return true;
     } catch (err) {
-      setError(getErrorMessage(err, "처리할 수 없습니다."));
+      const message = formatOperationalMessage(getErrorMessage(err, "처리할 수 없습니다."));
+      setError(message);
+      if (dialog) setDialogError(message);
       return false;
     } finally {
       setPendingActionKey(null);
@@ -405,36 +448,46 @@ export default function InstallationOrderDetail({
   }
 
   return (
-    <section className="px-6 py-7 lg:px-8">
+    <section className={displayMode === "panel" ? "min-w-0 max-w-full px-5 py-6 lg:px-7" : "min-w-0 max-w-full px-6 py-7 lg:px-8"}>
       <header className="mb-6 border-b border-zinc-200 pb-5">
-        <div className="flex min-w-0 items-start gap-3">
-          <button
-            type="button"
-            onClick={goBackToList}
-            aria-label="설치 주문 목록으로 돌아가기"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="size-5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
-          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-            <h2 className="shrink-0 whitespace-nowrap text-2xl font-semibold tracking-tight text-zinc-950">
-              설치 주문 진행 상세
-            </h2>
-            <p className="min-w-0 truncate font-mono text-sm text-zinc-500">
-              {item.sourceErpOrderNo}
-            </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            {displayMode === "page" ? (
+              <button
+                type="button"
+                onClick={goBackToList}
+                aria-label="설치 주문 목록으로 돌아가기"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="size-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                >
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <h2 className="shrink-0 whitespace-nowrap text-2xl font-semibold tracking-tight text-zinc-950">
+                설치 주문 진행 상세
+              </h2>
+            </div>
           </div>
+          {displayMode === "panel" ? (
+            <button
+              type="button"
+              onClick={goBackToList}
+              className={getBackofficeButtonClass("secondary")}
+            >
+              닫기
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -446,11 +499,20 @@ export default function InstallationOrderDetail({
 
       <OperationSummary rows={operationSummaryRows} />
 
-      <div aria-label="상세 항목 탭" className="mb-5 flex gap-2 overflow-x-auto border-b border-zinc-200 whitespace-nowrap">
+      <OperationalDecisionCard
+        decision={operationalDecision}
+        openIssueCount={openIssues.length}
+        onOpenTab={setActiveTab}
+      />
+
+      <div role="tablist" aria-label="상세 항목 탭" className="mb-5 flex gap-2 overflow-x-auto border-b border-zinc-200 whitespace-nowrap">
         {detailTabs.map((tab) => (
           <button
             key={tab.key}
+            id={`detail-tab-${tab.key}`}
             type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={
               activeTab === tab.key
@@ -459,11 +521,19 @@ export default function InstallationOrderDetail({
             }
           >
             {tab.label}
+            <DetailTabCount
+              count={getDetailTabCount(tab.key, {
+                assignment: assignmentAttempts.length,
+                sms: smsNotifications.length,
+                issues: openIssues.length,
+                timeline: groupedStatusEvents.length,
+              })}
+            />
           </button>
         ))}
       </div>
 
-      <div className="grid gap-5">
+      <div className="grid min-w-0 max-w-full gap-5">
         <Panel title="상태 액션" visible={activeTab === "orderStatus"}>
           <StatusActions
             pending={pending}
@@ -472,6 +542,7 @@ export default function InstallationOrderDetail({
             hasOpenIssue={item.hasOpenIssue}
             fallbackUsed={Boolean(activeCustomerRequest?.fallbackUsed)}
             activeAssignmentId={item.activeAssignmentId}
+            onSendCustomerInputSms={sendCustomerInputSms}
             onApproveAssignment={approveAssignment}
             onManualAssign={manualAssign}
             onRetryAssignment={retryAssignment}
@@ -517,14 +588,14 @@ export default function InstallationOrderDetail({
 
         <Panel title="진행 이력" visible={activeTab === "timeline"}>
           <TimelineList>
-            {statusEvents.length === 0 ? <EmptyText /> : null}
-            {statusEvents.map((event) => (
+            {groupedStatusEvents.length === 0 ? <EmptyText /> : null}
+            {groupedStatusEvents.map(({ event, count }) => (
               <TimelineItem
                 key={event.id}
                 at={event.createdAt}
-                title={eventLabels[event.eventType] ?? event.eventType}
-                detail={`${formatStatus(event.fromStatus)} -> ${formatStatus(event.toStatus)}`}
-                meta={[`처리자: ${formatActorType(event.actorType)} ${formatText(event.actorId)}`, formatReasonCode(event.reason)]}
+                title={`${eventLabels[event.eventType] ?? event.eventType}${count > 1 ? ` · ${count}건` : ""}`}
+                detail={formatStatusTransition(event.fromStatus, event.toStatus)}
+                meta={[...formatStatusEventActorMeta(event), formatReasonCode(event.reason)]}
               />
             ))}
           </TimelineList>
@@ -563,19 +634,21 @@ export default function InstallationOrderDetail({
           </TimelineList>
         </Panel>
 
+        <Panel title="현재 기사 후보" visible={activeTab === "assignment"}>
+          <InstallerCandidateTable candidates={item.installerCandidates} />
+        </Panel>
+
+        <Panel title="기사 후보 탐색 이력" visible={activeTab === "assignment"}>
+          <CandidateRunHistory key={item.id} runs={candidateRuns} />
+        </Panel>
+
         <Panel title="SMS 이력" visible={activeTab === "sms"}>
           <SmsNotificationTable
             notifications={smsNotifications}
             pending={pending}
             pendingActionKey={pendingActionKey}
             onRetrySms={retrySms}
-            onSendSms={sendSms}
           />
-        </Panel>
-
-        <Panel title="현재 기사 후보" visible={activeTab === "assignment"}>
-          <CandidateRunSummary runs={candidateRuns} />
-          <InstallerCandidateTable candidates={item.installerCandidates} />
         </Panel>
 
       </div>
@@ -697,7 +770,7 @@ function AdminActionDialog({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className={getBackofficeButtonClass("secondary")}
           >
             취소
           </button>
@@ -901,6 +974,7 @@ function normalizeManualAssignmentSearchText(value: string) {
 }
 
 function getAdminDialogTitle(dialog: AdminDialogState) {
+  if (dialog.kind === "sendCustomerInputSms") return "고객 입력 문자 발송";
   if (dialog.kind === "manualAssignment") return "기사 직접 지정";
   if (dialog.kind === "switchToManual") return "처리 필요 표시";
   if (dialog.kind === "adminRetryAssignment") return "기사 후보 다시 찾기";
@@ -911,6 +985,9 @@ function getAdminDialogTitle(dialog: AdminDialogState) {
 }
 
 function getAdminDialogDescription(dialog: AdminDialogState) {
+  if (dialog.kind === "sendCustomerInputSms") {
+    return "고객에게 설치 희망일과 주소를 입력할 수 있는 링크를 SMS로 보냅니다. 발송 요청이 생성되면 고객 입력 대기 상태로 전환됩니다.";
+  }
   if (dialog.kind === "manualAssignment") {
     return "선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 지역 예외 또는 후보 목록 밖 기사라면 사유를 남겨야 합니다.";
   }
@@ -933,6 +1010,7 @@ function getAdminDialogDescription(dialog: AdminDialogState) {
 }
 
 function getAdminDialogSubmitLabel(dialog: AdminDialogState) {
+  if (dialog.kind === "sendCustomerInputSms") return "문자 발송";
   if (dialog.kind === "manualAssignment") return "수동 배정";
   if (dialog.kind === "switchToManual") return "수동 처리 전환";
   if (dialog.kind === "adminRetryAssignment") return "다시 찾기";
@@ -943,17 +1021,19 @@ function getAdminDialogSubmitLabel(dialog: AdminDialogState) {
 }
 
 function getAdminDialogTone(dialog: AdminDialogState): "default" | "primary" | "danger" {
-  if (dialog.kind === "completeOrder" || dialog.kind === "approveAssignment") return "primary";
+  if (
+    dialog.kind === "sendCustomerInputSms" ||
+    dialog.kind === "completeOrder" ||
+    dialog.kind === "approveAssignment"
+  ) return "primary";
   if (dialog.kind === "cancelOrder") return "danger";
-  return "default";
+  return "primary";
 }
 
 function getDialogSubmitButtonClass(tone: "default" | "primary" | "danger") {
-  const baseClass = "h-9 rounded-md px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
-  if (tone === "primary") return `${baseClass} bg-zinc-900 text-white hover:bg-zinc-800`;
-  if (tone === "danger") return `${baseClass} bg-rose-700 text-white hover:bg-rose-800`;
-
-  return `${baseClass} border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50`;
+  if (tone === "danger") return getBackofficeButtonClass("danger");
+  if (tone === "default") return getBackofficeButtonClass("secondary");
+  return getBackofficeButtonClass("primary");
 }
 
 function KeyValueRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
@@ -966,13 +1046,92 @@ function KeyValueRows({ rows }: { rows: Array<{ label: string; value: string }> 
   );
 }
 
-function OperationSummary({ rows }: { rows: Array<{ label: string; value: string }> }) {
+function OperationalDecisionCard({
+  decision,
+  openIssueCount,
+  onOpenTab,
+}: {
+  decision: OperationalDecision;
+  openIssueCount: number;
+  onOpenTab: (tab: DetailTabKey) => void;
+}) {
+  const toneClass = {
+    neutral: "border-zinc-200 bg-zinc-50",
+    warning: "border-amber-300 bg-amber-50",
+    danger: "border-rose-300 bg-rose-50",
+  }[decision.tone];
+  const eyebrowClass = {
+    neutral: "text-zinc-600",
+    warning: "text-amber-800",
+    danger: "text-rose-800",
+  }[decision.tone];
+
   return (
-    <div className="mb-5 grid border-y border-zinc-200 bg-white sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <section aria-labelledby="operational-decision-title" className={`mb-5 rounded-md border p-4 ${toneClass}`}>
+      <div className={`text-xs font-semibold ${eyebrowClass}`}>{decision.eyebrow}</div>
+      <h3 id="operational-decision-title" className="mt-1 text-base font-semibold text-zinc-950">
+        {decision.title}
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-zinc-700">{decision.description}</p>
+      <p className="mt-2 text-sm font-semibold text-zinc-900">권장 조치: {decision.recommendation}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onOpenTab(decision.primaryTab)}
+          className={getBackofficeButtonClass("primary")}
+        >
+          {decision.primaryLabel}
+        </button>
+        {openIssueCount > 0 && decision.primaryTab !== "issues" ? (
+          <button
+            type="button"
+            onClick={() => onOpenTab("issues")}
+            className={getBackofficeButtonClass("secondary")}
+          >
+            열린 예외 {openIssueCount}건
+          </button>
+        ) : null}
+        {decision.primaryTab !== "assignment" ? (
+          <button
+            type="button"
+            onClick={() => onOpenTab("assignment")}
+            className={getBackofficeButtonClass("primary")}
+          >
+            기사 후보/배정 확인
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function DetailTabCount({ count }: { count: number }) {
+  if (count <= 0) return null;
+
+  return (
+    <>
+      <span aria-hidden="true" className="ml-1.5 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[11px] tabular-nums text-zinc-600">
+        {count}
+      </span>
+      <span className="sr-only"> {count}건</span>
+    </>
+  );
+}
+
+function OperationSummary({
+  rows,
+}: {
+  rows: Array<{ label: string; value: string; colSpan?: 2 }>;
+}) {
+  return (
+    <div className="mb-5 grid min-w-0 grid-cols-2 border-y border-zinc-200 bg-white lg:grid-cols-4">
       {rows.map((row) => (
-        <div key={row.label} className="border-b border-zinc-100 px-3 py-3 last:border-b-0 sm:border-r lg:last:border-r-0 xl:border-b-0">
+        <div
+          key={row.label}
+          className={`${row.colSpan === 2 ? "col-span-2" : ""} min-w-0 border-b border-r border-zinc-100 px-3 py-3`}
+        >
           <div className="text-xs font-semibold text-zinc-500">{row.label}</div>
-          <div className="mt-1 truncate text-sm font-semibold text-zinc-950">{row.value}</div>
+          <div title={row.value} className="mt-1 truncate text-sm font-semibold text-zinc-950">{row.value}</div>
         </div>
       ))}
     </div>
@@ -986,6 +1145,7 @@ function StatusActions({
   hasOpenIssue,
   fallbackUsed,
   activeAssignmentId,
+  onSendCustomerInputSms,
   onManualAssign,
   onApproveAssignment,
   onRetryAssignment,
@@ -999,6 +1159,7 @@ function StatusActions({
   hasOpenIssue: boolean;
   fallbackUsed: boolean;
   activeAssignmentId: string | null;
+  onSendCustomerInputSms: () => void;
   onApproveAssignment: () => void;
   onManualAssign: () => void;
   onRetryAssignment: () => void;
@@ -1009,6 +1170,7 @@ function StatusActions({
   const statusActions = getStatusActions(
     status,
     {
+      onSendCustomerInputSms,
       onManualAssign,
       onApproveAssignment,
       onRetryAssignment,
@@ -1067,6 +1229,7 @@ type StatusActionDefinition = {
 };
 
 type StatusActionHandlers = {
+  onSendCustomerInputSms: () => void;
   onApproveAssignment: () => void;
   onManualAssign: () => void;
   onRetryAssignment: () => void;
@@ -1083,6 +1246,18 @@ function getStatusActions(
   fallbackUsed = false,
 ): StatusActionDefinition[] {
   return [
+    {
+      key: "sendCustomerInputSms",
+      label: "고객 입력 문자 발송",
+      buttonLabel: "문자 발송",
+      resultStatusLabel: statusLabels.WAITING_CUSTOMER_INPUT,
+      description:
+        "고객에게 설치 희망일과 주소를 입력할 수 있는 링크를 SMS로 보냅니다. 발송 요청이 생성되면 고객 입력 대기 상태로 전환됩니다.",
+      tone: "primary",
+      enabled: canSendCustomerInputSms(status),
+      disabledReason: "고객 문자 발송 필요 상태에서만 발송할 수 있습니다.",
+      onClick: handlers.onSendCustomerInputSms,
+    },
     {
       key: "approveAssignment",
       label: "후보 승인",
@@ -1102,7 +1277,7 @@ function getStatusActions(
       resultStatusLabel: statusLabels.WAITING_INSTALLER_RESPONSE,
       description:
         "관리자가 선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 기사가 수락하면 배정 확정으로 진행하고, 거절하거나 응답 시간이 만료되면 관리자 확인 대상이 됩니다.",
-      tone: "default",
+      tone: "primary",
       enabled: canManuallyAssign(status, hasOpenIssue, fallbackUsed),
       disabledReason: "후보 선정 가능 또는 관리자 검토 대기 상태에서 직접 지정할 수 있습니다. 기사 응답 대기 상태는 열린 예외 또는 배송지 폴백 주문만 가능합니다.",
       onClick: handlers.onManualAssign,
@@ -1114,7 +1289,7 @@ function getStatusActions(
       resultStatusLabel: statusLabels.WAITING_ADMIN_REVIEW,
       description:
         "현재 조건으로 기사 후보를 다시 찾고 관리자 검토 대기로 보냅니다. 후보가 있으면 관리자가 승인한 뒤 기사에게 배정 요청 SMS를 발송합니다.",
-      tone: "default",
+      tone: "primary",
       enabled: canRetryAssignment(status, hasOpenIssue),
       disabledReason: "후보 선정 가능, 관리자 검토 대기, 기사 응답 대기 상태의 열린 예외 주문만 후보 자동 재탐색이 가능합니다.",
       onClick: handlers.onRetryAssignment,
@@ -1126,7 +1301,7 @@ function getStatusActions(
       resultStatusLabel: "처리 필요",
       description:
         "자동 후보/기사 응답 흐름을 멈추고 처리 필요 항목으로 표시합니다. 이후 직접 기사 지정 또는 후보 다시 찾기를 실행할 수 있으며, 고객이나 기사에게 자동 SMS는 발송하지 않습니다.",
-      tone: "default",
+      tone: "primary",
       enabled: canSwitchToManual(status),
       disabledReason: "후보 선정 가능 또는 기사 응답 대기 상태에서만 처리 필요로 표시할 수 있습니다.",
       onClick: handlers.onSwitchToManual,
@@ -1159,11 +1334,9 @@ function getStatusActions(
 }
 
 function getStatusActionButtonClass(tone: StatusActionDefinition["tone"]) {
-  const baseClass = "h-9 shrink-0 rounded-md px-3 text-sm font-semibold disabled:opacity-50";
-  if (tone === "primary") return `${baseClass} bg-zinc-900 text-white hover:bg-zinc-800`;
-  if (tone === "danger") return `${baseClass} bg-rose-700 text-white hover:bg-rose-800`;
-
-  return `${baseClass} border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50`;
+  if (tone === "danger") return getBackofficeButtonClass("danger");
+  if (tone === "default") return getBackofficeButtonClass("secondary");
+  return getBackofficeButtonClass("primary");
 }
 
 function SourceProductItems({
@@ -1203,7 +1376,7 @@ function KeyValueRow({ label, value }: { label: string; value: string }) {
 }
 
 function TimelineList({ children }: { children: ReactNode }) {
-  return <div className="border-y border-zinc-200">{children}</div>;
+  return <div className="min-w-0 max-w-full overflow-hidden border-y border-zinc-200">{children}</div>;
 }
 
 function TimelineItem({
@@ -1218,7 +1391,7 @@ function TimelineItem({
   meta?: Array<string | null | undefined>;
 }) {
   return (
-    <div className="grid grid-cols-[160px_24px_minmax(0,1fr)] border-b border-zinc-100 px-3 py-3 text-sm last:border-b-0">
+    <div className="grid min-w-0 grid-cols-[160px_24px_minmax(0,1fr)] border-b border-zinc-100 px-3 py-3 text-sm last:border-b-0">
       <time className="pt-0.5 text-xs text-zinc-500">{formatDateTime(at)}</time>
       <div className="relative flex justify-center">
         <span className="mt-1.5 h-2 w-2 rounded-full bg-zinc-900" />
@@ -1229,7 +1402,7 @@ function TimelineItem({
         {meta ? (
           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-zinc-500">
             {meta.filter(Boolean).map((value) => (
-              <span key={value}>{value}</span>
+              <span key={value} className="min-w-0 break-words">{value}</span>
             ))}
           </div>
         ) : null}
@@ -1238,33 +1411,53 @@ function TimelineItem({
   );
 }
 
-function CandidateRunSummary({ runs }: { runs: InstallationOrderDetailItem["candidateRuns"] }) {
-  if (runs.length === 0) return null;
+export function CandidateRunHistory({ runs }: { runs: InstallationOrderDetailItem["candidateRuns"] }) {
+  const [visibleCount, setVisibleCount] = useState(CANDIDATE_RUN_HISTORY_PAGE_SIZE);
+  const visibleRuns = runs.slice(0, visibleCount);
+  const remainingCount = Math.max(runs.length - visibleRuns.length, 0);
+
+  if (runs.length === 0) return <EmptyText />;
 
   return (
-    <div className="mb-4 border-y border-zinc-200">
-      {runs.map((run) => (
-        <div
-          key={run.id}
-          className="grid gap-2 border-b border-zinc-100 px-3 py-2 text-sm last:border-b-0 sm:grid-cols-[160px_minmax(0,1fr)_120px]"
-        >
-          <time className="text-xs text-zinc-500">{formatDateTime(run.createdAt)}</time>
-          <div className="min-w-0">
-            <div className="font-semibold text-zinc-950">기사 후보 찾기 {formatReasonCode(run.reasonCode)}</div>
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
-              {run.candidates.slice(0, 3).map((candidate) => (
-                <span key={candidate.installerId}>
-                  #{candidate.rank ?? "-"} {formatInstallerName(candidate.installerId, candidate.installerName)}
-                  {" / "}
-                  {formatText(candidate.installerBranch)}
-                </span>
-              ))}
-              {run.candidates.length > 3 ? <span>외 {run.candidates.length - 3}명</span> : null}
+    <div className="min-w-0 max-w-full">
+      <div className="mb-2 text-xs font-semibold text-zinc-500">
+        최근 이력 {visibleRuns.length} / {runs.length}건
+      </div>
+      <div className="min-w-0 max-w-full overflow-hidden border-y border-zinc-200">
+        {visibleRuns.map((run) => (
+          <div
+            key={run.id}
+            className="grid gap-2 border-b border-zinc-100 px-3 py-2 text-sm last:border-b-0 sm:grid-cols-[160px_minmax(0,1fr)_120px]"
+          >
+            <time className="text-xs text-zinc-500">{formatDateTime(run.createdAt)}</time>
+            <div className="min-w-0">
+              <div className="font-semibold text-zinc-950">기사 후보 찾기 {formatReasonCode(run.reasonCode)}</div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+                {run.candidates.slice(0, 3).map((candidate) => (
+                  <span key={candidate.installerId}>
+                    #{candidate.rank ?? "-"} {formatInstallerName(candidate.installerId, candidate.installerName)}
+                    {" / "}
+                    {formatText(candidate.installerBranch)}
+                  </span>
+                ))}
+                {run.candidates.length > 3 ? <span>외 {run.candidates.length - 3}명</span> : null}
+              </div>
             </div>
+            <div className="text-zinc-600 sm:text-right">후보 {run.candidates.length}명</div>
           </div>
-          <div className="text-zinc-600 sm:text-right">후보 {run.candidates.length}명</div>
+        ))}
+      </div>
+      {remainingCount > 0 ? (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + CANDIDATE_RUN_HISTORY_PAGE_SIZE)}
+            className={getBackofficeButtonClass("primary")}
+          >
+            이력 {Math.min(CANDIDATE_RUN_HISTORY_PAGE_SIZE, remainingCount)}건 더보기
+          </button>
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }
@@ -1277,8 +1470,8 @@ function InstallerCandidateTable({
   if (candidates.length === 0) return <EmptyText />;
 
   return (
-    <div className="overflow-x-auto border-y border-zinc-200">
-      <table className="w-full min-w-[880px] border-collapse text-left text-sm">
+    <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain border-y border-zinc-200">
+      <table className="w-max min-w-[1040px] border-collapse text-left text-sm">
         <thead className="bg-zinc-50 text-xs font-semibold text-zinc-500">
           <tr>
             <th className="w-16 px-3 py-2">순위</th>
@@ -1299,7 +1492,7 @@ function InstallerCandidateTable({
                 <div className="text-xs text-zinc-500">{formatText(candidate.installerBranch)}</div>
               </td>
               <td className="px-3 py-2">
-                <StatusBadge label={formatMatchTier(candidate.matchTier)} tone={candidate.matchTier ? "success" : "warning"} />
+                <StatusBadge label={formatInstallationMatchTier(candidate.matchTier)} tone={candidate.matchTier ? "success" : "warning"} />
               </td>
               <td className="px-3 py-2 text-zinc-700">{formatText(candidate.region)}</td>
               <td className="max-w-[280px] px-3 py-2 text-zinc-700">{formatList(candidate.serviceAreas)}</td>
@@ -1320,19 +1513,17 @@ function SmsNotificationTable({
   pending,
   pendingActionKey,
   onRetrySms,
-  onSendSms,
 }: {
   notifications: InstallationOrderDetailItem["smsNotifications"];
   pending: boolean;
   pendingActionKey: string | null;
   onRetrySms: (notificationId: string) => void;
-  onSendSms: (notificationId: string) => void;
 }) {
   if (notifications.length === 0) return <EmptyText />;
 
   return (
-    <div className="overflow-x-auto border-y border-zinc-200">
-      <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
+    <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain border-y border-zinc-200">
+      <table className="w-max min-w-[1200px] border-collapse text-left text-sm">
         <thead className="bg-zinc-50 text-xs font-semibold text-zinc-500">
           <tr>
             <th className="px-3 py-2">생성 시각</th>
@@ -1340,7 +1531,7 @@ function SmsNotificationTable({
             <th className="px-3 py-2">대상</th>
             <th className="px-3 py-2">발송 상태</th>
             <th className="px-3 py-2">도달 상태</th>
-            <th className="px-3 py-2">재시도</th>
+            <th className="px-3 py-2">시도 횟수</th>
             <th className="px-3 py-2">실패/제외 사유</th>
             <th className="w-24 px-3 py-2 text-right">액션</th>
           </tr>
@@ -1355,8 +1546,16 @@ function SmsNotificationTable({
                 <td className="px-3 py-2 font-semibold text-zinc-950">{formatSmsBusinessEvent(notification.businessEvent)}</td>
                 <td className="px-3 py-2 text-zinc-700">
                   <div>{formatRecipientType(notification.recipientType)}</div>
-                  {notification.assignmentId ? (
-                    <div className="text-xs text-zinc-500">배정 {notification.assignmentId}</div>
+                  {notification.recipientType === "INSTALLER" ? (
+                    <div className="mt-1 space-y-0.5">
+                      <div className="font-semibold text-zinc-950">{formatText(notification.recipientName)}</div>
+                      {notification.recipientBranch ? (
+                        <div className="text-xs text-zinc-500">{notification.recipientBranch}</div>
+                      ) : null}
+                      <div className="whitespace-nowrap text-xs tabular-nums text-zinc-500">
+                        {formatBackofficePhone(notification.recipientPhone)}
+                      </div>
+                    </div>
                   ) : null}
                 </td>
                 <td className="px-3 py-2">
@@ -1367,6 +1566,9 @@ function SmsNotificationTable({
                 </td>
                 <td className="px-3 py-2 text-zinc-700">
                   <div>{notification.retryCount}회</div>
+                  <div className="text-xs text-zinc-500">
+                    도달 확인 재시도 {notification.deliveryCheckCount}회
+                  </div>
                   {smsAction.eligibilityLabel ? (
                     <div className="text-xs text-zinc-500">{smsAction.eligibilityLabel}</div>
                   ) : null}
@@ -1381,12 +1583,8 @@ function SmsNotificationTable({
                       disabled={pending}
                       loading={pendingActionKey === `sms:${notification.id}`}
                       loadingLabel={smsAction.loadingLabel}
-                      onClick={() =>
-                        smsAction.kind === "send"
-                          ? onSendSms(notification.id)
-                          : onRetrySms(notification.id)
-                      }
-                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                      onClick={() => onRetrySms(notification.id)}
+                      className={getBackofficeButtonClass("primary", "sm")}
                     >
                       {smsAction.buttonLabel}
                     </LoadingButton>
@@ -1503,7 +1701,7 @@ function IssueGroup({
               onResolveIssue && issue.status === "OPEN" && !issue.resolvedAt ? (
                 <LoadingButton
                   type="button"
-                  className="rounded border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={getBackofficeButtonClass("primary", "sm")}
                   disabled={pending}
                   loading={pendingActionKey === `issue:${issue.id}`}
                   loadingLabel="처리 중"
@@ -1532,7 +1730,7 @@ function Panel({
   if (!visible) return null;
 
   return (
-    <div className="rounded-md border border-zinc-200 bg-white p-4">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-zinc-200 bg-white p-4">
       <h3 className="mb-3 text-sm font-semibold text-zinc-950">{title}</h3>
       {children}
     </div>
@@ -1549,6 +1747,10 @@ function formatDateTime(value: string | null | undefined) {
   if (Number.isNaN(date.getTime())) return "-";
 
   return date.toLocaleString("ko-KR");
+}
+
+function formatInstallSchedule(date: string | null | undefined, timeSlot: string | null | undefined) {
+  return [date?.trim(), timeSlot?.trim()].filter(Boolean).join(" · ") || "-";
 }
 
 function formatAssignmentNote(assignment: InstallationOrderDetailItem["assignmentAttempts"][number]) {
@@ -1592,6 +1794,15 @@ function formatStatus(value: string | null | undefined) {
   return statusLabels[value] ?? value;
 }
 
+export function formatStatusTransition(fromStatus: string | null | undefined, toStatus: string) {
+  const toLabel = formatStatus(toStatus);
+  if (!fromStatus) return `현재 상태: ${toLabel}`;
+
+  const fromLabel = formatStatus(fromStatus);
+  if (fromStatus === toStatus) return `${toLabel} 상태 유지`;
+  return `${fromLabel} → ${toLabel}`;
+}
+
 function formatCustomerRequestStatus(value: string | null | undefined) {
   const customerRequestStatusLabels: Record<string, string> = {
     CANCELLED: "취소",
@@ -1626,6 +1837,31 @@ function formatActorType(value: string | null | undefined) {
   return actorLabels[value] ?? value;
 }
 
+export function formatStatusEventActorMeta(
+  event: Pick<
+    InstallationOrderDetailItem["statusEvents"][number],
+    | "actorType"
+    | "actorEmail"
+    | "actorInstallerName"
+    | "actorInstallerBranch"
+    | "actorInstallerPhone"
+  >,
+) {
+  if (event.actorType === "ADMIN") {
+    return [`처리자: 관리자 ${formatText(event.actorEmail)}`];
+  }
+
+  if (event.actorType === "INSTALLER") {
+    return [
+      `처리자: 기사 ${formatText(event.actorInstallerName)}`,
+      `소속: ${formatText(event.actorInstallerBranch)}`,
+      `전화: ${formatBackofficePhone(event.actorInstallerPhone)}`,
+    ];
+  }
+
+  return [`처리자: ${formatActorType(event.actorType)}`];
+}
+
 function formatAssignmentSource(value: string | null | undefined) {
   const sourceLabels: Record<string, string> = {
     AUTO: "자동 배정",
@@ -1636,28 +1872,49 @@ function formatAssignmentSource(value: string | null | undefined) {
   return sourceLabels[value] ?? value;
 }
 
-function formatMatchTier(value: string | null | undefined) {
-  const tierLabels: Record<string, string> = {
-    PRIMARY: "담당 지역 일치",
-    REGION_ONLY: "광역 지역 일치",
-  };
-  if (!value) return "-";
-  return tierLabels[value] ?? value;
-}
-
-function formatReasonCode(value: string | null | undefined) {
+export function formatOperationalMessage(value: string | null | undefined) {
   const reasonLabels: Record<string, string> = {
+    ACTIVE_ASSIGNMENT_EXISTS: "이미 진행 중인 기사 배정 있음",
     CUSTOMER_NO_INPUT_96H_SOURCE_ORDER_USED: "고객 미입력 96시간 경과 - 주문 정보 사용",
     CUSTOMER_NO_INPUT_96H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 96시간 경과 - 주문 정보 부족",
+    CUSTOMER_INPUT_SMS_ALREADY_REQUESTED: "고객 입력 문자가 이미 요청됨",
+    CUSTOMER_INPUT_SMS_INVALID_STATE: "현재 상태에서는 고객 입력 문자를 발송할 수 없음",
+    CUSTOMER_INPUT_SMS_QUEUE_FAILED: "고객 입력 문자 발송 요청 실패",
+    DUPLICATE_INSTALLER_REQUEST: "이미 요청한 기사 중복 선정",
     INSTALLER_CANDIDATE_NOT_FOUND: "후보 기사 없음",
+    INSTALLER_RESPONSE_TIMEOUT: "기사 응답 기한 만료",
+    MISSING_INSTALL_DATE: "설치 희망일 없음",
     NO_CAPABILITY_MATCH: "설치 능력 조건에 맞는 기사 없음",
     NO_REGION_MATCH: "지역 조건에 맞는 기사 없음",
     ORDER_PRODUCT_REQUIREMENT_UNMAPPED: "제품 요구사항 미매핑",
+    PHONE_11_DIGITS_REQUIRED: "휴대전화번호 형식 오류",
     REVALIDATION_FAILED: "후보 재검증 실패",
+    SMS_DELIVERY_FAILED: "SMS 도달 실패",
+    SMS_DELIVERY_REPORT_API_FAILED: "SMS 도달 결과 조회 실패",
+    SMS_DELIVERY_STATUS_UNCONFIRMED: "SMS 도달 결과 확인 불가",
+    SMS_FAILED: "SMS 발송 실패",
+    SMS_SEND_OUTCOME_UNKNOWN: "SMS 발송 결과 확인 필요",
+    STALE_NOTIFICATION_SKIPPED: "이미 종료된 SMS 요청으로 발송 제외",
+    SYSTEM_SMS_RETRY_PENDING: "SMS 재발송 대기",
     UNPARSABLE_INSTALL_ADDRESS: "설치 주소 파싱 불가",
   };
   if (!value) return "-";
-  return reasonLabels[value] ?? value;
+  const normalized = value.trim();
+  const exactLabel = reasonLabels[normalized];
+  if (exactLabel) return exactLabel;
+
+  const prefixedCode = normalized.match(/^([A-Z][A-Z0-9_]+):\s*(.*)$/);
+  if (prefixedCode) {
+    const label = reasonLabels[prefixedCode[1]] ?? "시스템 처리 사유 확인 필요";
+    return prefixedCode[2] ? `${label}: ${prefixedCode[2]}` : label;
+  }
+
+  if (/^[A-Z][A-Z0-9_]+$/.test(normalized)) return "시스템 처리 사유 확인 필요";
+  return normalized;
+}
+
+function formatReasonCode(value: string | null | undefined) {
+  return formatOperationalMessage(value);
 }
 
 function formatIssueStatus(value: string | null | undefined) {
@@ -1672,6 +1929,8 @@ function formatIssueStatus(value: string | null | undefined) {
 function formatAssignmentStatus(value: string | null | undefined) {
   const assignmentStatusLabels: Record<string, string> = {
     INSTALLER_ACCEPTED: "수락",
+    ADMIN_COMPLETED: "관리자 완료",
+    ADMIN_MANUAL_OVERRIDDEN: "관리자 수동 변경",
     CANCELLED: "취소",
     INSTALLER_REJECTED: "기사 거절",
     SYSTEM_SMS_FAILED: "SMS 발송 실패",
@@ -1699,7 +1958,9 @@ function formatSmsBusinessEvent(value: string | null | undefined) {
 
 function formatSmsStatus(value: string | null | undefined) {
   const smsStatusLabels: Record<string, string> = {
+    DELIVERED: "도달 완료",
     FAILED: "발송 실패",
+    UNKNOWN: "발송 결과 확인 필요",
     PENDING: "발송 대기",
     SENT: "발송 완료",
     SKIPPED: "발송 제외",
@@ -1709,14 +1970,23 @@ function formatSmsStatus(value: string | null | undefined) {
 }
 
 function getSmsStatusTone(value: string | null | undefined): "neutral" | "success" | "warning" | "danger" {
-  if (value === "SENT") return "success";
+  if (value === "SENT" || value === "DELIVERED") return "success";
   if (value === "FAILED") return "danger";
   if (value === "PENDING") return "warning";
   return "neutral";
 }
 
-function getSmsDeliveryStatusView(
-  notification: InstallationOrderDetailItem["smsNotifications"][number],
+export function getSmsDeliveryStatusView(
+  notification: Pick<
+    InstallationOrderDetailItem["smsNotifications"][number],
+    | "sentAt"
+    | "failureReason"
+    | "providerStatusCode"
+    | "providerStatus"
+    | "providerReason"
+    | "providerReportedAt"
+    | "providerCheckedAt"
+  >,
 ): { label: string; tone: "neutral" | "success" | "warning" | "danger"; detail: string | null } {
   if (!notification.sentAt) {
     return { label: "도달 확인 전", tone: "neutral", detail: null };
@@ -1725,17 +1995,28 @@ function getSmsDeliveryStatusView(
   const statusCode = notification.providerStatusCode;
   const providerStatus = notification.providerStatus;
   const providerReason = notification.providerReason;
+  const providerDelivered = hasSuccessfulProviderDelivery(notification);
+  if (providerDelivered) {
+    return {
+      label: "도달 성공",
+      tone: "success",
+      detail: [statusCode, providerReason].filter(Boolean).join(" ") || formatProviderStatus(providerStatus),
+    };
+  }
+
   const isDeliveryFailure =
     notification.failureReason?.includes("SMS_DELIVERY_FAILED") ||
     providerStatus?.toUpperCase().includes("FAIL") ||
     providerStatus?.toUpperCase().includes("ERROR") ||
-    (Boolean(notification.providerReportedAt) && Boolean(statusCode) && statusCode !== "2000");
+    (Boolean(notification.providerReportedAt) &&
+      statusCode !== null &&
+      !["2000", "3000", "4000"].includes(statusCode));
 
   if (isDeliveryFailure) {
     return {
       label: "도달 실패",
       tone: "danger",
-      detail: [statusCode, providerReason].filter(Boolean).join(" ") || providerStatus || null,
+      detail: [statusCode, providerReason].filter(Boolean).join(" ") || formatProviderStatus(providerStatus),
     };
   }
 
@@ -1743,19 +2024,39 @@ function getSmsDeliveryStatusView(
     return { label: "도달 확인 전", tone: "warning", detail: null };
   }
 
-  if (statusCode === "2000" || providerStatus?.toUpperCase() === "COMPLETE") {
-    return {
-      label: "도달 성공",
-      tone: "success",
-      detail: [statusCode, providerReason].filter(Boolean).join(" ") || providerStatus || null,
-    };
-  }
-
   return {
     label: "조회됨",
     tone: "neutral",
-    detail: [statusCode, providerReason].filter(Boolean).join(" ") || providerStatus || null,
+    detail: [statusCode, providerReason].filter(Boolean).join(" ") || formatProviderStatus(providerStatus),
   };
+}
+
+function hasSuccessfulProviderDelivery(
+  notification: Pick<
+    InstallationOrderDetailItem["smsNotifications"][number],
+    "providerStatusCode" | "providerStatus"
+  >,
+) {
+  const normalizedProviderStatus = notification.providerStatus?.trim().toUpperCase() ?? "";
+  if (normalizedProviderStatus.includes("FAIL") || normalizedProviderStatus.includes("ERROR")) return false;
+  if (notification.providerStatusCode) return notification.providerStatusCode === "4000";
+
+  return normalizedProviderStatus.includes("COMPLETE") ||
+    normalizedProviderStatus.includes("SUCCESS") ||
+    normalizedProviderStatus.includes("DELIVER");
+}
+
+function formatProviderStatus(value: string | null | undefined) {
+  if (!value) return null;
+  const labels: Record<string, string> = {
+    COMPLETE: "도달 처리 완료",
+    DELIVERED: "도달 완료",
+    FAILED: "도달 실패",
+    PENDING: "도달 확인 대기",
+    PROCESSING: "도달 확인 중",
+    SUCCESS: "도달 성공",
+  };
+  return labels[value.trim().toUpperCase()] ?? formatOperationalMessage(value);
 }
 
 function formatRecipientType(value: string | null | undefined) {
@@ -1767,16 +2068,110 @@ function formatRecipientType(value: string | null | undefined) {
   return recipientLabels[value] ?? value;
 }
 
-function sortByCreatedAtAsc<T extends { createdAt: string }>(items: T[]) {
-  return [...items].sort((left, right) => toTime(left.createdAt) - toTime(right.createdAt));
+export function getOperationalDecision(item: InstallationOrderDetailItem): OperationalDecision {
+  const openIssues = item.issues.filter((issue) => issue.status === "OPEN" && !issue.resolvedAt);
+  const failedAssignment = sortByCreatedAtDesc(item.assignmentAttempts).find(
+    (assignment) => assignment.status === "SYSTEM_SMS_FAILED",
+  );
+
+  if (openIssues.length > 0) {
+    const issueTitles = [...new Set(openIssues.map((issue) => issue.title))].join(", ");
+    return {
+      tone: "danger",
+      eyebrow: `운영 판단 · 열린 예외 ${openIssues.length}건`,
+      title: `${issueTitles || "운영 예외"} 확인이 필요합니다`,
+      description: `현재 ${formatStatus(item.status)} 상태이며 열린 예외가 남아 있어 자동 진행보다 관리자 확인이 우선입니다.`,
+      recommendation: "예외의 실제 처리 결과를 확인하고 해결 사유를 기록한 뒤 다음 배정 단계를 진행하세요.",
+      primaryTab: "issues",
+      primaryLabel: "열린 예외 확인",
+    };
+  }
+
+  if (failedAssignment && item.status === "READY_FOR_CANDIDATE_SELECTION" && !item.currentInstallerId) {
+    return {
+      tone: "warning",
+      eyebrow: "운영 판단 · 기사 재배정 필요",
+      title: "이전 기사 요청이 종료되어 담당 기사가 없습니다",
+      description: `${failedAssignment.installerName} 기사에게 보낸 배정 요청이 SMS 처리 단계에서 종료됐고, 주문은 후보 선정 가능 상태로 돌아왔습니다.`,
+      recommendation: "후보와 이전 요청 이력을 확인한 뒤 적합한 기사를 다시 지정하세요.",
+      primaryTab: "assignment",
+      primaryLabel: "기사 후보/배정 확인",
+    };
+  }
+
+  if (item.status === "READY_FOR_CANDIDATE_SELECTION" && !item.currentInstallerId) {
+    return {
+      tone: "neutral",
+      eyebrow: "운영 판단 · 다음 단계",
+      title: "설치 기사 후보를 선정할 수 있습니다",
+      description: "고객 요청이 접수됐고 현재 담당 기사는 없습니다.",
+      recommendation: "설치 희망일과 지역 조건을 확인한 뒤 기사 후보를 선정하세요.",
+      primaryTab: "assignment",
+      primaryLabel: "기사 후보 확인",
+    };
+  }
+
+  return {
+    tone: "neutral",
+    eyebrow: "운영 판단 · 현재 진행",
+    title: `${formatStatus(item.status)} 단계입니다`,
+    description: item.currentInstaller?.name
+      ? `${item.currentInstaller.name} 기사가 현재 담당자로 지정되어 있습니다.`
+      : "현재 주문 상태와 최근 이력을 확인할 수 있습니다.",
+    recommendation: "상태 액션과 진행 이력을 확인해 다음 업무를 진행하세요.",
+    primaryTab: "orderStatus",
+    primaryLabel: "상태 액션 확인",
+  };
 }
 
-function sortByIssueTimelineAsc(items: InstallationOrderDetailItem["issues"]) {
-  return sortByCreatedAtAsc(items);
+function getDetailTabCount(
+  tab: DetailTabKey,
+  counts: Record<"assignment" | "sms" | "issues" | "timeline", number>,
+) {
+  if (tab === "assignment" || tab === "sms" || tab === "issues" || tab === "timeline") {
+    return counts[tab];
+  }
+  return 0;
 }
 
-function sortByNotificationTimelineAsc(items: InstallationOrderDetailItem["smsNotifications"]) {
-  return sortByCreatedAtAsc(items);
+export function groupEquivalentStatusEvents(items: InstallationOrderDetailItem["statusEvents"]) {
+  const groups: Array<{ event: InstallationOrderDetailItem["statusEvents"][number]; count: number }> = [];
+  const groupIndexByKey = new Map<string, number>();
+
+  for (const event of items) {
+    const key = [
+      event.createdAt,
+      event.eventType,
+      event.fromStatus ?? "",
+      event.toStatus,
+      event.actorType,
+      event.actorEmail ?? "",
+      event.actorInstallerName ?? "",
+      event.reason ?? "",
+    ].join("\u0000");
+    const existingIndex = groupIndexByKey.get(key);
+    if (existingIndex !== undefined) {
+      groups[existingIndex].count += 1;
+      continue;
+    }
+
+    groupIndexByKey.set(key, groups.length);
+    groups.push({ event, count: 1 });
+  }
+
+  return groups;
+}
+
+export function sortByCreatedAtDesc<T extends { createdAt: string }>(items: T[]) {
+  return [...items].sort((left, right) => toTime(right.createdAt) - toTime(left.createdAt));
+}
+
+function sortByIssueTimelineDesc(items: InstallationOrderDetailItem["issues"]) {
+  return sortByCreatedAtDesc(items);
+}
+
+function sortByNotificationTimelineDesc(items: InstallationOrderDetailItem["smsNotifications"]) {
+  return sortByCreatedAtDesc(items);
 }
 
 function toTime(value: string | null | undefined) {
@@ -1860,6 +2255,10 @@ export function canManuallyAssign(status: string, hasOpenIssue: boolean, fallbac
   return (hasOpenIssue || fallbackUsed) && canSwitchToManual(status);
 }
 
+export function canSendCustomerInputSms(status: string) {
+  return status === "CUSTOMER_INPUT_SMS_REQUIRED";
+}
+
 export function canRetryAssignment(status: string, hasOpenIssue: boolean) {
   return hasOpenIssue && canSwitchToManual(status);
 }
@@ -1881,7 +2280,7 @@ function canCancel(status: string) {
 }
 
 type SmsNotificationAction = {
-  kind: "send" | "retry" | null;
+  kind: "retry" | null;
   buttonLabel: string | null;
   loadingLabel: string;
   eligibilityLabel: string | null;
@@ -1896,10 +2295,10 @@ export function getSmsNotificationAction(
 ): SmsNotificationAction {
   if (notification.status === "PENDING" && !notification.sentAt) {
     return {
-      kind: "send",
-      buttonLabel: "발송",
-      loadingLabel: "발송 중",
-      eligibilityLabel: null,
+      kind: null,
+      buttonLabel: null,
+      loadingLabel: "처리 중",
+      eligibilityLabel: "5분 주기 자동 발송 대기",
       failureReason: null,
     };
   }
@@ -1933,10 +2332,12 @@ export function getSmsNotificationAction(
 }
 
 function getSmsFailureReasonText(notification: InstallationOrderDetailItem["smsNotifications"][number]) {
-  if (notification.status === "SENT") return "-";
+  if (notification.status === "SENT" || notification.status === "DELIVERED") return "-";
 
   const smsAction = getSmsNotificationAction(notification);
-  const details = [smsAction.failureReason, notification.failureReason].filter(Boolean);
+  const details = [smsAction.failureReason, formatOperationalMessage(notification.failureReason)].filter(
+    (detail) => detail && detail !== "-",
+  );
 
   return details.length > 0 ? details.join(" / ") : "-";
 }

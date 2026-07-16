@@ -3,6 +3,7 @@
 import type { FetchedInstallationOrder } from "@/lib/installation/orders/source/fetch/model";
 import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
+import { getBackofficeButtonClass } from "../backoffice-button-styles";
 import { installationOrderSourceColumns } from "./InstallationOrderSourceTable.columns";
 
 const TABLE_PREFS_KEY = "backoffice.installation-order-source.table.v3";
@@ -21,7 +22,7 @@ export default function InstallationOrderSourceTable({
   return (
     <section>
       <div className="px-6 py-7 lg:px-8">
-        <BackofficePageHeader title="ERP 주문 데이터" meta={`${initialItems.length}건`} />
+        <BackofficePageHeader title="ERP 주문 데이터" />
         {errorMessage ? (
           <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             데이터 처리 중 오류가 발생했습니다. {errorMessage}
@@ -59,7 +60,7 @@ export default function InstallationOrderSourceTable({
                 </label>
                 <button
                   type="submit"
-                  className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                  className={getBackofficeButtonClass("primary")}
                 >
                   조회
                 </button>
@@ -68,6 +69,7 @@ export default function InstallationOrderSourceTable({
             </div>
           )}
         />
+        <p className="mt-3 text-sm font-medium text-zinc-500">{initialItems.length}건</p>
       </div>
     </section>
   );

@@ -62,7 +62,11 @@ describe("installation customer request", () => {
     findUniqueOrder.mockReset();
     updateOrder.mockReset();
     dispatchReadyInstallationOrders.mockReset();
-    dispatchReadyInstallationOrders.mockResolvedValue({ dispatchedCount: 0, skippedCount: 0 });
+    dispatchReadyInstallationOrders.mockResolvedValue({
+      dispatchedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    });
 
     transaction.mockImplementation(async (callback) => callback(createTx()));
   });

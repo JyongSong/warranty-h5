@@ -381,6 +381,25 @@ async function rejectAssignment(
   });
 
   if (assignment.assignmentSource !== "AUTO") {
+    const issue = await createInstallationIssue(
+      {
+        installationOrderId: assignment.installationOrderId,
+        type: "INSTALLER_CANDIDATE_EXHAUSTED",
+        title: "관리자 배정 요청 미수락",
+        description: timedOut
+          ? "관리자가 요청한 설치 기사가 제한 시간 안에 응답하지 않았습니다."
+          : "관리자가 요청한 설치 기사가 배정을 거절했습니다.",
+        metadata: {
+          assignmentId: assignment.id,
+          customerRequestId: assignment.customerRequestId,
+          installerId: assignment.installerId,
+          assignmentSource: assignment.assignmentSource,
+          reason,
+        },
+        now: options.now,
+      },
+      tx as never,
+    );
     await transitionInstallationOrderStatus(
       assignment.installationOrderId,
       INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
@@ -389,6 +408,8 @@ async function rejectAssignment(
         orderData: {
           activeAssignmentId: null,
           currentInstallerId: null,
+          hasOpenIssue: true,
+          lastIssueId: issue.id,
         },
         event: {
           eventType,
@@ -400,6 +421,7 @@ async function rejectAssignment(
             customerRequestId: assignment.customerRequestId,
             installerId: assignment.installerId,
             assignmentSource: assignment.assignmentSource,
+            issueId: issue.id,
           },
         },
       },
@@ -452,7 +474,7 @@ async function rejectAssignment(
     await markAutoFallbackExhausted(tx, assignment, {
       reason,
       now: options.now,
-      description: "자동 배정 요청 3회 한도에 도달했습니다.",
+      description: "최초 요청 후 자동 재시도 1회 한도에 도달했습니다.",
       eventMetadata: {
         autoAttemptCount: attemptedAssignments.autoAttemptCount,
       },
@@ -568,7 +590,7 @@ function isSystemTimeoutResponse(input: ResponseInput) {
     input.response === "REJECT" &&
     input.rejectReason === INSTALLER_RESPONSE_TIMEOUT_REASON;
 }
-const MAX_AUTO_INSTALLER_REQUESTS_PER_RESERVATION = 3;
+const MAX_AUTO_INSTALLER_REQUESTS_PER_RESERVATION = 2;
 
 function createInstallerResponseToken() {
   return randomBytes(16).toString("base64url");
@@ -692,35 +714,18 @@ async function markAutoFallbackExhausted(
 }
 
 function toInstallerVisibleAssignment(assignment: AssignmentWithOrder): AssignmentWithOrder {
-  if (assignment.status === "INSTALLER_ACCEPTED") {
-    return {
-      ...assignment,
-      installationOrder: {
-        ...assignment.installationOrder,
-        productSummary: getOrderProductSummary(assignment.installationOrder),
-        requiredCapabilities: parseRequiredCapabilitiesText(
-          assignment.installationOrder.requiredCapabilitiesText,
-        ),
-      },
-    } as AssignmentWithOrder;
-  }
-
   return {
     ...assignment,
     installationOrder: {
       ...assignment.installationOrder,
-      sourceCustomerName: null,
-      sourcePhone: null,
+      sourceCustomerName:
+        assignment.status === "INSTALLER_ACCEPTED"
+          ? assignment.installationOrder.sourceCustomerName
+          : null,
       productSummary: getOrderProductSummary(assignment.installationOrder),
       requiredCapabilities: parseRequiredCapabilitiesText(
         assignment.installationOrder.requiredCapabilitiesText,
       ),
-      customerRequests: assignment.installationOrder.customerRequests.map((request) => ({
-        ...request,
-        installAddress: request.installAddress1 ?? request.installAddress,
-        installAddressDetail: null,
-        customerPhone: null,
-      })),
     },
   } as AssignmentWithOrder;
 }

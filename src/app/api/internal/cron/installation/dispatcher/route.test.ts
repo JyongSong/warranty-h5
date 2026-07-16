@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import vercelConfig from "../../../../../../../vercel.json";
 import { GET } from "@/app/api/internal/cron/installation/dispatcher/route";
 import { fallbackExpiredInstallationCustomerRequests } from "@/lib/installation/customer/fallback";
 import { remindExpiredInstallationCustomerRequests } from "@/lib/installation/customer/reminder";
 import { dispatchReadyInstallationOrders } from "@/lib/installation/installer/dispatch";
 import {
+  alertOrphanedInstallationOrders,
   alertDueSoonUnassignedOrders,
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
@@ -54,6 +55,7 @@ vi.mock("@/lib/installation/installer/dispatch", () => ({
 }));
 
 vi.mock("@/lib/installation/installer/guards", () => ({
+  alertOrphanedInstallationOrders: vi.fn(),
   alertDueSoonUnassignedOrders: vi.fn(),
   timeoutExpiredInstallerAssignments: vi.fn(),
 }));
@@ -69,6 +71,7 @@ const remindExpiredInstallationCustomerRequestsMock = vi.mocked(remindExpiredIns
 const fallbackExpiredInstallationCustomerRequestsMock = vi.mocked(fallbackExpiredInstallationCustomerRequests);
 const dispatchReadyInstallationOrdersMock = vi.mocked(dispatchReadyInstallationOrders);
 const timeoutExpiredInstallerAssignmentsMock = vi.mocked(timeoutExpiredInstallerAssignments);
+const alertOrphanedInstallationOrdersMock = vi.mocked(alertOrphanedInstallationOrders);
 const alertDueSoonUnassignedOrdersMock = vi.mocked(alertDueSoonUnassignedOrders);
 const sendPendingInstallationNotificationsMock = vi.mocked(sendPendingInstallationNotifications);
 const syncInstallationSmsDeliveryReportsMock = vi.mocked(syncInstallationSmsDeliveryReports);
@@ -85,6 +88,8 @@ function systemSetting(key: string, value: string) {
 
 describe("GET /api/internal/cron/installation/dispatcher", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T03:00:00.000Z")); // 12:00 KST
     process.env.CRON_SECRET = "test-cron-secret";
     vi.clearAllMocks();
 
@@ -134,22 +139,35 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       skippedDuplicateCount: 0,
       failedCount: 0,
     });
-    remindExpiredInstallationCustomerRequestsMock.mockResolvedValue({ remindedCount: 1, skippedCount: 0 });
+    remindExpiredInstallationCustomerRequestsMock.mockResolvedValue({
+      remindedCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+    });
     fallbackExpiredInstallationCustomerRequestsMock.mockResolvedValue({
       fallbackCount: 1,
       manualRequiredCount: 0,
       skippedCount: 2,
     });
-    dispatchReadyInstallationOrdersMock.mockResolvedValue({ dispatchedCount: 4, skippedCount: 5 });
+    dispatchReadyInstallationOrdersMock.mockResolvedValue({
+      dispatchedCount: 4,
+      skippedCount: 5,
+      failedCount: 0,
+    });
     timeoutExpiredInstallerAssignmentsMock.mockResolvedValue({ timedOutCount: 6, failedCount: 0 });
+    alertOrphanedInstallationOrdersMock.mockResolvedValue({ issueCount: 0 });
     alertDueSoonUnassignedOrdersMock.mockResolvedValue({ issueCount: 7 });
-    sendPendingInstallationNotificationsMock.mockResolvedValue({ sentCount: 8, failedCount: 1 });
+    sendPendingInstallationNotificationsMock.mockResolvedValue({ sentCount: 8, failedCount: 0 });
     syncInstallationSmsDeliveryReportsMock.mockResolvedValue({
       checkedCount: 9,
       updatedCount: 9,
       deliveryFailedCount: 1,
       failedCount: 0,
     });
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
   });
 
   it("does not register the dispatcher job in Vercel cron config", () => {
@@ -299,12 +317,18 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     expect(timeoutExpiredInstallerAssignmentsMock).toHaveBeenCalledWith({
       limit: 25,
     });
+    expect(alertOrphanedInstallationOrdersMock).toHaveBeenCalledWith({
+      limit: 50,
+    });
     expect(alertDueSoonUnassignedOrdersMock).toHaveBeenCalledWith({
       limit: 50,
     });
     expect(sendPendingInstallationNotificationsMock).toHaveBeenCalledWith({
       limit: 9,
     });
+    expect(sendPendingInstallationNotificationsMock.mock.invocationCallOrder[0]).toBeLessThan(
+      alertOrphanedInstallationOrdersMock.mock.invocationCallOrder[0],
+    );
     expect(syncInstallationSmsDeliveryReportsMock).toHaveBeenCalledWith({
       limit: 11,
     });
@@ -335,12 +359,13 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
           skippedDuplicateCount: 0,
           failedCount: 0,
         },
-        remindCustomerRequests: { remindedCount: 1, skippedCount: 0 },
+        remindCustomerRequests: { remindedCount: 1, skippedCount: 0, failedCount: 0 },
         fallbackCustomerRequests: { fallbackCount: 1, manualRequiredCount: 0, skippedCount: 2 },
-        dispatchReadyOrders: { dispatchedCount: 4, skippedCount: 5 },
+        dispatchReadyOrders: { dispatchedCount: 4, skippedCount: 5, failedCount: 0 },
         timeoutInstallerAssignments: { timedOutCount: 6, failedCount: 0 },
+        alertOrphanedOrders: { issueCount: 0 },
         alertDueSoonOrders: { issueCount: 7 },
-        sendInstallationNotifications: { sentCount: 8, failedCount: 1 },
+        sendInstallationNotifications: { sentCount: 8, failedCount: 0 },
         syncSmsDeliveryReports: {
           checkedCount: 9,
           updatedCount: 9,
@@ -354,6 +379,7 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
         fallbackCustomerRequests: { durationMs: expect.any(Number) },
         dispatchReadyOrders: { durationMs: expect.any(Number) },
         timeoutInstallerAssignments: { durationMs: expect.any(Number) },
+        alertOrphanedOrders: { durationMs: expect.any(Number) },
         alertDueSoonOrders: { durationMs: expect.any(Number) },
         sendInstallationNotifications: { durationMs: expect.any(Number) },
         syncSmsDeliveryReports: { durationMs: expect.any(Number) },
@@ -361,6 +387,8 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       config: {
         lockTtlMs: 180000,
         customerInputRequestMode: "auto",
+        smsSendWindow: { start: "08:00", end: "20:00" },
+        smsSendWindowOpen: true,
         limits: {
           processInstallationOrders: 7,
           remindCustomerRequests: 25,
@@ -417,6 +445,66 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       },
       config: {
         customerInputRequestMode: "manual",
+      },
+    });
+  });
+
+  it("keeps pending SMS unsent outside the configured Seoul window while other steps run", async () => {
+    vi.setSystemTime(new Date("2026-01-01T11:00:00.000Z")); // 20:00 KST
+
+    const response = await GET(
+      new Request("http://localhost/api/internal/cron/installation/dispatcher", {
+        headers: {
+          authorization: "Bearer test-cron-secret",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(sendPendingInstallationNotificationsMock).not.toHaveBeenCalled();
+    expect(processPendingInstallationOrdersMock).toHaveBeenCalled();
+    expect(remindExpiredInstallationCustomerRequestsMock).toHaveBeenCalled();
+    expect(dispatchReadyInstallationOrdersMock).toHaveBeenCalled();
+    expect(syncInstallationSmsDeliveryReportsMock).toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({
+      results: {
+        sendInstallationNotifications: {
+          sentCount: 0,
+          failedCount: 0,
+          skippedQuietHours: true,
+        },
+      },
+      config: {
+        smsSendWindow: { start: "08:00", end: "20:00" },
+        smsSendWindowOpen: false,
+      },
+    });
+  });
+
+  it("marks the cron degraded when an order-level automatic step fails", async () => {
+    dispatchReadyInstallationOrdersMock.mockResolvedValue({
+      dispatchedCount: 0,
+      skippedCount: 1,
+      failedCount: 1,
+    });
+
+    const response = await GET(
+      new Request("http://localhost/api/internal/cron/installation/dispatcher", {
+        headers: {
+          authorization: "Bearer test-cron-secret",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(cronJobStatusUpdateMock).toHaveBeenLastCalledWith({
+      where: { key: "installation.dispatcher" },
+      data: {
+        lastStartedAt: expect.any(Date),
+        lastFinishedAt: expect.any(Date),
+        lastStatus: "DEGRADED",
+        lastDurationMs: expect.any(Number),
+        lastErrorCode: "INSTALLATION_DISPATCHER_PARTIAL_FAILURE",
       },
     });
   });

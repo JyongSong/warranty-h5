@@ -304,6 +304,15 @@ describe("transitionInstallationOrderStatus", () => {
         statusChangedAt: new Date("2026-06-11T00:00:00.000Z"),
       },
     });
+    expect(updateManyIssues).toHaveBeenCalledWith({
+      where: { installationOrderId: "order-1", status: "OPEN" },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: new Date("2026-06-11T00:00:00.000Z"),
+        resolutionNote: "설치건 상태가 CANCELLED로 전환되어 남은 예외를 종결했습니다.",
+        updatedAt: new Date("2026-06-11T00:00:00.000Z"),
+      },
+    });
   });
 
   it("treats completed orders as terminal", async () => {

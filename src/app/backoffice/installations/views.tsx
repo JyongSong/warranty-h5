@@ -167,6 +167,7 @@ export async function InstallationOrderListView({
   return (
     <InstallationOrderList
       basePath={basePath}
+      detailSearchQuery={buildBackofficeNextPath("", searchParams).slice(1)}
       historyDateRange={historyDateRange}
       initialItems={items}
       searchCondition={searchCondition}

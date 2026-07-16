@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBackofficeMenuItemActive } from "./BackofficeSidebarNav";
+import { isBackofficeMenuItemActive, isBackofficeSubmenuExpanded } from "./BackofficeSidebarNav";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -25,6 +25,18 @@ describe("isBackofficeMenuItemActive", () => {
     expect(isBackofficeMenuItemActive("/backoffice/installations-archive", "/backoffice/installations")).toBe(false);
     expect(isBackofficeMenuItemActive("/backoffice/installations", "/backoffice")).toBe(false);
     expect(isBackofficeMenuItemActive("/backoffice/settings/system-settings", "/backoffice/settings")).toBe(true);
+  });
+
+  it("keeps active submenus open only while the desktop sidebar is expanded", () => {
+    const activeSettingsState = {
+      isActive: true,
+      isManuallyExpanded: false,
+      collapsedPathname: null,
+      pathname: "/backoffice/settings/system-status",
+    };
+
+    expect(isBackofficeSubmenuExpanded({ ...activeSettingsState, collapsed: false })).toBe(true);
+    expect(isBackofficeSubmenuExpanded({ ...activeSettingsState, collapsed: true })).toBe(false);
   });
 
   it("renders sidebar menu labels with a controlled medium weight", () => {
@@ -210,13 +222,29 @@ describe("isBackofficeMenuItemActive", () => {
     expect(source).toContain('aria-label={`${item.label} 하위 메뉴`}');
   });
 
+  it("keeps the desktop settings submenu mounted while navigating to the first child page", () => {
+    const source = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
+
+    expect(source).toContain("function handleSubmenuNavigate()");
+    expect(source).toContain("if (collapsed || onNavigate)");
+    expect(source).toContain("setIsManuallyExpanded(false)");
+    expect(source).toContain("setCollapsedPathname(null)");
+    expect(source).toContain("onNavigate?.()");
+    expect(source).toContain("onClick={handleSubmenuNavigate}");
+  });
+
   it("supports a mobile hamburger menu without duplicating menu item state", () => {
     const layoutSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const sidebarSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
 
     expect(layoutSource).toContain("BackofficeMobileNav");
-    expect(layoutSource).toContain('className="hidden w-64 shrink-0 border-r border-slate-200 bg-white md:block"');
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar");
+    expect(desktopSidebarSource).toContain('collapsed ? "w-16" : "w-64"');
     expect(mobileNavSource).toContain('aria-label={open ? "백오피스 메뉴 닫기" : "백오피스 메뉴 열기"}');
     expect(mobileNavSource).toContain('className="sticky top-0 z-30 border-b border-zinc-200 bg-white md:hidden"');
     expect(mobileNavSource).toContain('className="relative h-full w-72 max-w-[82vw] border-r border-slate-200 bg-white shadow-xl"');
@@ -225,13 +253,39 @@ describe("isBackofficeMenuItemActive", () => {
     expect(sidebarSource).toContain("onClick={onNavigate}");
   });
 
+  it("supports a persistent minimized desktop sidebar", () => {
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
+    const sidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"),
+      "utf8",
+    );
+
+    expect(desktopSidebarSource).toContain("backoffice-sidebar-collapsed-v1");
+    expect(desktopSidebarSource).toContain("window.localStorage.getItem");
+    expect(desktopSidebarSource).toContain("window.localStorage.setItem");
+    expect(desktopSidebarSource).toContain('collapsed ? "w-16" : "w-64"');
+    expect(desktopSidebarSource).toContain('aria-label={collapsed ? "사이드바 펼치기" : "사이드바 최소화"}');
+    expect(desktopSidebarSource).toContain("iconOnly={collapsed}");
+    expect(sidebarSource).toContain("collapsed?: boolean");
+    expect(sidebarSource).toContain('title={collapsed ? item.label : undefined}');
+    expect(sidebarSource).toContain("group-hover/sidebar-item:opacity-100");
+  });
+
   it("renders the logged-in account as a compact account panel menu button", () => {
     const layoutSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("<BackofficeUserMenu email={user.email} />");
-    expect(layoutSource).not.toContain("{user.email}</p>");
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user?.email} />");
+    expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
+    expect(desktopSidebarSource).toContain('"mt-auto border-t border-slate-200 bg-white"');
     expect(mobileNavSource).toContain("<BackofficeUserMenu email={userEmail} compact />");
     expect(mobileNavSource).not.toContain("{userEmail}</p>");
     expect(userMenuSource).toContain("email: string");
@@ -242,5 +296,19 @@ describe("isBackofficeMenuItemActive", () => {
     expect(userMenuSource).toContain('aria-label={`${email} 계정 메뉴`}');
     expect(userMenuSource).toContain("border-rose-100");
     expect(userMenuSource).toContain("text-rose-700");
+  });
+
+  it("opens a password change dialog from the logged-in account menu", () => {
+    const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
+    const dialogSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficePasswordDialog.tsx"), "utf8");
+
+    expect(userMenuSource).toContain("비밀번호 변경");
+    expect(userMenuSource).toContain("<BackofficePasswordDialog");
+    expect(dialogSource).toContain("changeBackofficePasswordAction({");
+    expect(dialogSource).not.toContain("/api/login/change-password");
+    expect(dialogSource).toContain('autoComplete="current-password"');
+    expect(dialogSource).toContain('autoComplete="new-password"');
+    expect(dialogSource).toContain('role="dialog"');
+    expect(dialogSource).toContain("비밀번호가 변경되었습니다.");
   });
 });

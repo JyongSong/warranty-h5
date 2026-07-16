@@ -358,30 +358,33 @@ order by indexname;
 Supabase Dashboard에서 다음을 설정한다.
 
 1. Authentication > Providers > Email을 활성화한다.
-2. 운영 정책에 맞게 email confirmation 사용 여부를 결정한다.
-3. Authentication > Users에서 관리자 이메일 사용자를 생성한다.
-4. 생성한 이메일과 비밀번호로 앱의 `/login`에서 로그인한다.
+2. 운영 환경에 `SUPABASE_SECRET_KEY`를 서버 전용 환경 변수로 설정한다.
+   레거시 `SUPABASE_SERVICE_ROLE_KEY`도 호환되지만 새 secret key 사용을 권장한다.
 
 Supabase Auth 사용자는 앱 권한과 별개다. 앱 내부 백오피스 권한은 `backoffice_users` 테이블의 `level` 값으로 결정된다.
+
+관리자는 `/backoffice/settings/users`에서 이메일, 초기 레벨, 초기 비밀번호를 입력한다.
+서버는 Supabase Auth Admin API의 `createUser()`를 `email_confirm: true`로 호출하고,
+성공한 Auth user id와 앱 권한을 `backoffice_users`에 함께 저장한다. 앱 DB 저장이 실패하면
+방금 생성한 Auth 사용자를 삭제해 두 시스템의 불일치를 보상한다.
+
+사용자는 초기 비밀번호로 `/login`에서 로그인하고, 로그인 후 내 비밀번호 변경 메뉴에서
+직접 비밀번호를 변경할 수 있다. 비밀번호 찾기 메일은 제공하지 않으며, 분실한 경우 관리자가
+유저 관리 화면에서 새 비밀번호로 재설정한다. 따라서 현재 흐름에는 Custom SMTP나 Auth Redirect URL이 필요 없다.
 
 로그인 성공 시 `src/lib/login/backofficeAuth.ts`가 다음 순서로 사용자를 연결한다.
 
 1. Supabase Auth user id로 `backoffice_users.supabase_user_id`를 찾는다.
 2. 없으면 이메일 해시가 같은 pending user를 찾고 연결한다.
-3. pending user도 없으면 `level = 0`인 백오피스 사용자를 새로 만든다.
-
-관리 권한이 필요하면 첫 로그인 후 Supabase Table Editor 또는 SQL Editor에서 해당 `backoffice_users` row의 `level`을 올린다.
-
-```sql
-update backoffice_users
-set level = 1
-where supabase_user_id = '<supabase-auth-user-id>';
-```
+3. pending user도 없으면 등록되지 않은 계정으로 로그인 세션을 제거하고 접근을 거절한다.
 
 현재 앱 권한 기준:
 
-- `level = 0`: 제한된 조회 권한
+- `level = 0`: 백오피스 접근 불가
 - `level = 1`: 관리자 기능 접근 가능
+
+Supabase Dashboard에서 직접 만든 기존 사용자는 같은 이메일의 미연결 앱 레코드가 있으면
+첫 로그인 시 연결할 수 있다. 새 사용자는 백오피스 화면에서 생성하는 방식을 사용한다.
 
 ## 7. 앱 동작 확인
 
@@ -400,10 +403,9 @@ DB migration 후 앱 배포가 완료되면 다음 화면과 API를 확인한다
 - Vercel 또는 배포 환경의 Environment Variables가 Supabase 프로젝트 값으로 설정되어 있다.
 - `DATABASE_URL`은 transaction pooler `:6543`을 사용한다.
 - `DIRECT_URL`은 session pooler `:5432`을 사용한다.
-- `SUPABASE_SERVICE_ROLE_KEY`가 클라이언트 코드나 `NEXT_PUBLIC_` 환경 변수에 노출되지 않는다.
+- `SUPABASE_SECRET_KEY`가 서버 환경에만 설정되어 있고 클라이언트 번들에 노출되지 않는다.
 - 첫 관리자 사용자의 `backoffice_users.level`이 `1` 이상이다.
 - `NEXT_PUBLIC_BASE_URL`이 앱 기본 URL 및 SMS 링크용 운영 도메인으로 설정되어 있다.
 - 개인정보 암호화 키 `PII_ENCRYPTION_KEY`, `PII_HASH_KEY`가 기존 운영 데이터와 호환되는 값인지 확인되어 있다.
 
 문제가 발생하면 운영 DB 백업 파일로 복구할지, migration forward-fix를 적용할지 운영 담당자가 결정한다.
-

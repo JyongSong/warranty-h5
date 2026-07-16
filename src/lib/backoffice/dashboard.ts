@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { INSTALLATION_CRON_JOBS } from "@/lib/cron/status";
 
-type CronHealthStatus = "healthy" | "running" | "stale" | "failed" | "disabled" | "locked" | "notStarted";
+type CronHealthStatus = "healthy" | "running" | "stale" | "failed" | "degraded" | "disabled" | "locked" | "notStarted";
 type CronHealthTone = "success" | "warning" | "danger" | "muted";
 
 const CHART_STATUS_ITEMS = [
@@ -44,7 +44,7 @@ export async function getBackofficeDashboardChartSummary({
 } = {}) {
   const normalizedDays = Math.max(1, Math.min(31, Math.floor(days)));
   const dayBuckets = buildKstDayBuckets(normalizedDays, now);
-  const [dailyTrend, queueStatusItems] = await Promise.all([
+  const [dailyTrend, queueStatusItems, attentionCount] = await Promise.all([
     Promise.all(
       dayBuckets.map(async (bucket) => {
         const [createdOrders, completedOrders] = await Promise.all([
@@ -84,6 +84,15 @@ export async function getBackofficeDashboardChartSummary({
         }),
       })),
     ),
+    prisma.installationOrder.count({
+      where: {
+        OR: [
+          { hasOpenIssue: true },
+          { status: "CUSTOMER_INPUT_SMS_REQUIRED" },
+          { status: "WAITING_ADMIN_REVIEW" },
+        ],
+      },
+    }),
   ]);
 
   return {
@@ -95,6 +104,7 @@ export async function getBackofficeDashboardChartSummary({
     },
     dailyTrend,
     queueStatusItems,
+    attentionCount,
   };
 }
 
@@ -197,6 +207,7 @@ function deriveCronHealth({
     return { status: "stale", label: "호출 지연", tone: "danger" };
   }
   if (lastStatus === "FAILED") return { status: "failed", label: "실패", tone: "danger" };
+  if (lastStatus === "DEGRADED") return { status: "degraded", label: "일부 실패", tone: "warning" };
   if (lastStartedAt && (!lastFinishedAt || lastStartedAt > lastFinishedAt)) {
     return { status: "running", label: "실행 중", tone: "warning" };
   }

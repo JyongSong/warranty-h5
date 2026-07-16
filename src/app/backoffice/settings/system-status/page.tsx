@@ -64,7 +64,7 @@ function CronJobStatusTable({ jobs }: { jobs: CronJob[] }) {
     {
       label: "마지막 결과",
       render: (job: CronJob) => (
-        <StatusValue tone={job.lastStatus === "FAILED" ? "danger" : "default"}>
+        <StatusValue tone={job.lastStatus === "FAILED" ? "danger" : job.lastStatus === "DEGRADED" ? "warning" : "default"}>
           {formatCronStatus(job.lastStatus)}
         </StatusValue>
       ),
@@ -161,6 +161,7 @@ function formatCronStatus(value: string | null) {
     DISABLED: "설정 비활성",
     LOCKED: "중복 실행 skip",
     FAILED: "실패",
+    DEGRADED: "일부 실패",
   };
 
   if (!value) return "-";

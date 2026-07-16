@@ -146,6 +146,7 @@ describe("installation installer response", () => {
     createStatusEvent.mockReset();
     countIssues.mockResolvedValue(0);
     findIssue.mockResolvedValue(null);
+    createIssue.mockResolvedValue({ id: "issue-1" });
     findFirstAssignment.mockResolvedValue(null);
 
     transaction.mockImplementation(async (callback) => callback(createTx()));
@@ -189,7 +190,7 @@ describe("installation installer response", () => {
     expect(result.assignment?.installerTokenExpiresAt).toBeNull();
   });
 
-  it("hides customer identity, phone, and detailed address before installer response", async () => {
+  it("shows customer phone and detailed address before installer response", async () => {
     findUniqueAssignment.mockResolvedValue(assignment);
 
     const result = await getInstallerAssignmentByToken("installer-token", {
@@ -197,10 +198,16 @@ describe("installation installer response", () => {
     });
 
     expect(result.assignment?.installationOrder.sourceCustomerName).toBeNull();
-    expect(result.assignment?.installationOrder.sourcePhone).toBeNull();
-    expect(result.assignment?.installationOrder.customerRequests[0]?.customerPhone).toBeNull();
-    expect(result.assignment?.installationOrder.customerRequests[0]?.installAddress).toBe("서울 강남구");
-    expect(result.assignment?.installationOrder.customerRequests[0]?.installAddressDetail).toBeNull();
+    expect(result.assignment?.installationOrder.sourcePhone).toBe("010-9999-0000");
+    expect(result.assignment?.installationOrder.customerRequests[0]?.customerPhone).toBe(
+      "010-9999-0000",
+    );
+    expect(result.assignment?.installationOrder.customerRequests[0]?.installAddress).toBe(
+      "서울 강남구 테헤란로 1",
+    );
+    expect(result.assignment?.installationOrder.customerRequests[0]?.installAddressDetail).toBe(
+      "12층 1201호",
+    );
     expect(result.assignment?.installationOrder.productSummary).toBe(
       "용역 도어락 설치비(K100) x1 / 월패드 연동(RF447) x1 앱 설치",
     );
@@ -717,6 +724,8 @@ describe("installation installer response", () => {
       data: {
         activeAssignmentId: null,
         currentInstallerId: null,
+        hasOpenIssue: true,
+        lastIssueId: "issue-1",
         status: "READY_FOR_CANDIDATE_SELECTION",
         statusChangedAt: now,
       },
@@ -843,6 +852,8 @@ describe("installation installer response", () => {
       data: {
         activeAssignmentId: null,
         currentInstallerId: null,
+        hasOpenIssue: true,
+        lastIssueId: "issue-1",
         status: "READY_FOR_CANDIDATE_SELECTION",
         statusChangedAt: now,
       },
@@ -897,22 +908,21 @@ describe("installation installer response", () => {
     });
   });
 
-  it("stops automatic fallback after the third auto rejection", async () => {
+  it("stops automatic fallback after the first automatic retry", async () => {
     const now = new Date("2026-06-11T02:00:00.000Z");
     findUniqueAssignment.mockResolvedValue({
       ...assignment,
-      id: "assignment-3",
-      installerId: "installer-3",
+      id: "assignment-2",
+      installerId: "installer-2",
       installationOrder: {
         ...assignment.installationOrder,
-        activeAssignmentId: "assignment-3",
+        activeAssignmentId: "assignment-2",
       },
     });
-    updateAssignment.mockResolvedValue({ id: "assignment-3", status: "INSTALLER_REJECTED" });
+    updateAssignment.mockResolvedValue({ id: "assignment-2", status: "INSTALLER_REJECTED" });
     findManyAssignments.mockResolvedValue([
       { installerId: "installer-1", assignmentSource: "AUTO" },
       { installerId: "installer-2", assignmentSource: "AUTO" },
-      { installerId: "installer-3", assignmentSource: "AUTO" },
     ]);
     findManyInstallers.mockResolvedValue([
       {
@@ -946,7 +956,7 @@ describe("installation installer response", () => {
         installationOrderId: "order-1",
         type: "INSTALLER_CANDIDATE_EXHAUSTED",
         title: "후보 기사 소진",
-        description: "자동 배정 요청 3회 한도에 도달했습니다.",
+        description: "최초 요청 후 자동 재시도 1회 한도에 도달했습니다.",
       }),
       select: { id: true },
     });
@@ -966,9 +976,9 @@ describe("installation installer response", () => {
         eventType: "INSTALLER_CANDIDATE_EXHAUSTED",
         reason: "일정 불가",
         metadata: expect.objectContaining({
-          assignmentId: "assignment-3",
+          assignmentId: "assignment-2",
           issueId: "issue-1",
-          autoAttemptCount: 3,
+          autoAttemptCount: 2,
         }),
       }),
     });
