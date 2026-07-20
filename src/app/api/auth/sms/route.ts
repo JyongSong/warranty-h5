@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendSms } from "@/lib/sms";
 import { normalizePhone } from "@/lib/phone";
-
-// In-memory verification code store
-// key: normalized phone number, value: { code: string; expiresAt: number }
-const codeStore = new Map<string, { code: string; expiresAt: number }>();
+import { smsStore } from "@/lib/store/smsStore";
 
 export async function POST(request: Request) {
   try {
@@ -25,7 +22,7 @@ export async function POST(request: Request) {
       
       // 2. Set expiration (3 minutes from now)
       const expiresAt = Date.now() + 3 * 60 * 1000;
-      codeStore.set(normalized, { code: generatedCode, expiresAt });
+      smsStore.set(normalized, { code: generatedCode, expiresAt });
       
       // 3. Send SMS using solapi
       const smsText = `[아카라 라이프] 본인확인 인증번호 [${generatedCode}]를 입력해 주세요. (3분 이내)`;
@@ -42,13 +39,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "인증번호를 입력해 주세요." }, { status: 400 });
       }
 
-      const stored = codeStore.get(normalized);
+      const stored = smsStore.get(normalized);
       if (!stored) {
         return NextResponse.json({ error: "발송된 인증번호가 없거나 만료되었습니다." }, { status: 400 });
       }
 
       if (Date.now() > stored.expiresAt) {
-        codeStore.delete(normalized);
+        smsStore.delete(normalized);
         return NextResponse.json({ error: "인증시간이 만료되었습니다. 다시 시도해 주세요." }, { status: 400 });
       }
 
@@ -57,7 +54,7 @@ export async function POST(request: Request) {
       }
 
       // Valid code, clear store
-      codeStore.delete(normalized);
+      smsStore.delete(normalized);
       return NextResponse.json({ success: true, message: "인증되었습니다." });
     }
 
