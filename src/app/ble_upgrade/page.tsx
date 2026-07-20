@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import QrScanModal from "@/app/reg/QrScanModal";
+import { normalizePhone, formatKrPhone } from "@/lib/phone";
 
 export default function BleUpgradePage() {
   const [sn, setSn] = useState("");
@@ -12,25 +13,132 @@ export default function BleUpgradePage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [deviceInfo, setDeviceInfo] = useState<{
-    sn: string;
-    model: string;
-    purchaseStatus: string;
-  } | null>(null);
 
   const [isScanning, setIsScanning] = useState(false);
 
-  // 校验 SN 的合法性
+  // SMS Verification States
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [sendingSms, setSendingSms] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [smsTimer, setSmsTimer] = useState(0);
+  const [smsMessage, setSmsMessage] = useState<{ text: string; isError: boolean } | null>(null);
+
+  // SMS Timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (smsTimer > 0) {
+      interval = setInterval(() => {
+        setSmsTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (smsTimer === 0 && smsSent && !isPhoneVerified) {
+      setSmsMessage({ text: "인증 시간이 만료되었습니다. 다시 시도해 주세요.", isError: true });
+      setSmsSent(false);
+    }
+    return () => clearInterval(interval);
+  }, [smsTimer, smsSent, isPhoneVerified]);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhone(formatKrPhone(e.target.value));
+    setIsPhoneVerified(false);
+    setSmsSent(false);
+    setSmsTimer(0);
+    setSmsMessage(null);
+  };
+
+  const sendSmsCode = async () => {
+    const normalizedPhone = normalizePhone(phone);
+    if (normalizedPhone.length < 9) {
+      setSmsMessage({ text: "올바른 휴대폰 번호를 입력해 주세요.", isError: true });
+      return;
+    }
+
+    setSendingSms(true);
+    setSmsMessage(null);
+
+    try {
+      const response = await fetch("/api/auth/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", phone: normalizedPhone }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "인증번호 발송에 실패했습니다.");
+      }
+
+      setSmsSent(true);
+      setVerificationCode("");
+      setIsPhoneVerified(false);
+      setSmsTimer(180); // 3 mins
+      setSmsMessage({ text: "인증번호가 발송되었습니다.", isError: false });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSmsMessage({ text: msg, isError: true });
+    } finally {
+      setSendingSms(false);
+    }
+  };
+
+  const verifySmsCode = async () => {
+    const normalizedPhone = normalizePhone(phone);
+    if (!verificationCode.trim()) {
+      setSmsMessage({ text: "인증번호를 입력해 주세요.", isError: true });
+      return;
+    }
+
+    setVerifyingCode(true);
+    setSmsMessage(null);
+
+    try {
+      const response = await fetch("/api/auth/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", phone: normalizedPhone, code: verificationCode }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "인증번호 확인에 실패했습니다.");
+      }
+
+      setIsPhoneVerified(true);
+      setSmsTimer(0);
+      setSmsMessage({ text: "인증되었습니다.", isError: false });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSmsMessage({ text: msg, isError: true });
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const handleRedirectToMall = (deviceInfo: { sn: string }) => {
+    const mallDomain = process.env.NEXT_PUBLIC_CAFE24_MALL_DOMAIN || "aqaralife.shop";
+    const productNo = process.env.NEXT_PUBLIC_CAFE24_PRODUCT_NO || "472";
+
+    const targetUrl = new URL(`https://${mallDomain}/product/detail.html`);
+    targetUrl.searchParams.set("product_no", productNo);
+    targetUrl.searchParams.set("sn", deviceInfo.sn);
+    targetUrl.searchParams.set("name", name.trim());
+    targetUrl.searchParams.set("phone", phone.trim());
+    if (email.trim()) {
+      targetUrl.searchParams.set("email", email.trim());
+    }
+
+    window.location.href = targetUrl.toString();
+  };
+
   const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
     setSuccessMessage("");
-    setDeviceInfo(null);
 
     const trimmedSn = sn.trim();
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
-    const trimmedEmail = email.trim();
 
     if (!trimmedSn) {
       setErrorMessage("기기 SN을 입력해 주세요.");
@@ -40,8 +148,8 @@ export default function BleUpgradePage() {
       setErrorMessage("이름을 입력해 주세요.");
       return;
     }
-    if (!trimmedPhone) {
-      setErrorMessage("휴대폰 번호를 입력해 주세요.");
+    if (!trimmedPhone || !isPhoneVerified) {
+      setErrorMessage("휴대폰 번호 인증을 완료해 주세요.");
       return;
     }
 
@@ -59,40 +167,14 @@ export default function BleUpgradePage() {
         throw new Error(data.message || "기기 검증에 실패했습니다.");
       }
 
-      setDeviceInfo(data.device);
-      setSuccessMessage(data.message);
+      // Directly redirect to mall upon success
+      handleRedirectToMall(data.device);
+      
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
-    } finally {
-      setLoadingState(false);
+      setLoading(false); // Only stop loading if error, redirect will unload the page
     }
-  };
-
-  // 跳转至 Cafe24 结算
-  const handleRedirectToMall = () => {
-    if (!deviceInfo) return;
-
-    // 默认使用商城域名 aqaralife.shop，商品编号 472
-    const mallDomain = process.env.NEXT_PUBLIC_CAFE24_MALL_DOMAIN || "aqaralife.shop";
-    const productNo = process.env.NEXT_PUBLIC_CAFE24_PRODUCT_NO || "472";
-
-    // 构造跳转链接
-    const targetUrl = new URL(`https://${mallDomain}/product/detail.html`);
-    targetUrl.searchParams.set("product_no", productNo);
-    targetUrl.searchParams.set("sn", deviceInfo.sn);
-    targetUrl.searchParams.set("name", name.trim());
-    targetUrl.searchParams.set("phone", phone.trim());
-    if (email.trim()) {
-      targetUrl.searchParams.set("email", email.trim());
-    }
-
-    // 跳转
-    window.location.href = targetUrl.toString();
-  };
-
-  const setLoadingState = (state: boolean) => {
-    setLoading(state);
   };
 
   return (
@@ -125,12 +207,35 @@ export default function BleUpgradePage() {
                 L100 SE<br />
                 Zigbee 기능 업그레이드
               </h1>
-              <p className="text-sm leading-relaxed text-zinc-600">
-                출고 시 BLE 전용으로 판매된 L100 SE 도어락을 유료 업그레이드하시면 스마트홈 연동을 위한 Zigbee 기능(망 연동)이 잠금 해제됩니다.
-              </p>
-              <p className="text-sm leading-relaxed text-zinc-600">
-                본 페이지에서 기기 일련번호(SN)와 구매자 정보를 검증한 뒤 공식 쇼핑몰 결제 페이지로 이동해 주시기 바랍니다. 결제가 완료되면 해당 기기의 업그레이드 상태가 즉시 시스템에 반영됩니다.
-              </p>
+              
+              <div className="mt-8 space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-sky-600 mb-3">구매 후 사용 가능한 주요 기능</h3>
+                  <ul className="list-disc list-inside text-sm leading-relaxed text-zinc-700 space-y-1.5 marker:text-zinc-400">
+                    <li>스마트 자동화</li>
+                    <li>원격 잠금 해제</li>
+                    <li>원격 도어락 상태 확인</li>
+                    <li>원격 도어락 알림 수신</li>
+                    <li>Aqara 카메라 및 도어벨과의 기기 연동</li>
+                    <li>Google Home 등 타사 플랫폼 연동</li>
+                  </ul>
+                  <p className="mt-3 text-sm font-semibold text-zinc-800">
+                    ※ L100 SE는 기능 업그레이드 후에도 SmartThings를 지원하지 않습니다.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-sky-600 mb-3">필수 안내사항</h3>
+                  <ul className="list-disc list-inside text-sm leading-relaxed text-zinc-700 space-y-1.5 marker:text-zinc-400">
+                    <li>본 상품은 L100 SE의 Aqara Hub 연결 기능을 활성화하는 유상 업그레이드 상품입니다.</li>
+                    <li>상기 기능은 업그레이드 구매 후 Aqara Hub를 연결해야 사용할 수 있습니다.</li>
+                    <li>기능 업그레이드는 계정이 아닌 해당 도어락의 제품 SN을 기준으로 적용되며, 기기를 양도하거나 계정을 변경해도 업그레이드 권한은 해당 기기에 유지됩니다.</li>
+                    <li>구매 전 대상 제품이 L100 SE인지 확인해야 합니다.</li>
+                    <li>이미 업그레이드가 완료된 제품은 중복 구매할 수 없습니다.</li>
+                    <li>L100 SE는 SmartThings를 지원하지 않습니다.</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
             {/* Price Box */}
@@ -138,7 +243,7 @@ export default function BleUpgradePage() {
               <span className="text-xs font-medium text-zinc-400">업그레이드 금액</span>
               <div className="mt-1 flex items-baseline gap-1">
                 <span className="text-2xl font-bold">₩</span>
-                <span className="text-4xl font-extrabold tracking-tight">39,000</span>
+                <span className="text-4xl font-extrabold tracking-tight">99,000</span>
               </div>
               <p className="mt-2 text-xs leading-normal text-zinc-400">
                 공식 쇼핑몰 결제 페이지로 이동 후 안전하게 결제를 진행할 수 있습니다. (신용카드, Toss, 카카오페이 지원)
@@ -167,7 +272,6 @@ export default function BleUpgradePage() {
                       value={sn}
                       onChange={(e) => {
                         setSn(e.target.value.toUpperCase());
-                        setDeviceInfo(null);
                       }}
                       placeholder="예: A01460/LS1EJ000059"
                       className="flex-1 min-w-0 rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors"
@@ -195,7 +299,6 @@ export default function BleUpgradePage() {
                     value={name}
                     onChange={(e) => {
                       setName(e.target.value);
-                      setDeviceInfo(null);
                     }}
                     placeholder="예: 홍길동"
                     className="w-full rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors"
@@ -204,23 +307,61 @@ export default function BleUpgradePage() {
                   />
                 </div>
 
-                {/* Phone Field */}
+                {/* Phone Field with SMS Verification */}
                 <div>
                   <label className="block text-sm font-semibold text-zinc-700 mb-1">
                     휴대폰 번호
                   </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => {
-                      setPhone(e.target.value);
-                      setDeviceInfo(null);
-                    }}
-                    placeholder="예: 01012345678"
-                    className="w-full rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors"
-                    required
-                    disabled={loading}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      placeholder="예: 010-1234-5678"
+                      className="flex-1 min-w-0 rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors disabled:bg-zinc-100 disabled:text-zinc-500"
+                      required
+                      disabled={loading || isPhoneVerified}
+                    />
+                    {!isPhoneVerified && (
+                      <button
+                        type="button"
+                        onClick={sendSmsCode}
+                        disabled={sendingSms || normalizePhone(phone).length < 9 || smsTimer > 0}
+                        className="shrink-0 rounded-xl border border-zinc-300 bg-zinc-50 hover:bg-zinc-100 active:bg-zinc-200 px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {sendingSms ? "발송 중..." : smsTimer > 0 ? `${smsTimer}초` : "인증번호 발송"}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Verification Code Input */}
+                  {smsSent && !isPhoneVerified && (
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                        placeholder="인증번호 6자리"
+                        className="flex-1 min-w-0 rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors"
+                        disabled={loading || verifyingCode}
+                      />
+                      <button
+                        type="button"
+                        onClick={verifySmsCode}
+                        disabled={verifyingCode || !verificationCode.trim()}
+                        className="shrink-0 rounded-xl bg-zinc-800 text-white hover:bg-zinc-700 active:bg-zinc-900 px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {verifyingCode ? "확인 중..." : "확인"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* SMS Message Display */}
+                  {smsMessage && (
+                    <p className={`mt-2 text-xs font-medium ${smsMessage.isError ? "text-rose-600" : "text-emerald-600"}`}>
+                      {smsMessage.text}
+                    </p>
+                  )}
                 </div>
 
                 {/* Email Field */}
@@ -233,7 +374,6 @@ export default function BleUpgradePage() {
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      setDeviceInfo(null);
                     }}
                     placeholder="user@example.com"
                     className="w-full rounded-xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm focus:border-zinc-500 focus:outline-none transition-colors"
@@ -245,9 +385,9 @@ export default function BleUpgradePage() {
                 <button
                   type="submit"
                   className="w-full mt-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:bg-black text-white py-3.5 text-sm font-bold tracking-wide transition-colors shadow-md disabled:bg-zinc-300 disabled:cursor-not-allowed"
-                  disabled={loading}
+                  disabled={loading || !isPhoneVerified}
                 >
-                  {loading ? "기기 검증 중..." : "기기 확인 및 정보 검증"}
+                  {loading ? "기기 검증 중..." : "구매 하기"}
                 </button>
               </form>
 
@@ -264,36 +404,6 @@ export default function BleUpgradePage() {
                 </div>
               )}
             </div>
-
-            {/* Device Info Card & Redirect Button */}
-            {deviceInfo && (
-              <div className="mt-6 border-t border-zinc-200/60 pt-6">
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-5 space-y-4">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-                      기기 정보 확인 완료
-                    </h3>
-                    <div className="mt-2 text-sm text-zinc-700 space-y-1">
-                      <p><span className="font-medium">기기 일련번호:</span> {deviceInfo.sn}</p>
-                      <p><span className="font-medium">모델명:</span> {deviceInfo.model}</p>
-                      <p>
-                        <span className="font-medium">현재 구매 상태:</span>{" "}
-                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200">
-                          {deviceInfo.purchaseStatus === "paid" ? "결제 완료" : "미결제"}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleRedirectToMall}
-                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3 text-sm font-bold tracking-wide transition-colors shadow-md"
-                  >
-                    공식 쇼핑몰 결제 페이지로 이동
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
@@ -306,7 +416,6 @@ export default function BleUpgradePage() {
           onResult={(resultSn) => {
             setSn(resultSn);
             setIsScanning(false);
-            setDeviceInfo(null);
             setSuccessMessage("");
             setErrorMessage("");
           }}
