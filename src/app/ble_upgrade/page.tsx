@@ -124,6 +124,7 @@ export default function BleUpgradePage() {
     targetUrl.searchParams.set("sn", deviceInfo.sn);
     targetUrl.searchParams.set("name", name.trim());
     targetUrl.searchParams.set("phone", phone.trim());
+    targetUrl.searchParams.set("auto_buy", "true");
     if (email.trim()) {
       targetUrl.searchParams.set("email", email.trim());
     }
@@ -176,7 +177,6 @@ export default function BleUpgradePage() {
       setLoading(false); // Only stop loading if error, redirect will unload the page
     }
   };
-
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f4f1ea_0%,#fbfaf8_55%,#ffffff_100%)] text-zinc-900 font-sans">
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-8 px-6 py-12 sm:px-10">
