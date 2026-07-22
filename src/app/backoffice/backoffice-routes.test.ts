@@ -13,7 +13,7 @@ import {
   getBackofficeDashboardChartSummary,
   getBackofficeSystemStatusSummary,
 } from "@/lib/backoffice/dashboard";
-import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import { getCurrentBackofficeUser, requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import { listActiveInstallerRequestAssignments } from "@/lib/installation/installer/review";
 import { listDispatchCandidateInstallers } from "@/lib/installation/installer/source";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
@@ -284,8 +284,8 @@ describe("backoffice installation order routes", () => {
     const desktopSidebarSource = readFileSync(join(backofficeDir, "BackofficeDesktopSidebar.tsx"), "utf8");
     const userMenuSource = readFileSync(join(backofficeDir, "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("getCurrentBackofficeUser");
-    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user?.email} />");
+    expect(layoutSource).toContain('requireBackofficeUserPage("/backoffice")');
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} />");
     expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
     expect(userMenuSource).toContain('aria-label={`${email} 계정 메뉴`}');
     expect(userMenuSource).toContain("signOutBackofficeAction()");
@@ -334,15 +334,8 @@ describe("backoffice installation order routes", () => {
     expect(sidebarSource).not.toContain("menuSections");
   });
 
-  it("does not expose the installer list in the backoffice menu", () => {
-    const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
-    const backofficePageSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
-
-    expect(existsSync(join(backofficeDir, "installers"))).toBe(false);
-    expect(layoutSource).not.toContain('href: "/backoffice/installers"');
-    expect(layoutSource).not.toContain('label: "기사 리스트"');
-    expect(backofficePageSource).not.toContain('href="/backoffice/installers"');
-    expect(backofficePageSource).not.toContain("기사 리스트");
+  it("exposes installer management in the backoffice menu", () => {
+    expect(existsSync(join(backofficeDir, "installers"))).toBe(true);
   });
 
   it("does not keep mock or raw query handling in backoffice page implementations", () => {
@@ -1944,16 +1937,17 @@ describe("backoffice installation order routes", () => {
     });
   });
 
-  it("protects the backoffice root without automatically entering installation management", () => {
+  it("keeps the backoffice root as a landing page without redirecting to an operational screen", () => {
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
 
-    expect(rootSource).toContain('requireBackofficeUserPage("/backoffice", 1)');
+    expect(rootSource).toContain("getCurrentBackofficeUser");
     expect(rootSource).not.toContain('redirect("/backoffice/installations")');
-    expect(rootSource).toContain("getBackofficeDashboardChartSummary");
+    expect(rootSource).toContain("사이드바 메뉴를 선택하세요.");
+    expect(rootSource).not.toContain("getBackofficeDashboardChartSummary");
   });
 
-  it("requires approved backoffice access on the backoffice root", async () => {
-    vi.mocked(requireBackofficeUserPage).mockResolvedValue({
+  it("reads the current backoffice user before rendering the landing page", async () => {
+    vi.mocked(getCurrentBackofficeUser).mockResolvedValue({
       id: "bo-1",
       supabaseUserId: "supabase-1",
       email: "viewer@example.com",
@@ -1962,32 +1956,25 @@ describe("backoffice installation order routes", () => {
 
     const element = await BackofficePage();
 
-    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice", 1);
-    expect(getBackofficeDashboardChartSummary).toHaveBeenCalledWith({ days: 14 });
+    expect(getCurrentBackofficeUser).toHaveBeenCalledOnce();
+    expect(requireBackofficeUserPage).not.toHaveBeenCalled();
+    expect(getBackofficeDashboardChartSummary).not.toHaveBeenCalled();
     expect(isValidElement(element)).toBe(true);
 
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
-    expect(rootSource).toContain("신규 주문과 설치 완료 추이");
-    expect(rootSource).toContain("현재 대기 상태 분포");
-    expect(rootSource).toContain("기간 집계가 아니라 지금 남아 있는 상태별 주문 수입니다.");
-    expect(rootSource).not.toContain("권한 승인 대기");
-    expect(rootSource).not.toContain("Cron 호출 상태");
-    expect(rootSource).not.toContain("처리 필요 항목");
-    expect(rootSource).not.toContain("설치 주문 보기");
-    expect(rootSource).not.toContain("운영 설정");
-    expect(rootSource).not.toContain("데이터 가져오기");
-    expect(rootSource).not.toContain("관리 메뉴");
-    expect(rootSource).not.toContain("진행 중인 설치 주문과 전체 주문을 조회합니다.");
+    expect(rootSource).toContain("AQARALIFE SERVICE BACKOFFICE");
+    expect(rootSource).toContain("사이드바 메뉴를 선택하세요.");
   });
 
-  it("keeps the backoffice root focused on charts instead of dashboard cards", () => {
+  it("keeps dashboard charts on the dedicated installation dashboard route", () => {
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
+    const dashboardSource = readFileSync(join(backofficeDir, "installation-dashboard", "page.tsx"), "utf8");
 
-    expect(rootSource).toContain("DailyOrdersChart");
-    expect(rootSource).toContain("QueueStatusChart");
-    expect(rootSource).not.toContain("renderDashboardInfoCard");
-    expect(rootSource).not.toContain("attentionItems.map");
-    expect(rootSource).not.toContain("Cron 호출 상태");
+    expect(rootSource).not.toContain("DailyOrdersChart");
+    expect(rootSource).not.toContain("QueueStatusChart");
+    expect(dashboardSource).toContain("DailyOrdersChart");
+    expect(dashboardSource).toContain("QueueStatusChart");
+    expect(dashboardSource).toContain("getBackofficeDashboardChartSummary");
   });
 
   it("passes the current installation board query string as the login return path", async () => {

@@ -120,10 +120,11 @@ describe("isBackofficeMenuItemActive", () => {
     expect(loadingSource).toContain("페이지를 불러오는 중입니다.");
   });
 
-  it("shows only frequently used operational pages and the settings entry in the sidebar", () => {
+  it("shows the order dashboard and frequently used operational pages in the sidebar", () => {
     const source = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
 
-    expect(source).not.toContain('label: "운영 현황"');
+    expect(source).toContain('label: "주문 대시보드"');
+    expect(source).toContain('href: "/backoffice/installation-dashboard"');
     expect(source).not.toContain('href: "/backoffice",');
     expect(source).toContain('label: "ERP 주문 데이터"');
     expect(source).toContain('label: "설치 업무 큐"');
@@ -287,7 +288,7 @@ describe("isBackofficeMenuItemActive", () => {
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user?.email} />");
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} />");
     expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
     expect(desktopSidebarSource).toContain('"mt-auto border-t border-slate-200 bg-white"');
     expect(mobileNavSource).toContain("<BackofficeUserMenu email={userEmail} compact />");

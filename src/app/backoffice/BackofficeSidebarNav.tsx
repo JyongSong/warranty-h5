@@ -2,30 +2,101 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 type MenuItem = {
   href: string;
   label: string;
-  icon: "database" | "queue" | "search" | "settings";
+  icon: "database" | "queue" | "search" | "settings" | "as" | "installer" | "query" | "survey" | "dashboard" | "orders" | "dispatch" | "sms";
   subItems?: MenuItem[];
 };
 
 const menuItems: MenuItem[] = [
   {
-    href: "/backoffice/installation-order-source",
-    label: "ERP 주문 데이터",
-    icon: "database",
+    href: "/backoffice/installation-dashboard",
+    label: "주문",
+    icon: "orders",
+    subItems: [
+      {
+        href: "/backoffice/installation-dashboard",
+        label: "주문 대시보드",
+        icon: "dashboard",
+      },
+      {
+        href: "/backoffice/installation-order-source",
+        label: "ERP 주문 데이터",
+        icon: "database",
+      },
+      {
+        href: "/backoffice/installations?statusView=active",
+        label: "설치 업무 큐",
+        icon: "queue",
+      },
+      {
+        href: "/backoffice/installation-search",
+        label: "주문 검색",
+        icon: "search",
+      },
+    ],
   },
   {
-    href: "/backoffice/installations?statusView=active",
-    label: "설치 업무 큐",
-    icon: "queue",
+    href: "/backoffice/as/search",
+    label: "A/S 관리",
+    icon: "as",
+    subItems: [
+      {
+        href: "/backoffice/as/register",
+        label: "A/S등록",
+        icon: "as",
+      },
+      {
+        href: "/backoffice/as/search",
+        label: "A/S 검색",
+        icon: "as",
+      },
+    ],
   },
   {
-    href: "/backoffice/installation-search",
-    label: "주문 검색",
-    icon: "search",
+    href: "/backoffice/installers",
+    label: "기사",
+    icon: "installer",
+    subItems: [
+      {
+        href: "/backoffice/installers",
+        label: "기사 관리",
+        icon: "installer",
+      },
+      {
+        href: "/backoffice/installers-settlement",
+        label: "기사 정산",
+        icon: "installer",
+      },
+      {
+        href: "/backoffice/installers-assignment-status",
+        label: "기사 배정현황",
+        icon: "installer",
+      },
+    ],
+  },
+  {
+    href: "/backoffice/registrations?tab=query",
+    label: "설치 정보 조회",
+    icon: "query",
+  },
+  {
+    href: "/backoffice/registrations?tab=survey",
+    label: "만족도 조사 대시보드",
+    icon: "survey",
+  },
+  {
+    href: "/backoffice/dispatch",
+    label: "기사배정 임시",
+    icon: "dispatch",
+  },
+  {
+    href: "/backoffice/send-assignment-sms",
+    label: "설치 배정 SMS 임시",
+    icon: "sms",
   },
   {
     href: "/backoffice/settings",
@@ -66,14 +137,28 @@ const menuItems: MenuItem[] = [
   },
 ];
 
-export function isBackofficeMenuItemActive(pathname: string, href: string) {
+export function isBackofficeMenuItemActive(pathname: string, href: string, searchParams?: URLSearchParams) {
   const normalizedPathname = pathname.split("?")[0] ?? pathname;
-  const normalizedHref = href.split("?")[0] ?? href;
-  if (normalizedHref === "/backoffice") {
-    return normalizedPathname === normalizedHref;
+  const hrefPath = href.split("?")[0] ?? href;
+  const hrefQuery = href.includes("?") ? new URLSearchParams(href.split("?")[1]) : null;
+
+  if (hrefPath === "/backoffice") {
+    return normalizedPathname === hrefPath;
   }
 
-  return normalizedPathname === normalizedHref || normalizedPathname.startsWith(`${normalizedHref}/`);
+  // Exact path matching logic
+  const isPathMatch = normalizedPathname === hrefPath || (hrefPath !== "/backoffice" && normalizedPathname.startsWith(`${hrefPath}/`));
+
+  if (!isPathMatch) {
+    return false;
+  }
+
+  // If href has tab query parameter, check searchParams if provided
+  if (hrefQuery?.has("tab") && searchParams) {
+    return searchParams.get("tab") === hrefQuery.get("tab") || (hrefQuery.get("tab") === "query" && !searchParams.get("tab"));
+  }
+
+  return true;
 }
 
 export function isBackofficeSubmenuExpanded({
@@ -110,6 +195,7 @@ export default function BackofficeSidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <nav
@@ -127,6 +213,7 @@ export default function BackofficeSidebarNav({
           key={item.href}
           item={item}
           pathname={pathname}
+          searchParams={searchParams}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
@@ -138,15 +225,18 @@ export default function BackofficeSidebarNav({
 function BackofficeSidebarNavItem({
   item,
   pathname,
+  searchParams,
   collapsed,
   onNavigate,
 }: {
   item: MenuItem;
   pathname: string;
+  searchParams: URLSearchParams;
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const isActive = isBackofficeMenuItemActive(pathname, item.href);
+  const isChildActive = Boolean(item.subItems?.some((sub) => isBackofficeMenuItemActive(pathname, sub.href, searchParams)));
+  const isActive = isBackofficeMenuItemActive(pathname, item.href, searchParams) || isChildActive;
   const hasSubItems = Boolean(item.subItems?.length);
   const [manuallyExpandedPathname, setManuallyExpandedPathname] = useState<string | null>(null);
   const [collapsedPathname, setCollapsedPathname] = useState<string | null>(null);
@@ -159,9 +249,6 @@ function BackofficeSidebarNavItem({
   });
 
   function handleSubmenuNavigate() {
-    // Keep the expanded desktop submenu mounted while the route changes. Closing
-    // it here makes the first settings navigation briefly hide the submenu before
-    // the new pathname marks the settings section active and opens it again.
     if (collapsed || onNavigate) {
       setManuallyExpandedPathname(null);
       setCollapsedPathname(null);
@@ -249,7 +336,7 @@ function BackofficeSidebarNavItem({
           aria-label={`${item.label} 하위 메뉴`}
         >
           {item.subItems.map((subItem) => {
-            const subItemActive = isBackofficeMenuItemActive(pathname, subItem.href);
+            const subItemActive = isBackofficeMenuItemActive(pathname, subItem.href, searchParams);
 
             return (
               <Link
@@ -288,6 +375,14 @@ function SidebarItemIcon({ icon }: { icon: MenuItem["icon"] }) {
     "aria-hidden": true,
   } as const;
 
+  if (icon === "orders") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 5h12M4 10h12M4 15h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   if (icon === "database") {
     return (
       <svg {...commonProps}>
@@ -313,6 +408,67 @@ function SidebarItemIcon({ icon }: { icon: MenuItem["icon"] }) {
       <svg {...commonProps}>
         <circle cx="8.5" cy="8.5" r="5" stroke="currentColor" strokeWidth="1.5" />
         <path d="m12.2 12.2 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "dashboard") {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+        <rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+        <rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+        <rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    );
+  }
+
+  if (icon === "as") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="10" cy="10" r="4" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M10 2v3M10 15v3M2 10h3M15 10h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "installer") {
+    return (
+      <svg {...commonProps}>
+        <path d="M13 16v-1a3 3 0 00-3-3H7a3 3 0 00-3 3v1M10 7a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "query") {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M7 8h6M7 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "survey") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 16V9a2 2 0 012-2h2a2 2 0 012 2v7M10 16V5a2 2 0 012-2h2a2 2 0 012 2v11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "dispatch") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 7h8m0 0l-3-3m3 3l-3 3m-5 3H4m0 0l3 3m-3-3l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "sms") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3 5h14a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 3V6a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
     );
   }

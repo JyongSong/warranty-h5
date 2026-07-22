@@ -333,23 +333,10 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
       <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="rounded-xl bg-emerald-800 px-3.5 py-1.5 font-bold tracking-wider text-white text-sm">
-              AQARA
-            </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-zinc-950">설치 및 품질보증 관리</h1>
-              <p className="text-xs text-zinc-500">
-                {admin.name} ({admin.level === 10 ? "최고관리자" : `일반관리자 Lvl ${admin.level}`})
-              </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 active:scale-95"
-          >
-            로그아웃
-          </button>
         </div>
       </header>
 

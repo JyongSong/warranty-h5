@@ -181,13 +181,6 @@ export default function BleUpgradePage() {
     <div className="min-h-screen bg-[linear-gradient(180deg,#f4f1ea_0%,#fbfaf8_55%,#ffffff_100%)] text-zinc-900 font-sans">
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-8 px-6 py-12 sm:px-10">
         
-        {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-end">
-          <span className="rounded-full border border-black/10 bg-white/70 px-4 py-1 text-xs font-semibold tracking-wider text-zinc-600 uppercase">
-            Upgrade Portal
-          </span>
-        </div>
-
         {/* Two-Column split layout */}
         <div className="grid gap-8 md:grid-cols-12 items-stretch">
           

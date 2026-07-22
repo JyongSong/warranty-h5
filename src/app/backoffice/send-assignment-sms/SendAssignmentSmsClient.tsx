@@ -163,7 +163,7 @@ export default function SendAssignmentSmsClient() {
           <p className="font-medium mb-1">엑셀 파일 형식</p>
           <ul className="list-disc ml-5 space-y-0.5 text-blue-800">
             <li>
-              <a href="/dispatch" className="underline hover:text-blue-700">
+              <a href="/backoffice/dispatch" className="underline hover:text-blue-700">
                 기사배정
               </a>{" "}
               페이지의 <strong>Excel 다운로드</strong> 결과 파일을 그대로 사용
