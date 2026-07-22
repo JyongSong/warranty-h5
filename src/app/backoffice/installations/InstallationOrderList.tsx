@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { LoadingButton } from "@/app/_components/LoadingIndicator";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
 import {
   formatBackofficeDateTime,
@@ -793,12 +791,9 @@ function InstallationOrderInlineSearchForm({
             />
           </label>
         )}
-        <SearchSubmitButton
-          type="submit"
-          className={`${getBackofficeButtonClass("primary")} w-full @3xl:w-auto`}
-        >
+        <button type="submit" className={`${getBackofficeButtonClass("primary")} w-full @3xl:w-auto`}>
           검색
-        </SearchSubmitButton>
+        </button>
         <Link
           href={buildSearchResetHref(basePath, statusView, pageSize)}
           className={`${getBackofficeButtonClass("secondary")} w-full @3xl:w-auto`}
@@ -810,24 +805,6 @@ function InstallationOrderInlineSearchForm({
         </p>
       </form>
     </div>
-  );
-}
-
-function SearchSubmitButton({
-  children,
-  className,
-  type,
-}: {
-  children: ReactNode;
-  className: string;
-  type: "submit";
-}) {
-  const { pending } = useFormStatus();
-
-  return (
-    <LoadingButton type={type} loading={pending} loadingLabel="검색 중..." className={className}>
-      {children}
-    </LoadingButton>
   );
 }
 

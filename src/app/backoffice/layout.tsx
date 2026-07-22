@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
 import BackofficeDesktopSidebar from "./BackofficeDesktopSidebar";
 import BackofficeMobileNav from "./BackofficeMobileNav";
+import BackofficeNavigationFeedback from "./BackofficeNavigationFeedback";
 
 export default async function BackofficeLayout({
   children,
@@ -14,6 +15,7 @@ export default async function BackofficeLayout({
 
   return (
     <div className="min-h-screen bg-white text-zinc-950 md:h-screen md:overflow-hidden">
+      <BackofficeNavigationFeedback />
       <BackofficeMobileNav userEmail={user?.email} />
       <div className="flex min-h-[calc(100vh-3.5rem)] flex-col md:h-full md:min-h-0 md:flex-row">
         <BackofficeDesktopSidebar userEmail={user?.email} />

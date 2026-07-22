@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import BackofficeSidebarNav from "./BackofficeSidebarNav";
 import BackofficeUserMenu from "./BackofficeUserMenu";
 
 export default function BackofficeMobileNav({ userEmail }: { userEmail?: string }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white md:hidden">
@@ -26,7 +32,11 @@ export default function BackofficeMobileNav({ userEmail }: { userEmail?: string 
           </span>
         </button>
 
-        <Link href="/backoffice" className="min-w-0 truncate text-sm font-semibold text-zinc-950">
+        <Link
+          href="/backoffice"
+          onClick={() => setOpen(false)}
+          className="min-w-0 truncate text-sm font-semibold text-zinc-950"
+        >
           Backoffice
         </Link>
 

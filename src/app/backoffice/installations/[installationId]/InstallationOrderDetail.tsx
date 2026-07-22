@@ -224,6 +224,7 @@ export default function InstallationOrderDetail({
   const [activeTab, setActiveTab] = useState<(typeof detailTabs)[number]["key"]>("orderStatus");
   const [dialog, setDialog] = useState<AdminDialogState | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [isLeavingDetail, setIsLeavingDetail] = useState(false);
   const pending = pendingActionKey !== null;
   const openIssues = sortByIssueTimelineDesc(
     item.issues.filter((issue) => issue.status === "OPEN" && !issue.resolvedAt),
@@ -439,6 +440,8 @@ export default function InstallationOrderDetail({
   }
 
   function goBackToList() {
+    if (isLeavingDetail) return;
+    setIsLeavingDetail(true);
     if (window.history.length > 1) {
       router.back();
       return;
@@ -456,8 +459,9 @@ export default function InstallationOrderDetail({
               <button
                 type="button"
                 onClick={goBackToList}
-                aria-label="설치 주문 목록으로 돌아가기"
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+                disabled={isLeavingDetail}
+                aria-label={isLeavingDetail ? "목록으로 돌아가는 중" : "설치 주문 목록으로 돌아가기"}
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-wait disabled:opacity-60"
               >
                 <svg
                   aria-hidden="true"
@@ -483,9 +487,10 @@ export default function InstallationOrderDetail({
             <button
               type="button"
               onClick={goBackToList}
+              disabled={isLeavingDetail}
               className={getBackofficeButtonClass("secondary")}
             >
-              닫기
+              {isLeavingDetail ? "닫는 중..." : "닫기"}
             </button>
           ) : null}
         </div>

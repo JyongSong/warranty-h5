@@ -2,6 +2,7 @@
 
 import { useId, type ReactNode } from "react";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
+import BackofficeFormSubmitButton from "../../BackofficeFormSubmitButton";
 
 type BackofficeUserActionDialogProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -68,13 +69,12 @@ export function BackofficeUserActionDialog({
             >
               취소
             </button>
-            <button
-              type="submit"
+            <BackofficeFormSubmitButton
               disabled={submitDisabled}
+              label={submitLabel}
+              pendingLabel="저장 중..."
               className={getBackofficeButtonClass(tone === "danger" ? "danger" : "primary", "lg")}
-            >
-              {submitLabel}
-            </button>
+            />
           </div>
         </form>
       </section>

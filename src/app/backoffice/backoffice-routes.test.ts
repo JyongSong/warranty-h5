@@ -398,37 +398,16 @@ describe("backoffice installation order routes", () => {
     expect(clientSource).not.toContain("sampleVars");
   });
 
-  it("shows an in-page loading animation while ERP installation orders load", () => {
-    const loadingSource = readFileSync(join(backofficeDir, "installation-order-source", "loading.tsx"), "utf8");
-
-    expect(loadingSource).toContain("ERP 주문 데이터");
-    expect(loadingSource).toContain("ERP_SOURCE_LOADING_COLUMN_COUNT");
-    expect(loadingSource).toContain("ERP_SOURCE_LOADING_COLUMNS.length");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).not.toContain('"customer_name"');
-    expect(loadingSource).not.toContain('"order_numbers"');
-    expect(loadingSource).not.toContain('"ERP 주문"');
-    expect(loadingSource).not.toContain('"주문일"');
-    expect(loadingSource).not.toContain("데이터를 불러오는 중입니다.");
-    expect(loadingSource).toContain("animate-spin");
-    expect(loadingSource).toContain("flex items-center gap-2");
-    expect(loadingSource).not.toContain("justify-between");
+  it("uses the shared backoffice loader for ERP installation orders", () => {
+    expect(existsSync(join(backofficeDir, "installation-order-source", "loading.tsx"))).toBe(false);
   });
 
   it("supports a lazy query parameter for visually checking the installation management loading state", () => {
     const pageSource = readFileSync(join(routesDir, "page.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
 
     expect(pageSource).toContain('resolvedSearchParams.lazy === "true"');
     expect(pageSource).toContain("await sleep(5_000)");
     expect(pageSource).toContain("function sleep");
-    expect(loadingSource).toContain("설치 주문");
-    expect(loadingSource).toContain("진행 중");
-    expect(loadingSource).toContain("INSTALLATION_ORDER_LOADING_COLUMNS");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).toContain("animate-spin");
-    expect(loadingSource).toContain('aria-label="설치 주문 로딩 중"');
-    expect(loadingSource).not.toContain("배정 요청");
   });
 
   it("shows the ERP installation order item count below the table", () => {
@@ -1120,14 +1099,12 @@ describe("backoffice installation order routes", () => {
 
   it("does not show the current page item count next to the installation order list title", () => {
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
 
     expect(listSource).toContain("<BackofficePageHeader");
     expect(listSource).toContain("title={title}");
     expect(listSource).not.toContain("meta={`${initialItems.length}건`}");
     expect(listSource).not.toContain("{initialItems.length}건");
     expect(listSource).not.toContain("전체 {initialItems.length}건 / 표시");
-    expect(loadingSource).not.toContain("<span className=\"text-sm text-zinc-500\">-건</span>");
   });
 
   it("keeps only active workflow statuses as filters inside the installation queue page", () => {
@@ -1156,21 +1133,8 @@ describe("backoffice installation order routes", () => {
     expect(pageSource).not.toContain('label: "취소"');
   });
 
-  it("keeps the installation order loading state on the current list UI", () => {
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
-
-    expect(loadingSource).toContain("설치 업무 큐");
-    expect(loadingSource).toContain("전체 진행 중");
-    expect(loadingSource).toContain("INSTALLATION_ORDER_LOADING_COLUMNS");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).toContain("w-max min-w-full");
-    expect(loadingSource).not.toContain("고객 입력 대기");
-    expect(loadingSource).not.toContain("배정 승인 대기");
-    expect(loadingSource).not.toContain("기사 배정 완료");
-    expect(loadingSource).not.toContain("-건");
-    expect(loadingSource).not.toContain("진행 단계");
-    expect(loadingSource).not.toContain("배정 요청");
-    expect(loadingSource).not.toContain("border-b-2 border-zinc-950");
+  it("uses the shared backoffice loader for the installation queue", () => {
+    expect(existsSync(join(routesDir, "loading.tsx"))).toBe(false);
   });
 
   it("removes separate board filter and sort controls from the installation order list", () => {
@@ -1608,9 +1572,10 @@ describe("backoffice installation order routes", () => {
       "utf8",
     );
 
-    expect(detailSource).toContain('aria-label="설치 주문 목록으로 돌아가기"');
+    expect(detailSource).toContain('"설치 주문 목록으로 돌아가기"');
+    expect(detailSource).toContain('"목록으로 돌아가는 중"');
     expect(detailSource).toContain('displayMode === "panel"');
-    expect(detailSource).toContain(">\n              닫기\n            </button>");
+    expect(detailSource).toContain('isLeavingDetail ? "닫는 중..." : "닫기"');
     expect(detailSource).not.toContain("상세 닫기");
     expect(detailSource).toContain("router.back()");
     expect(detailSource).toContain("router.push(returnPath)");
@@ -2072,24 +2037,26 @@ describe("backoffice installation order routes", () => {
     });
   });
 
-  it("redirects the dedicated order search page to the default order date query on first load", async () => {
+  it("loads the default order date range on the dedicated order search page without redirecting", async () => {
     vi.mocked(requireBackofficeUserPage).mockClear();
     vi.mocked(listInstallationOrderStatuses).mockResolvedValue([]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-24T01:00:00+09:00"));
 
     try {
-      await expect(
-        InstallationSearchPage({
-          searchParams: Promise.resolve({}),
-        }),
-      ).rejects.toThrow(
-        "NEXT_REDIRECT:/backoffice/installation-search?searchField=orderDate&searchFrom=2026-05-25&searchTo=2026-06-24",
-      );
-      expect(redirectMock).toHaveBeenCalledWith(
-        "/backoffice/installation-search?searchField=orderDate&searchFrom=2026-05-25&searchTo=2026-06-24",
-      );
-      expect(listInstallationOrderStatuses).not.toHaveBeenCalled();
+      const element = await InstallationSearchPage({
+        searchParams: Promise.resolve({}),
+      });
+      await renderServerElement(element);
+
+      expect(listInstallationOrderStatuses).toHaveBeenCalledWith({
+        query: "",
+        searchCondition: { field: "orderDate", from: "2026-05-25", to: "2026-06-24" },
+        statusView: "all",
+        limit: 20,
+        offset: 0,
+      });
+      expect(redirectMock).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -2279,13 +2246,11 @@ describe("backoffice installation order routes", () => {
 
   it("shows status filter tabs with counts instead of a separate progress step section", () => {
     const pageSource = readFileSync(join(routesDir, "page.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
 
     expect(pageSource).toContain("statusFilterItems");
     expect(pageSource).not.toContain("progressStepItems");
     expect(pageSource).toContain("normalizeInstallationOrderStatusView");
-    expect(loadingSource).not.toContain("진행 단계");
     expect(listSource).not.toContain("InstallationOrderProgressSteps");
     expect(listSource).not.toContain("aria-label=\"설치 주문 진행 단계\"");
     expect(listSource).not.toContain("→");

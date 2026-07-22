@@ -79,16 +79,18 @@ export function isBackofficeMenuItemActive(pathname: string, href: string) {
 export function isBackofficeSubmenuExpanded({
   collapsed,
   isActive,
-  isManuallyExpanded,
+  manuallyExpandedPathname,
   collapsedPathname,
   pathname,
 }: {
   collapsed: boolean;
   isActive: boolean;
-  isManuallyExpanded: boolean;
+  manuallyExpandedPathname: string | null;
   collapsedPathname: string | null;
   pathname: string;
 }) {
+  const isManuallyExpanded = manuallyExpandedPathname === pathname;
+
   if (collapsed) {
     return isManuallyExpanded;
   }
@@ -146,12 +148,12 @@ function BackofficeSidebarNavItem({
 }) {
   const isActive = isBackofficeMenuItemActive(pathname, item.href);
   const hasSubItems = Boolean(item.subItems?.length);
-  const [isManuallyExpanded, setIsManuallyExpanded] = useState(false);
+  const [manuallyExpandedPathname, setManuallyExpandedPathname] = useState<string | null>(null);
   const [collapsedPathname, setCollapsedPathname] = useState<string | null>(null);
   const isExpanded = isBackofficeSubmenuExpanded({
     collapsed,
     isActive,
-    isManuallyExpanded,
+    manuallyExpandedPathname,
     collapsedPathname,
     pathname,
   });
@@ -161,7 +163,7 @@ function BackofficeSidebarNavItem({
     // it here makes the first settings navigation briefly hide the submenu before
     // the new pathname marks the settings section active and opens it again.
     if (collapsed || onNavigate) {
-      setIsManuallyExpanded(false);
+      setManuallyExpandedPathname(null);
       setCollapsedPathname(null);
     }
     onNavigate?.();
@@ -188,12 +190,12 @@ function BackofficeSidebarNavItem({
           className={itemClassName}
           onClick={() => {
             if (isExpanded) {
-              setIsManuallyExpanded(false);
+              setManuallyExpandedPathname(null);
               setCollapsedPathname(isActive ? pathname : null);
               return;
             }
 
-            setIsManuallyExpanded(true);
+            setManuallyExpandedPathname(pathname);
             setCollapsedPathname(null);
           }}
         >

@@ -12,10 +12,6 @@ interface PageProps {
 
 export default async function InstallationSearchPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
-  if (!getSingleSearchParam(resolvedSearchParams.searchField)) {
-    redirect(buildDefaultOrderDateSearchPath());
-  }
-
   const searchCondition = normalizeInstallationOrderSearchCondition(resolvedSearchParams);
   const tableSearchParams = normalizeInstallationOrderTableSearchParams(resolvedSearchParams, searchCondition);
   const nextPath = buildBackofficeNextPath("/backoffice/installation-search", tableSearchParams);
@@ -37,17 +33,6 @@ export default async function InstallationSearchPage({ searchParams }: PageProps
       title="주문 검색"
     />
   );
-}
-
-function buildDefaultOrderDateSearchPath() {
-  const range = getDefaultOrderDateRange();
-  const params = new URLSearchParams({
-    searchField: "orderDate",
-    searchFrom: range.from,
-    searchTo: range.to,
-  });
-
-  return `/backoffice/installation-search?${params.toString()}`;
 }
 
 function normalizeInstallationOrderTableSearchParams(

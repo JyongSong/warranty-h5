@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
+import BackofficeFormSubmitButton from "../../BackofficeFormSubmitButton";
 
 type BackofficeUserCreateDialogProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -107,12 +108,11 @@ export function BackofficeUserCreateDialog({ action }: BackofficeUserCreateDialo
                 >
                   취소
                 </button>
-                <button
-                  type="submit"
+                <BackofficeFormSubmitButton
+                  label="추가하기"
+                  pendingLabel="추가 중..."
                   className={getBackofficeButtonClass("primary", "lg")}
-                >
-                  추가하기
-                </button>
+                />
               </div>
             </form>
           </section>
