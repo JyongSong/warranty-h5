@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { notFound } from "next/navigation";
 import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import {
@@ -62,7 +63,7 @@ export async function renderInstallationOrderDetailPage({
   const requiredCapabilities = parseRequiredCapabilitiesText(order.requiredCapabilities);
   const requiredAqaraAppCapability = order.requiredAqaraAppCapability ?? "NONE";
   const activeRequest =
-    order.customerRequests.find((request) => request.id === order.activeCustomerRequestId) ??
+    order.customerRequests.find((request: any) => request.id === order.activeCustomerRequestId) ??
     order.customerRequests[0] ??
     null;
   const dispatchInstallers = await listDispatchCandidateInstallers({
@@ -84,11 +85,11 @@ export async function renderInstallationOrderDetailPage({
       index + 1,
     ),
   );
-  const candidateRuns = order.candidateRuns.map((run) => ({
+  const candidateRuns = order.candidateRuns.map((run: any) => ({
     id: run.id,
     reasonCode: run.reasonCode,
     createdAt: run.createdAt.toISOString(),
-    candidates: run.candidates.map((candidate) => ({
+    candidates: run.candidates.map((candidate: any) => ({
       installerId: candidate.installerId,
       installerName: candidate.installer.name,
       installerBranch: candidate.installer.branch,
@@ -110,7 +111,7 @@ export async function renderInstallationOrderDetailPage({
     metadata: event.metadata as Record<string, unknown> | null,
     createdAt: event.createdAt.toISOString(),
   }));
-  const issues = order.issues.map((issue) => ({
+  const issues = order.issues.map((issue: any) => ({
     ...issue,
     code: issue.type,
     resolvedAt: issue.resolvedAt ? issue.resolvedAt.toISOString() : null,
@@ -125,12 +126,12 @@ export async function renderInstallationOrderDetailPage({
     manualAssignmentInstallers,
     candidateRuns,
     statusChangedAt: order.statusChangedAt.toISOString(),
-    customerRequests: order.customerRequests.map((request) => ({
+    customerRequests: order.customerRequests.map((request: any) => ({
       ...request,
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
     })),
-    assignmentAttempts: order.assignmentAttempts.map((assignment) => ({
+    assignmentAttempts: order.assignmentAttempts.map((assignment: any) => ({
       ...assignment,
       installerName: assignment.installer.name,
       installerBranch: assignment.installer.branch,

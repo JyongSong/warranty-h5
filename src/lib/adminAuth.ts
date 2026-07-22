@@ -25,7 +25,6 @@ function getSessionSecret() {
 
   return secret;
 }
-
 function toBase64Url(input: string) {
   return Buffer.from(input).toString("base64url");
 }
@@ -87,32 +86,40 @@ export async function getCurrentAdmin(): Promise<AuthAdmin | null> {
   return admin ?? null;
 }
 
+import { getCurrentBackofficeUser, requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+
+export const requirePortalUserPage = requireBackofficeUserPage;
+
 export async function requireAdminPage(nextPath: string, minLevel = 0): Promise<AuthAdmin> {
-  const admin = await getCurrentAdmin();
+  const user = await getCurrentBackofficeUser();
 
-  if (!admin) {
-    redirect(`/auth?next=${encodeURIComponent(nextPath)}`);
+  if (!user) {
+    redirect(`/login?redirect_url=${encodeURIComponent(nextPath)}`);
   }
 
-  if (admin.level < minLevel) {
-    redirect(`/auth?next=${encodeURIComponent(nextPath)}&error=forbidden`);
+  if (user.level < minLevel) {
+    redirect(`/login?redirect_url=${encodeURIComponent(nextPath)}&error=forbidden`);
   }
 
-  return admin;
+  return {
+    id: user.id,
+    name: user.email.split("@")[0] || "Admin",
+    level: user.level,
+  };
 }
 
 export async function requireAdminApi(minLevel = 0) {
   try {
-    const admin = await getCurrentAdmin();
+    const user = await getCurrentBackofficeUser();
 
-    if (!admin) {
+    if (!user) {
       return {
         admin: null,
         errorResponse: NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 }),
       };
     }
 
-    if (admin.level < minLevel) {
+    if (user.level < minLevel) {
       return {
         admin: null,
         errorResponse: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }),
@@ -120,7 +127,11 @@ export async function requireAdminApi(minLevel = 0) {
     }
 
     return {
-      admin,
+      admin: {
+        id: user.id,
+        name: user.email.split("@")[0] || "Admin",
+        level: user.level,
+      },
       errorResponse: null,
     };
   } catch (error) {

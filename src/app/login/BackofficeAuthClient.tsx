@@ -9,12 +9,24 @@ import { signInBackofficeAction } from "./actions";
 const DEFAULT_BACKOFFICE_NEXT_PATH = "/backoffice/installations";
 
 export function getSafeBackofficeNextPath(nextPath: string | null) {
-  if (!nextPath?.startsWith("/backoffice")) return DEFAULT_BACKOFFICE_NEXT_PATH;
-  if (nextPath.startsWith("/backoffice/auth") || nextPath.startsWith("/login")) {
+  if (!nextPath || !nextPath.startsWith("/")) {
+    return DEFAULT_BACKOFFICE_NEXT_PATH;
+  }
+
+  if (nextPath.startsWith("//")) {
+    return DEFAULT_BACKOFFICE_NEXT_PATH;
+  }
+
+  if (
+    nextPath.startsWith("/login") ||
+    nextPath.startsWith("/auth") ||
+    nextPath.startsWith("/backoffice/auth")
+  ) {
     return DEFAULT_BACKOFFICE_NEXT_PATH;
   }
   return nextPath;
 }
+
 
 export default function BackofficeAuthClient() {
   const searchParams = useSearchParams();

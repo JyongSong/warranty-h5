@@ -1,6 +1,9 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { AuthAdmin } from "@/lib/adminAuth";
 import { formatKrPhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
@@ -104,7 +107,19 @@ const SURVEY_QUESTIONS: Record<string, string> = {
 };
 
 export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
-  const [activeTab, setActiveTab] = useState<"query" | "survey">("query");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<"query" | "survey">(
+    tabParam === "survey" ? "survey" : "query"
+  );
+
+  useEffect(() => {
+    if (tabParam === "survey" && activeTab !== "survey") {
+      setActiveTab("survey");
+    } else if (tabParam === "query" && activeTab !== "query") {
+      setActiveTab("query");
+    }
+  }, [tabParam, activeTab]);
   const [query, setQuery] = useState("");
   const [surveyFilter, setSurveyFilter] = useState<string>("ALL");
   const [ratingFilter, setRatingFilter] = useState<number | "ALL">("ALL");
@@ -118,11 +133,13 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
 
   // Reset states when filters/tabs change
   useEffect(() => {
-    setSelectedSurveyIds([]);
-    if (surveyFilter !== "COMPLETED") {
+    if (selectedSurveyIds.length > 0) {
+      setSelectedSurveyIds([]);
+    }
+    if (surveyFilter !== "COMPLETED" && ratingFilter !== "ALL") {
       setRatingFilter("ALL");
     }
-  }, [surveyFilter, activeTab, query]);
+  }, [surveyFilter, activeTab, query, selectedSurveyIds, ratingFilter]);
 
   async function handleSendSurvey(registrationId: string) {
     if (sendingSurvey) return;
@@ -340,26 +357,15 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
         {/* Tab Selector */}
         <div className="mb-8 flex border-b border-zinc-200 items-center justify-between">
           <div className="flex">
-            <button
-              onClick={() => setActiveTab("query")}
-              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-                activeTab === "query"
-                  ? "border-emerald-800 text-emerald-800"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800"
-              }`}
-            >
-              설치 정보 조회 (기존)
-            </button>
-            <button
-              onClick={() => setActiveTab("survey")}
-              className={`px-5 py-3 font-semibold text-sm -mb-px border-b-2 transition ${
-                activeTab === "survey"
-                  ? "border-emerald-800 text-emerald-800"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800"
-              }`}
-            >
-              만족도 조사 대시보드
-            </button>
+            {activeTab === "query" ? (
+              <div className="px-5 py-3 font-semibold text-sm -mb-px border-b-2 border-emerald-800 text-emerald-800">
+                설치 정보 조회 (기존)
+              </div>
+            ) : (
+              <div className="px-5 py-3 font-semibold text-sm -mb-px border-b-2 border-emerald-800 text-emerald-800">
+                만족도 조사 대시보드
+              </div>
+            )}
           </div>
 
           <button
