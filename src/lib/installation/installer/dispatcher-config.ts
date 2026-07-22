@@ -14,6 +14,10 @@ export type InstallationDispatcherLimits = Record<DispatcherLimitName, number>;
 export type InstallationDispatcherConfig = {
   enabled: boolean;
   customerInputRequestMode: "auto" | "manual";
+  smsSendWindow: {
+    start: string;
+    end: string;
+  };
   lockTtlMs: number;
   limits: InstallationDispatcherLimits;
 };
@@ -32,6 +36,8 @@ export const INSTALLATION_DISPATCHER_CONFIG_KEYS = [
   dispatcherConfig.enabled.key,
   dispatcherConfig.lockTtlMs.key,
   dispatcherConfig.customerInputRequestMode.key,
+  dispatcherConfig.smsSendWindow.start.key,
+  dispatcherConfig.smsSendWindow.end.key,
   ...limitEntries.map(([, spec]) => spec.key),
 ] as const;
 
@@ -54,6 +60,16 @@ export async function loadInstallationDispatcherConfig(): Promise<InstallationDi
     customerInputRequestMode: readCustomerInputRequestMode(
       values.get(dispatcherConfig.customerInputRequestMode.key),
     ),
+    smsSendWindow: {
+      start: readTime(
+        values.get(dispatcherConfig.smsSendWindow.start.key),
+        dispatcherConfig.smsSendWindow.start.default,
+      ),
+      end: readTime(
+        values.get(dispatcherConfig.smsSendWindow.end.key),
+        dispatcherConfig.smsSendWindow.end.default,
+      ),
+    },
     lockTtlMs: readBoundedInteger(
       values.get(dispatcherConfig.lockTtlMs.key),
       dispatcherConfig.lockTtlMs.default,
@@ -83,6 +99,16 @@ export function getInstallationDispatcherConfigRows(
       value: String(config.lockTtlMs),
       description: dispatcherConfig.lockTtlMs.description,
     },
+    {
+      key: dispatcherConfig.smsSendWindow.start.key,
+      value: config.smsSendWindow.start,
+      description: dispatcherConfig.smsSendWindow.start.description,
+    },
+    {
+      key: dispatcherConfig.smsSendWindow.end.key,
+      value: config.smsSendWindow.end,
+      description: dispatcherConfig.smsSendWindow.end.description,
+    },
     ...limitEntries.map(([name, spec]) => ({
       key: spec.key,
       value: String(config.limits[name]),
@@ -97,8 +123,18 @@ export function getInstallationDispatcherConfigDescription(key: string) {
   if (key === dispatcherConfig.customerInputRequestMode.key) {
     return dispatcherConfig.customerInputRequestMode.description;
   }
+  if (key === dispatcherConfig.smsSendWindow.start.key) {
+    return dispatcherConfig.smsSendWindow.start.description;
+  }
+  if (key === dispatcherConfig.smsSendWindow.end.key) {
+    return dispatcherConfig.smsSendWindow.end.description;
+  }
 
   return limitEntries.find(([, spec]) => spec.key === key)?.[1].description ?? null;
+}
+
+function readTime(value: string | undefined, fallback: string) {
+  return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
 }
 
 function readCustomerInputRequestMode(value: string | undefined): "auto" | "manual" {

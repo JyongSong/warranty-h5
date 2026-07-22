@@ -8,10 +8,12 @@ import {
   formatBackofficeDateTime,
   formatBackofficePhone,
   formatBackofficeText,
+  formatInstallationMatchTier,
 } from "@/lib/backoffice/table-formatting";
 import installationStatusLabels from "@/lib/installation/orders/views/label-installation-status.json";
 import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
+import { getBackofficeButtonClass } from "../backoffice-button-styles";
 import {
   approveInstallationAssignmentAction,
   approveInstallationAssignmentsAction,
@@ -231,7 +233,10 @@ export default function AssignmentReviewList({
         size: 420,
         minSize: 180,
         cell: ({ row }) => (
-          <div className="whitespace-normal break-keep leading-5 text-zinc-800">
+          <div
+            className="line-clamp-2 whitespace-normal break-words leading-5 text-zinc-800"
+            title={formatText(row.original.request?.installAddress ?? row.original.order.sourceAddress)}
+          >
             {formatText(row.original.request?.installAddress ?? row.original.order.sourceAddress)}
           </div>
         ),
@@ -278,7 +283,7 @@ export default function AssignmentReviewList({
         header: "배정-지역 매칭 단계",
         size: 160,
         minSize: 130,
-        cell: ({ row }) => formatMatchTier(row.original.matchTier),
+        cell: ({ row }) => formatInstallationMatchTier(row.original.matchTier),
         sortingFn: "alphanumeric",
       },
       {
@@ -325,7 +330,7 @@ export default function AssignmentReviewList({
               setError(null);
               setConfirmAssignmentId(row.original.id);
             }}
-            className="h-8 rounded-md bg-zinc-950 px-3 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className={getBackofficeButtonClass("primary", "sm")}
           >
             승인
           </LoadingButton>
@@ -358,7 +363,7 @@ export default function AssignmentReviewList({
               setError(null);
               setConfirmBulkApproval(true);
             }}
-            className="h-9 rounded-md bg-zinc-950 px-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className={getBackofficeButtonClass("primary")}
           >
             선택 일괄 승인 ({selectedVisibleAssignmentIds.length})
           </LoadingButton>
@@ -367,7 +372,7 @@ export default function AssignmentReviewList({
               type="button"
               disabled={bulkPending}
               onClick={() => setSelectedAssignmentIds(new Set())}
-              className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className={getBackofficeButtonClass("secondary")}
             >
               선택 해제
             </button>
@@ -421,7 +426,7 @@ export default function AssignmentReviewList({
                   <MobileDetail label="기사" value={`${formatText(item.installerName)} · ${formatText(item.installerPhone)}`} />
                   <MobileDetail label="기사 ID" value={formatText(item.installerId)} />
                   <MobileDetail label="배정 출처" value={formatAssignmentSource(item.assignmentSource)} />
-                  <MobileDetail label="지역 매칭 단계" value={formatMatchTier(item.matchTier)} />
+                  <MobileDetail label="지역 매칭 단계" value={formatInstallationMatchTier(item.matchTier)} />
                   <MobileDetail label="후보 순위" value={String(item.candidateRank ?? "-")} />
                   <MobileDetail label="후보 생성" value={formatBackofficeDateTime(item.createdAt)} />
                 </dl>
@@ -435,7 +440,7 @@ export default function AssignmentReviewList({
                     setError(null);
                     setConfirmAssignmentId(item.id);
                   }}
-                  className="mt-4 h-10 w-full rounded-md bg-zinc-950 px-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  className={`${getBackofficeButtonClass("primary", "lg")} mt-4 w-full`}
                 >
                   승인
                 </LoadingButton>
@@ -517,7 +522,7 @@ function AssignmentApproveDialog({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className={getBackofficeButtonClass("secondary")}
           >
             취소
           </button>
@@ -526,7 +531,7 @@ function AssignmentApproveDialog({
             onClick={onConfirm}
             loading={pending}
             loadingLabel="처리 중"
-            className="h-9 rounded-md bg-zinc-900 px-3 text-sm font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={getBackofficeButtonClass("primary")}
           >
             {confirmLabel}
           </LoadingButton>
@@ -562,13 +567,4 @@ function formatAssignmentSource(value: string | null | undefined) {
   };
   if (!value) return "-";
   return sourceLabels[value] ?? value;
-}
-
-function formatMatchTier(value: string | null | undefined) {
-  const tierLabels: Record<string, string> = {
-    PRIMARY: "담당 지역 일치",
-    REGION_ONLY: "광역 지역 일치",
-  };
-  if (!value) return "-";
-  return tierLabels[value] ?? value;
 }

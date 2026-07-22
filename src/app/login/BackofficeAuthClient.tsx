@@ -4,18 +4,15 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
 import { getErrorMessage } from "@/lib/error";
+import { signInBackofficeAction } from "./actions";
 
 const DEFAULT_BACKOFFICE_NEXT_PATH = "/backoffice/installations";
 
 export function getSafeBackofficeNextPath(nextPath: string | null) {
-  if (!nextPath?.startsWith("/backoffice")) {
-    return DEFAULT_BACKOFFICE_NEXT_PATH;
-  }
-
+  if (!nextPath?.startsWith("/backoffice")) return DEFAULT_BACKOFFICE_NEXT_PATH;
   if (nextPath.startsWith("/backoffice/auth") || nextPath.startsWith("/login")) {
     return DEFAULT_BACKOFFICE_NEXT_PATH;
   }
-
   return nextPath;
 }
 
@@ -25,29 +22,19 @@ export default function BackofficeAuthClient() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const nextPath = getSafeBackofficeNextPath(searchParams.get("redirect_url"));
 
-  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/login/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "로그인에 실패했습니다.");
-      }
-
+      const result = await signInBackofficeAction(email, password);
+      if (!result.ok) throw new Error(result.error);
       window.location.assign(nextPath);
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "로그인에 실패했습니다."));
+    } catch (nextError: unknown) {
+      setError(getErrorMessage(nextError, "로그인에 실패했습니다."));
       setLoading(false);
     }
   }
@@ -68,29 +55,28 @@ export default function BackofficeAuthClient() {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="name@example.com"
               className="h-11 rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-500"
               autoComplete="email"
               required
             />
           </label>
-
           <label className="grid gap-2">
             <span className="text-sm font-medium text-zinc-700">비밀번호</span>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
               className="h-11 rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-500"
               autoComplete="current-password"
               required
             />
           </label>
-
-          <StatusMessage error={error} />
-
+          {error ? (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          ) : null}
           <LoadingButton
             type="submit"
             loading={loading}
@@ -103,16 +89,4 @@ export default function BackofficeAuthClient() {
       </div>
     </div>
   );
-}
-
-function StatusMessage({
-  error,
-}: {
-  error: string | null;
-}) {
-  if (error) {
-    return <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>;
-  }
-
-  return null;
 }

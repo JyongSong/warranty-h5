@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  alertOrphanedInstallationOrders,
   alertDueSoonUnassignedOrders,
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
@@ -46,6 +47,7 @@ describe("installation dispatch guards", () => {
     findManyAssignments.mockResolvedValue([
       {
         id: "assignment-1",
+        installationOrderId: "order-1",
         installerTokenHash: "hashed-token",
       },
     ]);
@@ -63,6 +65,7 @@ describe("installation dispatch guards", () => {
       take: 10,
       select: {
         id: true,
+        installationOrderId: true,
         installerTokenHash: true,
       },
     });
@@ -71,6 +74,71 @@ describe("installation dispatch guards", () => {
       rejectReason: "INSTALLER_RESPONSE_TIMEOUT",
       now,
       tokenIsHash: true,
+    });
+  });
+
+  it("opens an admin issue when timeout processing fails", async () => {
+    const now = new Date("2026-06-11T05:00:00.000Z");
+    findManyAssignments.mockResolvedValue([
+      {
+        id: "assignment-1",
+        installationOrderId: "order-1",
+        installerTokenHash: "hashed-token",
+      },
+    ]);
+    respondInstallerAssignmentMock.mockRejectedValue(new Error("timeout transition failed"));
+    createInstallationIssueMock.mockResolvedValue({ id: "issue-1" });
+
+    await expect(timeoutExpiredInstallerAssignments({ now })).resolves.toEqual({
+      timedOutCount: 0,
+      failedCount: 1,
+    });
+    expect(createInstallationIssueMock).toHaveBeenCalledWith({
+      installationOrderId: "order-1",
+      type: "INSTALLATION_AUTOMATION_FAILED",
+      title: "기사 응답 timeout 처리 실패",
+      description: "timeout transition failed",
+      metadata: {
+        stage: "INSTALLER_RESPONSE_TIMEOUT",
+        assignmentId: "assignment-1",
+      },
+      now,
+    });
+  });
+
+  it("opens an admin issue for a stale installer wait without a valid deadline", async () => {
+    const now = new Date("2026-06-11T05:00:00.000Z");
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        status: "WAITING_INSTALLER_RESPONSE",
+        activeAssignmentId: "assignment-1",
+        activeAssignment: {
+          id: "assignment-1",
+          status: "WAITING_INSTALLER_RESPONSE",
+          installerTokenExpiresAt: null,
+          notifications: [{ id: "notification-1", status: "SENT" }],
+        },
+      },
+    ]);
+    createInstallationIssueMock.mockResolvedValue({ id: "issue-1" });
+
+    await expect(alertOrphanedInstallationOrders({ now, limit: 10 })).resolves.toEqual({
+      issueCount: 1,
+    });
+    expect(createInstallationIssueMock).toHaveBeenCalledWith({
+      installationOrderId: "order-1",
+      type: "INSTALLATION_WORKFLOW_ORPHANED",
+      title: "설치 업무 흐름 중단 감지",
+      description: "기사 응답 대기 상태에 유효한 배정 요청 또는 종료 시각이 없어 관리자 확인이 필요합니다.",
+      metadata: {
+        status: "WAITING_INSTALLER_RESPONSE",
+        activeAssignmentId: "assignment-1",
+        assignmentStatus: "WAITING_INSTALLER_RESPONSE",
+        notificationId: "notification-1",
+        notificationStatus: "SENT",
+      },
+      now,
     });
   });
 

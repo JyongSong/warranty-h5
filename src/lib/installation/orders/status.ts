@@ -119,42 +119,54 @@ async function transitionInstallationOrderStatusInTx(
     },
   });
 
-  if (shouldResolveAssignmentBlockingIssues(nextStatus)) {
+  if (shouldResolveIssues(nextStatus)) {
     if (!tx.installationIssue) {
       throw new Error("INSTALLATION_ISSUE_MODEL_MISSING");
     }
 
-    await tx.installationIssue.updateMany({
-      where: {
-        installationOrderId: orderId,
-        type: "INSTALLER_NOT_ASSIGNED",
-        status: "OPEN",
-      },
-      data: {
-        status: "RESOLVED",
-        resolvedAt: now,
-        resolutionNote: `설치건 상태가 ${nextStatus}로 전환되어 일정 임박 예외를 해결했습니다.`,
-        updatedAt: now,
-      },
-    });
-    await tx.installationIssue.updateMany({
-      where: {
-        installationOrderId: orderId,
-        type: {
-          in: [
-            "INSTALLER_CANDIDATE_NOT_FOUND",
-            "INSTALLER_CANDIDATE_EXHAUSTED",
-          ],
+    if (isTerminalStatus(nextStatus)) {
+      await tx.installationIssue.updateMany({
+        where: { installationOrderId: orderId, status: "OPEN" },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: now,
+          resolutionNote: `설치건 상태가 ${nextStatus}로 전환되어 남은 예외를 종결했습니다.`,
+          updatedAt: now,
         },
-        status: "OPEN",
-      },
-      data: {
-        status: "RESOLVED",
-        resolvedAt: now,
-        resolutionNote: `설치건 상태가 ${nextStatus}로 전환되어 배정 예외를 해결했습니다.`,
-        updatedAt: now,
-      },
-    });
+      });
+    } else {
+      await tx.installationIssue.updateMany({
+        where: {
+          installationOrderId: orderId,
+          type: "INSTALLER_NOT_ASSIGNED",
+          status: "OPEN",
+        },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: now,
+          resolutionNote: `설치건 상태가 ${nextStatus}로 전환되어 일정 임박 예외를 해결했습니다.`,
+          updatedAt: now,
+        },
+      });
+      await tx.installationIssue.updateMany({
+        where: {
+          installationOrderId: orderId,
+          type: {
+            in: [
+              "INSTALLER_CANDIDATE_NOT_FOUND",
+              "INSTALLER_CANDIDATE_EXHAUSTED",
+            ],
+          },
+          status: "OPEN",
+        },
+        data: {
+          status: "RESOLVED",
+          resolvedAt: now,
+          resolutionNote: `설치건 상태가 ${nextStatus}로 전환되어 배정 예외를 해결했습니다.`,
+          updatedAt: now,
+        },
+      });
+    }
 
     const remainingOpenIssueCount = await tx.installationIssue.count({
       where: {
@@ -192,11 +204,15 @@ async function transitionInstallationOrderStatusInTx(
   }
 }
 
-function shouldResolveAssignmentBlockingIssues(status: InstallationOrderStatus) {
+function shouldResolveIssues(status: InstallationOrderStatus) {
   const issueResolvingStatuses: readonly InstallationOrderStatus[] = [
     INSTALLATION_ORDER_STATUSES.INSTALLER_ASSIGNED,
     INSTALLATION_ORDER_STATUSES.CANCELLED,
     INSTALLATION_ORDER_STATUSES.COMPLETED,
   ];
   return issueResolvingStatuses.includes(status);
+}
+
+function isTerminalStatus(status: InstallationOrderStatus) {
+  return status === INSTALLATION_ORDER_STATUSES.CANCELLED || status === INSTALLATION_ORDER_STATUSES.COMPLETED;
 }

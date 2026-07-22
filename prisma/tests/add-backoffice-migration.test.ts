@@ -9,7 +9,9 @@ const installerModelMigration = readFileSync(
 
 describe("add backoffice Prisma migration", () => {
   it("creates assignment attempts with the final physical table name", () => {
-    expect(installerModelMigration).toContain('CREATE TABLE "installation_installer_assignment_attempts"');
+    expect(installerModelMigration).toMatch(
+      /CREATE TABLE(?: IF NOT EXISTS)? "installation_installer_assignment_attempts"/,
+    );
     expect(installerModelMigration).not.toContain("installation_installer_assignments");
   });
 

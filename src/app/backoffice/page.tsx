@@ -1,8 +1,10 @@
 import {
   getBackofficeDashboardChartSummary,
+  getBackofficeSystemStatusSummary,
   type BackofficeDashboardChartSummary,
 } from "@/lib/backoffice/dashboard";
 import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import Link from "next/link";
 import BackofficePageHeader from "./BackofficePageHeader";
 
 type DailyTrendItem = BackofficeDashboardChartSummary["dailyTrend"][number];
@@ -10,7 +12,13 @@ type QueueStatusItem = BackofficeDashboardChartSummary["queueStatusItems"][numbe
 
 export default async function BackofficePage() {
   await requireBackofficeUserPage("/backoffice", 1);
-  const chartSummary = await getBackofficeDashboardChartSummary({ days: 14 });
+  const [chartSummary, systemSummary] = await Promise.all([
+    getBackofficeDashboardChartSummary({ days: 14 }),
+    getBackofficeSystemStatusSummary(),
+  ]);
+  const unhealthyJobs = systemSummary.cronJobs.filter((job) =>
+    ["danger", "warning"].includes(job.health.tone),
+  );
 
   return (
     <div className="px-6 py-7 lg:px-8">
@@ -19,6 +27,28 @@ export default async function BackofficePage() {
           title="운영 현황"
           meta={`${chartSummary.window.label} (${chartSummary.window.from} - ${chartSummary.window.to})`}
         />
+
+        {chartSummary.attentionCount > 0 ? (
+          <Link
+            href="/backoffice/installations?statusView=attention"
+            className="mb-4 flex items-center justify-between rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+          >
+            <span className="font-semibold">관리자 처리 필요 설치건 {chartSummary.attentionCount}건</span>
+            <span>확인하기</span>
+          </Link>
+        ) : null}
+
+        {unhealthyJobs.length > 0 ? (
+          <Link
+            href="/backoffice/settings/system-status"
+            className="mb-6 flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            <span className="font-semibold">
+              자동 작업 확인 필요: {unhealthyJobs.map((job) => job.label).join(", ")}
+            </span>
+            <span>시스템 상태 확인</span>
+          </Link>
+        ) : null}
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
           <ChartPanel

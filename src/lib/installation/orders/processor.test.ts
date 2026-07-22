@@ -118,6 +118,7 @@ describe("processPendingInstallationOrders", () => {
       where: {
         status: "CUSTOMER_INPUT_SMS_REQUIRED",
         activeCustomerRequestId: null,
+        hasOpenIssue: false,
       },
       orderBy: { createdAt: "asc" },
       take: 10,

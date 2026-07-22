@@ -606,6 +606,18 @@ function createTx() {
       },
     },
     installationInstallerCandidateRun: {
+      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
+        state.candidateRuns.find((item) => {
+          const run = item as Record<string, unknown>;
+          return (
+            run.installationOrderId === where.installationOrderId &&
+            run.customerRequestId === where.customerRequestId &&
+            run.assignmentSource === where.assignmentSource &&
+            run.reasonCode === where.reasonCode
+          );
+        })
+          ? { id: "candidate-run-existing" }
+          : null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         state.candidateRuns.push(data);
         return { id: `candidate-run-${state.candidateRuns.length}` };

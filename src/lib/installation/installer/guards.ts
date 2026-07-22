@@ -20,6 +20,7 @@ export async function timeoutExpiredInstallerAssignments({
     take: limit,
     select: {
       id: true,
+      installationOrderId: true,
       installerTokenHash: true,
     },
   });
@@ -29,6 +30,12 @@ export async function timeoutExpiredInstallerAssignments({
 
   for (const assignment of assignments) {
     if (!assignment.installerTokenHash) {
+      await createTimeoutProcessingIssue(
+        assignment.installationOrderId,
+        assignment.id,
+        "INSTALLER_TOKEN_HASH_MISSING",
+        now,
+      );
       failedCount += 1;
       continue;
     }
@@ -41,12 +48,101 @@ export async function timeoutExpiredInstallerAssignments({
         tokenIsHash: true,
       });
       timedOutCount += 1;
-    } catch {
+    } catch (error) {
+      await createTimeoutProcessingIssue(
+        assignment.installationOrderId,
+        assignment.id,
+        error instanceof Error ? error.message : "INSTALLER_TIMEOUT_PROCESSING_FAILED",
+        now,
+      );
       failedCount += 1;
     }
   }
 
   return { timedOutCount, failedCount };
+}
+
+export async function alertOrphanedInstallationOrders({
+  now = new Date(),
+  limit = 50,
+}: GuardOptions = {}) {
+  const staleBefore = new Date(now.getTime() - 15 * 60 * 1000);
+  const orders = await prisma.installationOrder.findMany({
+    where: {
+      status: "WAITING_INSTALLER_RESPONSE",
+      hasOpenIssue: false,
+      statusChangedAt: { lt: staleBefore },
+    },
+    orderBy: { statusChangedAt: "asc" },
+    take: limit,
+    select: {
+      id: true,
+      status: true,
+      activeAssignmentId: true,
+      activeAssignment: {
+        select: {
+          id: true,
+          status: true,
+          installerTokenExpiresAt: true,
+          notifications: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true, status: true },
+          },
+        },
+      },
+    },
+  });
+
+  let issueCount = 0;
+  for (const order of orders) {
+    const assignment = order.activeAssignment;
+    const notification = assignment?.notifications[0] ?? null;
+    const hasValidWait = Boolean(
+      assignment &&
+      order.activeAssignmentId === assignment.id &&
+      ((assignment.status === "WAITING_INSTALLER_RESPONSE" && assignment.installerTokenExpiresAt) ||
+        (assignment.status === "SYSTEM_SMS_RETRY_PENDING" && notification?.status === "PENDING")),
+    );
+    if (hasValidWait) continue;
+
+    await createInstallationIssue({
+      installationOrderId: order.id,
+      type: "INSTALLATION_WORKFLOW_ORPHANED",
+      title: "설치 업무 흐름 중단 감지",
+      description: "기사 응답 대기 상태에 유효한 배정 요청 또는 종료 시각이 없어 관리자 확인이 필요합니다.",
+      metadata: {
+        status: order.status,
+        activeAssignmentId: order.activeAssignmentId,
+        assignmentStatus: assignment?.status ?? null,
+        notificationId: notification?.id ?? null,
+        notificationStatus: notification?.status ?? null,
+      },
+      now,
+    });
+    issueCount += 1;
+  }
+
+  return { issueCount };
+}
+
+async function createTimeoutProcessingIssue(
+  installationOrderId: string,
+  assignmentId: string,
+  error: string,
+  now: Date,
+) {
+  await createInstallationIssue({
+    installationOrderId,
+    type: "INSTALLATION_AUTOMATION_FAILED",
+    title: "기사 응답 timeout 처리 실패",
+    description: error,
+    metadata: {
+      stage: "INSTALLER_RESPONSE_TIMEOUT",
+      assignmentId,
+    },
+    now,
+  });
 }
 
 export async function alertDueSoonUnassignedOrders({

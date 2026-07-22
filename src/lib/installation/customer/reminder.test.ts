@@ -8,11 +8,13 @@ const {
   findMany,
   updateRequest,
   createNotification,
+  createInstallationIssue,
 } = vi.hoisted(() => ({
   transaction: vi.fn(),
   findMany: vi.fn(),
   updateRequest: vi.fn(),
   createNotification: vi.fn(),
+  createInstallationIssue: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -22,6 +24,10 @@ vi.mock("@/lib/prisma", () => ({
     },
     $transaction: transaction,
   },
+}));
+
+vi.mock("@/lib/installation/orders/issues/create", () => ({
+  createInstallationIssue,
 }));
 
 function createTx() {
@@ -42,6 +48,8 @@ describe("remindExpiredInstallationCustomerRequests", () => {
     findMany.mockReset();
     updateRequest.mockReset();
     createNotification.mockReset();
+    createInstallationIssue.mockReset();
+    createInstallationIssue.mockResolvedValue({ id: "issue-1" });
 
     transaction.mockImplementation(async (callback) => callback(createTx()));
   });
@@ -72,7 +80,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
       tokenFactory: () => "reminder-token",
     });
 
-    expect(result).toEqual({ remindedCount: 1, skippedCount: 0 });
+    expect(result).toEqual({ remindedCount: 1, skippedCount: 0, failedCount: 0 });
     expect(findMany).toHaveBeenCalledWith({
       where: {
         status: "PENDING_INPUT",
@@ -83,6 +91,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
         },
         installationOrder: {
           status: "WAITING_CUSTOMER_INPUT",
+          hasOpenIssue: false,
         },
       },
       orderBy: { createdAt: "asc" },
@@ -138,7 +147,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
       baseUrl: "https://example.com",
     });
 
-    expect(result).toEqual({ remindedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ remindedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(transaction).not.toHaveBeenCalled();
   });
 
@@ -164,6 +173,40 @@ describe("remindExpiredInstallationCustomerRequests", () => {
       tokenFactory: () => "reminder-token",
     });
 
-    expect(result).toEqual({ remindedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ remindedCount: 0, skippedCount: 1, failedCount: 0 });
+  });
+
+  it("counts an unexpected reminder creation error as a failure", async () => {
+    const now = new Date("2026-06-11T12:00:00.000Z");
+    findMany.mockResolvedValue([
+      {
+        id: "request-1",
+        installationOrderId: "order-1",
+        customerPhoneEncrypted: "010-1234-5678",
+        installationOrder: {
+          source: {
+            phoneEncrypted: null,
+            memo: null,
+          },
+        },
+      },
+    ]);
+    createNotification.mockRejectedValue(new Error("notification insert failed"));
+
+    const result = await remindExpiredInstallationCustomerRequests({
+      now,
+      baseUrl: "https://example.com",
+      tokenFactory: () => "reminder-token",
+    });
+
+    expect(result).toEqual({ remindedCount: 0, skippedCount: 1, failedCount: 1 });
+    expect(createInstallationIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installationOrderId: "order-1",
+        type: "INSTALLATION_AUTOMATION_FAILED",
+        description: "notification insert failed",
+        now,
+      }),
+    );
   });
 });

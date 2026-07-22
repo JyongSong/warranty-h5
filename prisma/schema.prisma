@@ -328,7 +328,9 @@ enum InstallationInstallerAssignmentStatus {
 enum InstallationNotificationStatus {
   PENDING
   SENT
+  DELIVERED
   FAILED
+  UNKNOWN
 }
 
 enum InstallationIssueType {
@@ -342,6 +344,8 @@ enum InstallationIssueType {
   INSTALLER_CANDIDATE_EXHAUSTED
   INSTALLER_NOT_ASSIGNED
   INSTALLATION_NOT_COMPLETED
+  INSTALLATION_AUTOMATION_FAILED
+  INSTALLATION_WORKFLOW_ORPHANED
   INSTALLER_ASSIGNMENT_SMS_SEND_FAILED
   CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED
 }
@@ -583,6 +587,7 @@ model InstallationNotification {
   errorMessage            String?                                 @map("error_message")
   idempotencyKey          String                                  @unique @map("idempotency_key")
   retryCount              Int                                     @default(0) @map("retry_count")
+  deliveryCheckCount      Int                                     @default(0) @map("delivery_check_count")
   sentAt                  DateTime?                               @map("sent_at")
   createdAt               DateTime                                @default(now()) @map("created_at")
   updatedAt               DateTime                                @updatedAt @map("updated_at")

@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { getInstallationOrderStatusDetail } from "@/lib/installation/orders/views/detail";
 
-const { findUnique } = vi.hoisted(() => ({
+const { findUnique, findBackofficeUsers, findInstallers, decryptNullablePii } = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  findBackofficeUsers: vi.fn(),
+  findInstallers: vi.fn(),
+  decryptNullablePii: vi.fn((value: string | null | undefined) => value ? `decrypted:${value}` : null),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -11,7 +14,17 @@ vi.mock("@/lib/prisma", () => ({
     installationOrder: {
       findUnique,
     },
+    backofficeUser: {
+      findMany: findBackofficeUsers,
+    },
+    installer: {
+      findMany: findInstallers,
+    },
   },
+}));
+
+vi.mock("@/lib/piiCrypto", () => ({
+  decryptNullablePii,
 }));
 
 describe("getInstallationOrderStatusDetail", () => {
@@ -37,20 +50,79 @@ describe("getInstallationOrderStatusDetail", () => {
       statusChangedAt: new Date("2026-06-11T00:00:00.000Z"),
       customerRequests: [],
       assignmentAttempts: [],
-      statusEvents: [],
+      statusEvents: [
+        {
+          id: "event-admin",
+          fromStatus: "WAITING_ADMIN_REVIEW",
+          toStatus: "WAITING_INSTALLER_RESPONSE",
+          eventType: "ADMIN_APPROVED",
+          actorType: "ADMIN",
+          actorId: "admin-1",
+          reason: null,
+          metadata: null,
+          createdAt: new Date("2026-06-11T01:00:00.000Z"),
+        },
+        {
+          id: "event-installer",
+          fromStatus: "WAITING_INSTALLER_RESPONSE",
+          toStatus: "READY_FOR_CANDIDATE_SELECTION",
+          eventType: "INSTALLER_REJECTED",
+          actorType: "INSTALLER",
+          actorId: "installer-1",
+          reason: "일정 조율 불가",
+          metadata: null,
+          createdAt: new Date("2026-06-11T02:00:00.000Z"),
+        },
+      ],
       issues: [],
       notifications: [],
       candidateRuns: [],
     });
+    findBackofficeUsers.mockResolvedValue([
+      { id: "admin-1", emailEncrypted: "admin-email" },
+    ]);
+    findInstallers.mockResolvedValue([
+      { id: "installer-1", name: "송지용", branch: "지용열쇠", phone: "01091703550" },
+    ]);
 
     const detail = await getInstallationOrderStatusDetail("order-1");
 
     expect(detail).toMatchObject({
       requiredCapabilities: JSON.stringify(["DOORLOCK", "WALLPAD_HUB"]),
       requiredAqaraAppCapability: "DOORLOCK_AND_APP_AND_HUB",
+      statusEvents: [
+        expect.objectContaining({
+          actorEmail: "decrypted:admin-email",
+          actorInstallerName: null,
+        }),
+        expect.objectContaining({
+          actorEmail: null,
+          actorInstallerName: "송지용",
+          actorInstallerBranch: "지용열쇠",
+          actorInstallerPhone: "01091703550",
+        }),
+      ],
     });
+    expect(detail?.statusEvents[0]).not.toHaveProperty("actorId");
+    expect(detail?.statusEvents[1]).not.toHaveProperty("actorId");
     expect(prisma.installationOrder.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "order-1" } }),
     );
+    expect(prisma.installationOrder.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          assignmentAttempts: expect.objectContaining({ orderBy: { createdAt: "desc" } }),
+          statusEvents: expect.objectContaining({ orderBy: { createdAt: "desc" } }),
+        }),
+      }),
+    );
+    expect(findBackofficeUsers).toHaveBeenCalledWith({
+      where: { id: { in: ["admin-1"] } },
+      select: { id: true, emailEncrypted: true },
+    });
+    expect(findInstallers).toHaveBeenCalledWith({
+      where: { id: { in: ["installer-1"] } },
+      select: { id: true, name: true, branch: true, phone: true },
+    });
   });
 });

@@ -125,10 +125,63 @@ describe("sendPendingInstallationNotifications", () => {
         status: "SENT",
         provider: "solapi",
         providerMessageId: "message-1",
+        providerStatus: null,
+        providerStatusCode: null,
+        providerReason: null,
+        providerReportedAt: null,
+        providerCheckedAt: null,
+        deliveryCheckCount: 0,
         sentAt: now,
         errorCode: null,
         errorMessage: null,
       },
+    });
+  });
+
+  it("does not blindly resend when the provider accepted SMS but the sent-state update failed", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        assignmentAttemptId: null,
+        smsType: "CUSTOMER_INPUT_LINK",
+        recipientPhoneEncrypted: encryptPii("010-1234-5678"),
+        smsBody: "hello",
+        retryCount: 0,
+      },
+    ]);
+    update
+      .mockRejectedValueOnce(new Error("sent state update failed"))
+      .mockResolvedValueOnce({ id: "notification-1", status: "UNKNOWN" });
+    createInstallationIssue.mockResolvedValue({ id: "issue-1" });
+
+    await expect(
+      sendPendingInstallationNotifications({ now, sendSms }),
+    ).resolves.toEqual({ sentCount: 0, failedCount: 1 });
+    expect(sendSms).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenLastCalledWith({
+      where: { id: "notification-1" },
+      data: {
+        status: "UNKNOWN",
+        retryCount: 1,
+        errorCode: "SMS_SEND_OUTCOME_UNKNOWN",
+        errorMessage: "sent state update failed",
+      },
+    });
+    expect(createInstallationIssue).toHaveBeenCalledWith({
+      installationOrderId: "order-1",
+      type: "CUSTOMER_INPUT_LINK_SMS_SEND_FAILED",
+      title: "SMS 발송 실패",
+      description: "SMS_SEND_OUTCOME_UNKNOWN: sent state update failed",
+      metadata: {
+        notificationId: "notification-1",
+        recipientPhoneEncrypted: expect.any(String),
+        retryCount: 1,
+        failureStage: "SEND",
+      },
+      now,
     });
   });
 
@@ -214,6 +267,12 @@ describe("sendPendingInstallationNotifications", () => {
         status: "SENT",
         provider: "solapi",
         providerMessageId: "message-1",
+        providerStatus: null,
+        providerStatusCode: null,
+        providerReason: null,
+        providerReportedAt: null,
+        providerCheckedAt: null,
+        deliveryCheckCount: 0,
         sentAt: now,
         errorCode: null,
         errorMessage: null,
@@ -225,7 +284,18 @@ describe("sendPendingInstallationNotifications", () => {
         status: "FAILED",
       }),
     });
-    expect(createInstallationIssue).not.toHaveBeenCalled();
+    expect(createInstallationIssue).toHaveBeenCalledWith({
+      installationOrderId: "order-1",
+      type: "INSTALLATION_AUTOMATION_FAILED",
+      title: "SMS 발송 후 상태 반영 실패",
+      description: "cleanup failed",
+      metadata: {
+        stage: "POST_SEND_NOTIFICATION_EFFECTS",
+        notificationId: "notification-1",
+        assignmentAttemptId: null,
+      },
+      now,
+    });
     expect(consoleError).toHaveBeenCalledWith(
       "[installation/notification/post-send]",
       expect.any(Error),
@@ -419,9 +489,58 @@ describe("sendPendingInstallationNotifications", () => {
     });
   });
 
-  it("records provider delivery success reports without opening an issue", async () => {
+  it("marks a recovered provider delivery report delivered and clears confirmation failures", async () => {
     const now = new Date("2026-06-11T00:10:00.000Z");
     const reportedAt = "2026-06-11T00:09:00.000Z";
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        assignmentAttemptId: null,
+        smsType: "CUSTOMER_ASSIGNMENT_CONFIRMED",
+        recipientPhoneEncrypted: "010-1234-5678",
+        retryCount: 0,
+        deliveryCheckCount: 1,
+        providerMessageId: "message-1",
+      },
+    ]);
+
+    const result = await syncInstallationSmsDeliveryReports({
+      now,
+      getDeliveryReport: async () => ({
+        messageId: "message-1",
+        status: "COMPLETE",
+        statusCode: "4000",
+        reason: "수신 완료",
+        dateReported: reportedAt,
+      }),
+    });
+
+    expect(result).toEqual({
+      checkedCount: 1,
+      updatedCount: 1,
+      deliveryFailedCount: 0,
+      failedCount: 0,
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: {
+        providerStatus: "COMPLETE",
+        providerStatusCode: "4000",
+        providerReason: "수신 완료",
+        providerReportedAt: new Date(reportedAt),
+        providerCheckedAt: now,
+        deliveryCheckCount: 0,
+        status: "DELIVERED",
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    expect(createInstallationIssue).not.toHaveBeenCalled();
+  });
+
+  it("keeps SOLAPI queued and sending status codes unconfirmed", async () => {
+    const now = new Date("2026-06-11T00:10:00.000Z");
     findMany.mockResolvedValue([
       {
         id: "notification-1",
@@ -438,28 +557,20 @@ describe("sendPendingInstallationNotifications", () => {
       now,
       getDeliveryReport: async () => ({
         messageId: "message-1",
-        status: "COMPLETE",
+        status: "PENDING",
         statusCode: "2000",
-        reason: null,
-        dateReported: reportedAt,
+        reason: "발송 대기",
+        dateReported: "2026-06-11T00:09:00.000Z",
       }),
     });
 
-    expect(result).toEqual({
-      checkedCount: 1,
-      updatedCount: 1,
-      deliveryFailedCount: 0,
-      failedCount: 0,
-    });
+    expect(result.deliveryFailedCount).toBe(0);
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
-      data: {
-        providerStatus: "COMPLETE",
+      data: expect.objectContaining({
         providerStatusCode: "2000",
-        providerReason: null,
-        providerReportedAt: new Date(reportedAt),
         providerCheckedAt: now,
-      },
+      }),
     });
     expect(createInstallationIssue).not.toHaveBeenCalled();
   });
@@ -523,6 +634,7 @@ describe("sendPendingInstallationNotifications", () => {
         smsType: "CUSTOMER_ASSIGNMENT_CONFIRMED",
         recipientPhoneEncrypted: "010-1234-5678",
         retryCount: 1,
+        deliveryCheckCount: 1,
         providerMessageId: "message-1",
       },
     ]);
@@ -577,6 +689,53 @@ describe("sendPendingInstallationNotifications", () => {
       },
       now,
     });
+  });
+
+  it("opens an admin issue after the delivery report API retry also fails", async () => {
+    const now = new Date("2026-06-11T00:10:00.000Z");
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        assignmentAttemptId: null,
+        smsType: "CUSTOMER_ASSIGNMENT_CONFIRMED",
+        recipientPhoneEncrypted: "010-1234-5678",
+        retryCount: 1,
+        deliveryCheckCount: 1,
+        providerMessageId: "message-1",
+      },
+    ]);
+    createInstallationIssue.mockResolvedValue({ id: "issue-1" });
+
+    const result = await syncInstallationSmsDeliveryReports({
+      now,
+      getDeliveryReport: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    expect(result).toEqual({
+      checkedCount: 0,
+      updatedCount: 0,
+      deliveryFailedCount: 0,
+      failedCount: 1,
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: {
+        status: "FAILED",
+        deliveryCheckCount: 2,
+        providerCheckedAt: now,
+        errorCode: "SMS_DELIVERY_REPORT_API_FAILED",
+        errorMessage: "provider unavailable",
+      },
+    });
+    expect(createInstallationIssue).toHaveBeenCalledWith(expect.objectContaining({
+      installationOrderId: "order-1",
+      type: "CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED",
+      title: "SMS 도달 실패",
+      description: "provider unavailable",
+    }));
   });
 
   it("marks customer input delivery failures pending for automatic retry", async () => {

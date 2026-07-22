@@ -162,11 +162,11 @@ export default function BackofficeDataTable<TData>({
           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-950"
           aria-expanded={showColumnVisibilityPopup}
         >
-          컬럼 선택
+          컬럼 보기
         </button>
         {showColumnVisibilityPopup ? (
           <div className="absolute right-0 z-20 mt-2 w-64 rounded-md border border-zinc-200 bg-white p-3 shadow-lg">
-            <div className="mb-2 text-xs font-semibold text-zinc-500">컬럼 표시 설정</div>
+            <div className="mb-2 text-xs font-semibold text-zinc-500">컬럼 보기 설정</div>
             <div className="max-h-72 space-y-2 overflow-y-auto">
               {table
                 .getAllLeafColumns()
@@ -324,7 +324,7 @@ export default function BackofficeDataTable<TData>({
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
-                        className={cellClassName}
+                        className={`overflow-hidden ${cellClassName}`}
                         style={getColumnSizeStyle(getColumnRenderSize(cell.column))}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

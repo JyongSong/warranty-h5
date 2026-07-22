@@ -11,6 +11,18 @@ export function formatBackofficePhone(value: string | null | undefined) {
   return formatKrPhone(value);
 }
 
+export function formatInstallationMatchTier(value: string | null | undefined) {
+  const tierLabels: Record<string, string> = {
+    EXACT_DISTRICT: "담당 지역 일치",
+    PRIMARY: "담당 지역 일치",
+    REGION_ONLY: "광역 지역 일치",
+    NOT_MATCHED: "지역 불일치",
+  };
+
+  if (!value) return "-";
+  return tierLabels[value] ?? "매칭 정보 확인 필요";
+}
+
 export function formatBackofficeDateTime(value: string | null | undefined) {
   const normalized = value?.trim();
   if (!normalized) return "-";

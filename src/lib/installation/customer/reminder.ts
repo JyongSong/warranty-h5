@@ -10,6 +10,7 @@ import { hashInstallationCustomerToken } from "@/lib/installation/customer/token
 import { buildCustomerReservationReminderSmsContent } from "@/lib/installation/notifications/sms-content";
 import { INSTALLATION_ORDER_STATUSES } from "@/lib/installation/orders/status";
 import { formatSourceItemsProductSummary } from "@/lib/installation/orders/source/source-items";
+import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
 
 type ReminderOptions = {
   baseUrl: string;
@@ -33,6 +34,7 @@ type ReminderCandidate = {
 export type RemindExpiredInstallationCustomerRequestsResult = {
   remindedCount: number;
   skippedCount: number;
+  failedCount: number;
 };
 
 const REMINDER_TOKEN_TTL_HOURS = 24;
@@ -55,6 +57,7 @@ export async function remindExpiredInstallationCustomerRequests({
       },
       installationOrder: {
         status: INSTALLATION_ORDER_STATUSES.WAITING_CUSTOMER_INPUT,
+        hasOpenIssue: false,
       },
     },
     orderBy: { createdAt: "asc" },
@@ -78,12 +81,24 @@ export async function remindExpiredInstallationCustomerRequests({
 
   let remindedCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
 
   for (const request of requests as ReminderCandidate[]) {
     const recipientPhone =
       decryptNullablePii(request.customerPhoneEncrypted) ??
       decryptNullablePii(request.installationOrder.source?.phoneEncrypted);
     if (!recipientPhone?.trim()) {
+      await createInstallationIssue({
+        installationOrderId: request.installationOrderId,
+        type: "ORDER_CUSTOMER_PHONE_MISSING",
+        title: "고객 리마인드 연락처 없음",
+        description: "고객 입력 리마인드 문자를 발송할 전화번호가 없어 관리자 확인이 필요합니다.",
+        metadata: {
+          customerRequestId: request.id,
+          stage: "CUSTOMER_INPUT_REMINDER",
+        },
+        now,
+      });
       skippedCount += 1;
       continue;
     }
@@ -96,11 +111,23 @@ export async function remindExpiredInstallationCustomerRequests({
         skippedCount += 1;
         continue;
       }
-      throw error;
+      await createInstallationIssue({
+        installationOrderId: request.installationOrderId,
+        type: "INSTALLATION_AUTOMATION_FAILED",
+        title: "고객 리마인드 생성 실패",
+        description: error instanceof Error ? error.message : "UNKNOWN_CUSTOMER_REMINDER_ERROR",
+        metadata: {
+          customerRequestId: request.id,
+          stage: "CUSTOMER_INPUT_REMINDER",
+        },
+        now,
+      });
+      skippedCount += 1;
+      failedCount += 1;
     }
   }
 
-  return { remindedCount, skippedCount };
+  return { remindedCount, skippedCount, failedCount };
 }
 
 async function createReminder(

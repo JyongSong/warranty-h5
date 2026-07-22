@@ -38,10 +38,12 @@ export async function renderInstallationOrderDetailPage({
   installationId,
   searchParams,
   basePath,
+  displayMode = "page",
 }: {
   installationId: string;
   searchParams: BackofficeSearchParams;
   basePath: string;
+  displayMode?: "page" | "panel";
 }) {
   await requireBackofficeUserPage(
     buildBackofficeNextPath(
@@ -99,6 +101,9 @@ export async function renderInstallationOrderDetailPage({
       decisionReason: candidate.decisionReason,
     })),
   }));
+  const assignmentInstallerById = new Map(
+    order.assignmentAttempts.map((assignment) => [assignment.id, assignment.installer]),
+  );
 
   const statusEvents = order.statusEvents.map((event) => ({
     ...event,
@@ -140,28 +145,41 @@ export async function renderInstallationOrderDetailPage({
     statusEvents,
     auditEvents: statusEvents,
     issues,
-    smsNotifications: order.notifications.map((notification) => ({
-      id: notification.id,
-      businessEvent: notification.smsType,
-      recipientType: notification.recipientType,
-      recipientId: null,
-      recipientPhone: notification.recipientPhone,
-      assignmentId: notification.assignmentAttemptId,
-      status: notification.status,
-      providerStatus: notification.providerStatus,
-      providerStatusCode: notification.providerStatusCode,
-      providerReason: notification.providerReason,
-      providerReportedAt: notification.providerReportedAt?.toISOString() ?? null,
-      providerCheckedAt: notification.providerCheckedAt?.toISOString() ?? null,
-      retryable: notification.status === "FAILED",
-      failureReason: notification.errorMessage ?? notification.errorCode,
-      retryCount: notification.retryCount,
-      sentAt: notification.sentAt?.toISOString() ?? null,
-      createdAt: notification.createdAt.toISOString(),
-    })),
+    smsNotifications: order.notifications.map((notification) => {
+      const recipientInstaller = notification.assignmentAttemptId
+        ? assignmentInstallerById.get(notification.assignmentAttemptId)
+        : null;
+
+      return {
+        id: notification.id,
+        businessEvent: notification.smsType,
+        recipientType: notification.recipientType,
+        recipientName: notification.recipientType === "INSTALLER" ? recipientInstaller?.name ?? null : null,
+        recipientBranch: notification.recipientType === "INSTALLER" ? recipientInstaller?.branch ?? null : null,
+        recipientPhone: notification.recipientPhone,
+        status: notification.status,
+        providerStatus: notification.providerStatus,
+        providerStatusCode: notification.providerStatusCode,
+        providerReason: notification.providerReason,
+        providerReportedAt: notification.providerReportedAt?.toISOString() ?? null,
+        providerCheckedAt: notification.providerCheckedAt?.toISOString() ?? null,
+        retryable: notification.status === "FAILED",
+        failureReason: notification.errorMessage ?? notification.errorCode,
+        retryCount: notification.retryCount,
+        deliveryCheckCount: notification.deliveryCheckCount,
+        sentAt: notification.sentAt?.toISOString() ?? null,
+        createdAt: notification.createdAt.toISOString(),
+      };
+    }),
   };
 
-  return <InstallationOrderDetail item={item} returnPath={basePath} />;
+  return (
+    <InstallationOrderDetail
+      item={item}
+      returnPath={buildBackofficeNextPath(basePath, searchParams)}
+      displayMode={displayMode}
+    />
+  );
 }
 
 function withMatchedTier(
