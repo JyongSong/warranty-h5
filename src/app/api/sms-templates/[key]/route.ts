@@ -28,7 +28,7 @@ function getDefault(key: string): string | null {
 type Ctx = { params: Promise<{ key: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
-  const { errorResponse } = await requireAdminApi();
+  const { errorResponse } = await requireAdminApi(1);
   if (errorResponse) return errorResponse;
 
   const { key } = await ctx.params;
@@ -69,7 +69,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  const { admin, errorResponse } = await requireAdminApi();
+  const { admin, errorResponse } = await requireAdminApi(1);
   if (errorResponse) return errorResponse;
 
   const { key } = await ctx.params;

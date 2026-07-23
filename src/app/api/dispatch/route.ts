@@ -5,7 +5,7 @@ import { fetchDispatchRows, assignDispatch } from "@/lib/dispatch";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await requireAdminApi();
+  const { errorResponse } = await requireAdminApi(1);
   if (errorResponse) return errorResponse;
 
   const sp = new URL(req.url).searchParams;

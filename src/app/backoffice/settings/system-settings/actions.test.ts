@@ -140,4 +140,34 @@ describe("updateSystemSettingAction", () => {
     expect(upsertMock).not.toHaveBeenCalled();
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
+
+  it("allows an administrator to update an assignment SMS safety limit", async () => {
+    getCurrentBackofficeUserMock.mockResolvedValue({
+      id: "admin-1",
+      supabaseUserId: "supabase-1",
+      email: "admin@example.com",
+      level: 1,
+    });
+
+    const formData = new FormData();
+    formData.set("key", "backoffice.sms.assignment.maxRecipientsPerDay");
+    formData.set("value", "2000");
+
+    await expect(updateSystemSettingAction(formData)).resolves.toEqual({
+      ok: true,
+      key: "backoffice.sms.assignment.maxRecipientsPerDay",
+    });
+    expect(upsertMock).toHaveBeenCalledWith({
+      where: { key: "backoffice.sms.assignment.maxRecipientsPerDay" },
+      create: {
+        key: "backoffice.sms.assignment.maxRecipientsPerDay",
+        value: "2000",
+        updatedBy: "admin-1",
+      },
+      update: {
+        value: "2000",
+        updatedBy: "admin-1",
+      },
+    });
+  });
 });

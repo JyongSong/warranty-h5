@@ -8,37 +8,84 @@ import {
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    $queryRaw: vi.fn(),
+    backofficeSetting: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
-const systemSettingQueryRawMock = vi.mocked(prisma.$queryRaw);
+const systemSettingFindManyMock = vi.mocked(prisma.backofficeSetting.findMany);
 
 describe("listSystemSettings", () => {
   beforeEach(() => {
-    systemSettingQueryRawMock.mockReset();
+    systemSettingFindManyMock.mockReset();
   });
 
   it("loads only known system settings with effective values for missing rows", async () => {
-    systemSettingQueryRawMock.mockResolvedValue([
+    systemSettingFindManyMock.mockResolvedValue([
       {
         key: "installation.dispatcher.enabled",
         value: "true",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedBy: null,
       },
       {
         key: "custom.experimental.enabled",
         value: "true",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedBy: null,
+      },
+      {
+        key: "backoffice.sms.assignment.audit.internal-id",
+        value: "{}",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedBy: null,
       },
     ]);
 
     const settings = await listSystemSettings();
-    const query = systemSettingQueryRawMock.mock.calls[0]?.[0] as readonly string[] | undefined;
-
-    expect(systemSettingQueryRawMock).toHaveBeenCalledOnce();
-    expect(query?.join("")).toContain('from "backoffice_settings"');
-    expect(query?.join("")).toContain('"value"::text');
-    expect(query?.join("")).not.toContain('"updated_at"');
-    expect(query?.join("")).not.toContain('"updated_by"');
+    expect(systemSettingFindManyMock).toHaveBeenCalledOnce();
+    expect(systemSettingFindManyMock).toHaveBeenCalledWith({
+      where: {
+        key: {
+          in: expect.arrayContaining([
+            "backoffice.sms.assignment.maxFileBytes",
+            "backoffice.sms.assignment.maxRecipientsPerRequest",
+            "backoffice.sms.assignment.maxRecipientsPerDay",
+            "installation.dispatcher.enabled",
+          ]),
+        },
+      },
+      select: { key: true, value: true },
+      orderBy: { key: "asc" },
+    });
+    expect(settings).toContainEqual(
+      expect.objectContaining({
+        key: "backoffice.sms.assignment.maxFileBytes",
+        value: "",
+        effectiveValue: "2097152",
+        valueStatus: "missing",
+      }),
+    );
+    expect(settings).toContainEqual(
+      expect.objectContaining({
+        key: "backoffice.sms.assignment.maxRecipientsPerRequest",
+        value: "",
+        effectiveValue: "500",
+        valueStatus: "missing",
+      }),
+    );
+    expect(settings).toContainEqual(
+      expect.objectContaining({
+        key: "backoffice.sms.assignment.maxRecipientsPerDay",
+        value: "",
+        effectiveValue: "1000",
+        valueStatus: "missing",
+      }),
+    );
     expect(settings).toContainEqual(
       expect.objectContaining({
         key: "installation.dispatcher.enabled",
@@ -73,6 +120,9 @@ describe("listSystemSettings", () => {
       }),
     );
     expect(settings).not.toContainEqual(expect.objectContaining({ key: "custom.experimental.enabled" }));
+    expect(settings).not.toContainEqual(
+      expect.objectContaining({ key: "backoffice.sms.assignment.audit.internal-id" }),
+    );
   });
 
   it("uses a fallback description for unknown system setting keys", () => {
@@ -94,5 +144,17 @@ describe("listSystemSettings", () => {
     expect(validateSystemSettingValue("installation.sms.sendWindowEnd", "24:00")).toEqual({
       ok: false,
     });
+  });
+
+  it("validates editable assignment SMS safety limits", () => {
+    expect(
+      validateSystemSettingValue("backoffice.sms.assignment.maxRecipientsPerRequest", "500"),
+    ).toEqual({ ok: true, value: "500" });
+    expect(
+      validateSystemSettingValue("backoffice.sms.assignment.maxRecipientsPerRequest", "5001"),
+    ).toEqual({ ok: false });
+    expect(
+      validateSystemSettingValue("backoffice.sms.assignment.maxRecipientsPerDay", "0"),
+    ).toEqual({ ok: false });
   });
 });

@@ -108,7 +108,7 @@ export async function requireAdminPage(nextPath: string, minLevel = 0): Promise<
   };
 }
 
-export async function requireAdminApi(minLevel = 0) {
+export async function requireAdminApi(minLevel = 1) {
   try {
     const user = await getCurrentBackofficeUser();
 

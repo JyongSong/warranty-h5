@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import dispatcherConfig from "@/lib/installation/installer/dispatcher-config.json";
 
 export const SYSTEM_SETTING_KEYS = {
+  backofficeAssignmentSmsMaxFileBytes: "backoffice.sms.assignment.maxFileBytes",
+  backofficeAssignmentSmsMaxRecipientsPerRequest:
+    "backoffice.sms.assignment.maxRecipientsPerRequest",
+  backofficeAssignmentSmsMaxRecipientsPerDay:
+    "backoffice.sms.assignment.maxRecipientsPerDay",
   installationSyncOrdersEnabled: "installation.syncOrders.enabled",
   installationDispatcherEnabled: "installation.dispatcher.enabled",
   installationDispatcherLockTtlMs: "installation.dispatcher.lockTtlMs",
@@ -24,6 +29,12 @@ export const SYSTEM_SETTING_KEYS = {
   installationSmsTestPhoneNumber: "installation.sms.testPhoneNumber",
   installationSmsSendWindowStart: "installation.sms.sendWindowStart",
   installationSmsSendWindowEnd: "installation.sms.sendWindowEnd",
+} as const;
+
+export const ASSIGNMENT_SMS_LIMIT_DEFAULTS = {
+  maxFileBytes: 2 * 1024 * 1024,
+  maxRecipientsPerRequest: 500,
+  maxRecipientsPerDay: 1000,
 } as const;
 
 type SystemSettingRow = {
@@ -61,6 +72,33 @@ const dispatcherLimitSpecs: SystemSettingSpec[] = Object.entries(dispatcherConfi
 }));
 
 const SYSTEM_SETTING_SPECS = ([
+  {
+    key: SYSTEM_SETTING_KEYS.backofficeAssignmentSmsMaxFileBytes,
+    description: "백오피스 수동 SMS 업로드 파일 최대 크기(byte)",
+    type: "integer" as const,
+    min: 1024,
+    max: 20 * 1024 * 1024,
+    defaultValue: ASSIGNMENT_SMS_LIMIT_DEFAULTS.maxFileBytes,
+    validationHint: `1024-${20 * 1024 * 1024} 사이의 정수(byte)`,
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.backofficeAssignmentSmsMaxRecipientsPerRequest,
+    description: "백오피스 수동 SMS 요청당 최대 수신자 수",
+    type: "integer" as const,
+    min: 1,
+    max: 5000,
+    defaultValue: ASSIGNMENT_SMS_LIMIT_DEFAULTS.maxRecipientsPerRequest,
+    validationHint: "1-5000 사이의 정수",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.backofficeAssignmentSmsMaxRecipientsPerDay,
+    description: "백오피스 수동 SMS 일일 최대 발송 시도 수(KST)",
+    type: "integer" as const,
+    min: 1,
+    max: 50000,
+    defaultValue: ASSIGNMENT_SMS_LIMIT_DEFAULTS.maxRecipientsPerDay,
+    validationHint: "1-50000 사이의 정수",
+  },
   {
     key: SYSTEM_SETTING_KEYS.installationSyncOrdersEnabled,
     description: "설치 주문 동기화 cron 실행 여부",
@@ -127,13 +165,13 @@ const SYSTEM_SETTING_SPECS = ([
 const systemSettingSpecByKey = new Map(SYSTEM_SETTING_SPECS.map((spec) => [spec.key, spec]));
 
 export async function listSystemSettings(): Promise<SystemSettingListItem[]> {
-  const settings = await prisma.$queryRaw<SystemSettingRow[]>`
-    select
-      "key",
-      "value"::text as "value"
-    from "backoffice_settings"
-    order by "key" asc
-  `;
+  const settings = await prisma.backofficeSetting.findMany({
+    where: {
+      key: { in: SYSTEM_SETTING_SPECS.map((spec) => spec.key) },
+    },
+    select: { key: true, value: true },
+    orderBy: { key: "asc" },
+  });
   const settingByKey = new Map(settings.map((setting) => [setting.key, setting.value]));
 
   return SYSTEM_SETTING_SPECS.map((spec) => {

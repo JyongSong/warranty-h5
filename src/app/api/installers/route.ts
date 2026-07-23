@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi();
+    const { errorResponse } = await requireAdminApi(1);
     if (errorResponse) return errorResponse;
 
     const { searchParams } = new URL(req.url);

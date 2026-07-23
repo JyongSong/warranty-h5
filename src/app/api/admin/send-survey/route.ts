@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
 import { sendSms } from "@/lib/sms";
 import { getBaseUrl } from "@/lib/getBaseUrl";
@@ -6,6 +7,9 @@ import { getErrorMessage } from "@/lib/error";
 
 export async function POST(req: Request) {
     try {
+        const { errorResponse } = await requireAdminApi(1);
+        if (errorResponse) return errorResponse;
+
         const body = await req.json();
         const registrationId = body.registrationId ? String(body.registrationId).trim() : null;
         const registrationIds = Array.isArray(body.registrationIds)

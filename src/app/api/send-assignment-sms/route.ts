@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { SolapiMessageService } from "solapi";
 import { requireAdminApi } from "@/lib/adminAuth";
+import {
+  AssignmentSmsSecurityError,
+  finishAssignmentSmsDispatch,
+  getAssignmentSmsLimits,
+  reserveAssignmentSmsDispatch,
+  validateAssignmentSmsUpload,
+} from "@/lib/backoffice/sms-dispatch-security";
 import { findInstallerByBranch } from "@/lib/dispatch";
 import {
   DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
@@ -28,6 +35,14 @@ type Result = {
   error?: string;
 };
 
+type PreparedRow = {
+  row: number;
+  branch: string;
+  to: string;
+  normalized: string;
+  text: string;
+};
+
 function normalizeKr(input: string): string {
   const digits = (input ?? "").replace(/\D/g, "");
   if (!digits) return "";
@@ -36,121 +51,166 @@ function normalizeKr(input: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const { errorResponse } = await requireAdminApi();
+  const { admin, errorResponse } = await requireAdminApi(1);
   if (errorResponse) return errorResponse;
 
-  const apiKey = process.env.SOLAPI_API_KEY;
-  const apiSecret = process.env.SOLAPI_API_SECRET;
-  const from = process.env.SOLAPI_SENDER;
-  if (!apiKey || !apiSecret || !from) {
-    return NextResponse.json(
-      { error: "SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER env 누락" },
-      { status: 500 }
-    );
-  }
-  const service = new SolapiMessageService(apiKey, apiSecret);
-
-  const formData = await request.formData();
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "file required" }, { status: 400 });
-  }
-
-  const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: "array" });
-  const ws = wb.Sheets[SHEET_NAME];
-  if (!ws) {
-    return NextResponse.json(
-      { error: `시트 "${SHEET_NAME}" 를 찾을 수 없습니다 (dispatch export 파일을 사용하세요)` },
-      { status: 400 }
-    );
-  }
-
-  const rows = XLSX.utils.sheet_to_json<Row>(ws, { defval: "" });
-  const results: Result[] = [];
-
-  // 템플릿은 한 번만 로드 (loop 안에서 N번 쿼리 방지)
-  const templateBody = await getSmsTemplateBody(
-    SMS_TEMPLATE_KEYS.ASSIGNMENT,
-    DEFAULT_ASSIGNMENT_SMS_TEMPLATE
-  );
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const branch = String(row["지점명"] ?? "").trim();
-    const to = String(row["연락처"] ?? "").trim();
-    const rowNumber = i + 2;
-
-    if (!branch || !to) {
-      results.push({
-        row: rowNumber,
-        branch,
-        to,
-        ok: false,
-        error: "필수 필드 누락 (지점명/연락처)",
-      });
-      continue;
+  try {
+    const limits = await getAssignmentSmsLimits();
+    const apiKey = process.env.SOLAPI_API_KEY;
+    const apiSecret = process.env.SOLAPI_API_SECRET;
+    const from = process.env.SOLAPI_SENDER;
+    if (!apiKey || !apiSecret || !from) {
+      return NextResponse.json(
+        { error: "SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER env 누락" },
+        { status: 500 },
+      );
     }
 
-    const installer = findInstallerByBranch(branch);
-    if (!installer) {
-      results.push({
-        row: rowNumber,
-        branch,
-        to,
-        ok: false,
-        error: `설치기사 등록 안됨 (지점명: "${branch}")`,
-      });
-      continue;
+    const formData = await request.formData();
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "file required" }, { status: 400 });
     }
-    if (!installer.phone) {
-      results.push({
-        row: rowNumber,
-        branch,
-        to,
-        ok: false,
-        error: `기사 연락처 미입력 (dispatch.ts 의 INSTALLERS 에서 phone 설정 필요)`,
-      });
-      continue;
-    }
+    validateAssignmentSmsUpload({ fileSize: file.size }, limits);
 
-    const normalized = normalizeKr(to);
-    if (!normalized) {
-      results.push({
-        row: rowNumber,
-        branch,
-        to,
-        ok: false,
-        error: "연락처 형식 오류",
-      });
-      continue;
-    }
-
-    const text = renderTemplate(templateBody, {
-      branchName: installer.branchName,
-      installerPhone: installer.phone,
-      branch,
-      customerPhone: to,
-    });
-
+    const buffer = await file.arrayBuffer();
+    let wb: XLSX.WorkBook;
     try {
-      await service.send({ to: normalized, from, text });
-      results.push({ row: rowNumber, branch, to, ok: true });
-    } catch (e) {
-      results.push({
+      wb = XLSX.read(buffer, { type: "array" });
+    } catch {
+      return NextResponse.json({ error: "invalid Excel file" }, { status: 400 });
+    }
+
+    const ws = wb.Sheets[SHEET_NAME];
+    if (!ws) {
+      return NextResponse.json(
+        { error: `시트 "${SHEET_NAME}" 를 찾을 수 없습니다 (dispatch export 파일을 사용하세요)` },
+        { status: 400 },
+      );
+    }
+
+    const rows = XLSX.utils.sheet_to_json<Row>(ws, { defval: "" });
+    validateAssignmentSmsUpload({ fileSize: file.size, rowCount: rows.length }, limits);
+
+    const results: Result[] = [];
+    const preparedRows: PreparedRow[] = [];
+    const templateBody = await getSmsTemplateBody(
+      SMS_TEMPLATE_KEYS.ASSIGNMENT,
+      DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
+    );
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const branch = String(row["지점명"] ?? "").trim();
+      const to = String(row["연락처"] ?? "").trim();
+      const rowNumber = i + 2;
+
+      if (!branch || !to) {
+        results.push({
+          row: rowNumber,
+          branch,
+          to,
+          ok: false,
+          error: "필수 필드 누락 (지점명/연락처)",
+        });
+        continue;
+      }
+
+      const installer = findInstallerByBranch(branch);
+      if (!installer) {
+        results.push({
+          row: rowNumber,
+          branch,
+          to,
+          ok: false,
+          error: `설치기사 등록 안됨 (지점명: "${branch}")`,
+        });
+        continue;
+      }
+      if (!installer.phone) {
+        results.push({
+          row: rowNumber,
+          branch,
+          to,
+          ok: false,
+          error: "기사 연락처 미입력 (dispatch.ts 의 INSTALLERS 에서 phone 설정 필요)",
+        });
+        continue;
+      }
+
+      const normalized = normalizeKr(to);
+      if (!normalized) {
+        results.push({
+          row: rowNumber,
+          branch,
+          to,
+          ok: false,
+          error: "연락처 형식 오류",
+        });
+        continue;
+      }
+
+      preparedRows.push({
         row: rowNumber,
         branch,
         to,
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        normalized,
+        text: renderTemplate(templateBody, {
+          branchName: installer.branchName,
+          installerPhone: installer.phone,
+          branch,
+          customerPhone: to,
+        }),
       });
     }
-  }
 
-  return NextResponse.json({
-    total: rows.length,
-    sent: results.filter((r) => r.ok).length,
-    failed: results.filter((r) => !r.ok).length,
-    results,
-  });
+    const reservation = await reserveAssignmentSmsDispatch({
+      adminId: admin!.id,
+      fileName: file.name,
+      recipientCount: preparedRows.length,
+      templateBody,
+      templateKey: SMS_TEMPLATE_KEYS.ASSIGNMENT,
+      maxRecipientsPerDay: limits.maxRecipientsPerDay,
+    });
+    const service = new SolapiMessageService(apiKey, apiSecret);
+
+    for (const row of preparedRows) {
+      try {
+        await service.send({ to: row.normalized, from, text: row.text });
+        results.push({ row: row.row, branch: row.branch, to: row.to, ok: true });
+      } catch (error) {
+        results.push({
+          row: row.row,
+          branch: row.branch,
+          to: row.to,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const sentCount = results.filter((result) => result.ok).length;
+    const failedCount = results.filter((result) => !result.ok).length;
+    const attemptedFailedCount = preparedRows.length - sentCount;
+    if (reservation) {
+      await finishAssignmentSmsDispatch({
+        auditKey: reservation.key,
+        sentCount,
+        failedCount: attemptedFailedCount,
+      });
+    }
+
+    return NextResponse.json({
+      total: rows.length,
+      sent: sentCount,
+      failed: failedCount,
+      results,
+    });
+  } catch (error) {
+    if (error instanceof AssignmentSmsSecurityError) {
+      return NextResponse.json({ error: error.code }, { status: error.status });
+    }
+    console.error("[api/send-assignment-sms]", error);
+    return NextResponse.json({ error: "SMS_SEND_FAILED" }, { status: 500 });
+  }
 }
