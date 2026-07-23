@@ -1,4 +1,12 @@
 {
   "crons": [
+    {
+      "path": "/api/internal/cron/installation/dispatcher",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/internal/cron/installation/sync-orders",
+      "schedule": "*/30 * * * *"
+    }
   ]
 }

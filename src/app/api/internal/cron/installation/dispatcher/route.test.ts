@@ -170,8 +170,8 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     vi.useRealTimers();
   });
 
-  it("does not register the dispatcher job in Vercel cron config", () => {
-    expect(vercelConfig.crons).not.toContainEqual({
+  it("registers the dispatcher job in Vercel cron config", () => {
+    expect(vercelConfig.crons).toContainEqual({
       path: "/api/internal/cron/installation/dispatcher",
       schedule: "*/5 * * * *",
     });
