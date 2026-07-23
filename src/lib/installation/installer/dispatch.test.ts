@@ -22,6 +22,7 @@ const {
   updateAssignment,
   countAssignments,
   createAssignment,
+  findFirstCandidateRun,
   createCandidateRun,
   upsertNotification,
   createStatusEvent,
@@ -41,6 +42,7 @@ const {
   updateAssignment: vi.fn(),
   countAssignments: vi.fn(),
   createAssignment: vi.fn(),
+  findFirstCandidateRun: vi.fn(),
   createCandidateRun: vi.fn(),
   upsertNotification: vi.fn(),
   createStatusEvent: vi.fn(),
@@ -51,6 +53,12 @@ vi.mock("@/lib/prisma", () => ({
     installationOrder: {
       findMany: findManyOrders,
       findUnique: findUniqueOrder,
+      update: updateOrder,
+    },
+    installationIssue: {
+      findFirst: findIssue,
+      create: createIssue,
+      update: updateIssue,
     },
     installer: {
       findMany: findManyInstallers,
@@ -100,6 +108,7 @@ function createTx() {
       create: createAssignment,
     },
     installationInstallerCandidateRun: {
+      findFirst: findFirstCandidateRun,
       create: createCandidateRun,
     },
     installationNotification: {
@@ -129,12 +138,14 @@ describe("dispatchReadyInstallationOrders", () => {
     updateAssignment.mockReset();
     countAssignments.mockReset();
     createAssignment.mockReset();
+    findFirstCandidateRun.mockReset();
     createCandidateRun.mockReset();
     upsertNotification.mockReset();
     createStatusEvent.mockReset();
     findIssue.mockResolvedValue(null);
     countIssues.mockResolvedValue(0);
     findFirstAssignment.mockResolvedValue(null);
+    findFirstCandidateRun.mockResolvedValue(null);
 
     transaction.mockImplementation(async (callback) => callback(createTx()));
   });
@@ -204,11 +215,12 @@ describe("dispatchReadyInstallationOrders", () => {
       tokenFactory: () => "installer-token",
     });
 
-    expect(result).toEqual({ dispatchedCount: 1, skippedCount: 0 });
+    expect(result).toEqual({ dispatchedCount: 1, skippedCount: 0, failedCount: 0 });
     expect(findManyOrders).toHaveBeenCalledWith({
       where: {
         status: "READY_FOR_CANDIDATE_SELECTION",
         activeAssignmentId: null,
+        hasOpenIssue: false,
         customerRequests: {
           some: {
             status: { in: ["SUBMITTED", "FALLBACK_USED"] },
@@ -382,7 +394,7 @@ describe("dispatchReadyInstallationOrders", () => {
         baseUrl: "https://example.com",
       });
 
-      expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+      expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
       expect(createCandidateRun).toHaveBeenCalledWith({
         data: expect.objectContaining({
           installationOrderId: "order-1",
@@ -394,6 +406,86 @@ describe("dispatchReadyInstallationOrders", () => {
       expect(createAssignment).not.toHaveBeenCalled();
     },
   );
+
+  it("records each automatic candidate failure reason only once per customer request", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    findManyOrders.mockResolvedValue([]);
+    findUniqueOrder.mockResolvedValue({
+      id: "order-1",
+      status: "READY_FOR_CANDIDATE_SELECTION",
+      source: { memo: "설치비 (K100) x1", addressEncrypted: null },
+      activeCustomerRequestId: "request-1",
+      activeAssignmentId: null,
+      customerRequests: [
+        {
+          id: "request-1",
+          installAddressEncrypted: "서울 강남구 테헤란로 1",
+          installDate: null,
+        },
+      ],
+    });
+    findFirstCandidateRun.mockResolvedValue({ id: "candidate-run-existing" });
+
+    const result = await dispatchReadyInstallationOrders({
+      now,
+      orderId: "order-1",
+      baseUrl: "https://example.com",
+    });
+
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
+    expect(findFirstCandidateRun).toHaveBeenCalledWith({
+      where: {
+        installationOrderId: "order-1",
+        customerRequestId: "request-1",
+        assignmentSource: "AUTO",
+        reasonCode: "MISSING_INSTALL_DATE",
+      },
+      select: { id: true },
+    });
+    expect(createCandidateRun).not.toHaveBeenCalled();
+  });
+
+  it("counts an unexpected automatic dispatch error as a failure", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        source: { memo: "설치비 (K100) x1", addressEncrypted: null },
+        activeCustomerRequestId: "request-1",
+        customerRequests: [
+          {
+            id: "request-1",
+            installAddressEncrypted: "서울 강남구 테헤란로 1",
+            installAddress1Encrypted: "서울 강남구",
+            installDate: "2026-06-20",
+          },
+        ],
+      },
+    ]);
+    findManyInstallers.mockRejectedValue(new Error("installer lookup failed"));
+    createIssue.mockResolvedValue({ id: "issue-1" });
+    updateOrder.mockResolvedValue({ id: "order-1" });
+
+    await expect(
+      dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" }),
+    ).resolves.toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 1 });
+    expect(createIssue).toHaveBeenCalledWith({
+      data: {
+        installationOrderId: "order-1",
+        type: "INSTALLATION_AUTOMATION_FAILED",
+        title: "자동 배정 처리 실패",
+        description: "installer lookup failed",
+        metadata: { stage: "DISPATCH_READY_ORDER" },
+        status: "OPEN",
+        createdAt: now,
+        updatedAt: now,
+      },
+      select: { id: true },
+    });
+
+    consoleError.mockRestore();
+  });
 
   it("does not create another active assignment when an active attempt already exists", async () => {
     const now = new Date("2026-06-11T01:00:00.000Z");
@@ -435,7 +527,7 @@ describe("dispatchReadyInstallationOrders", () => {
       baseUrl: "https://example.com",
     });
 
-    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(findFirstAssignment).toHaveBeenCalledWith({
       where: {
         installationOrderId: "order-1",
@@ -453,6 +545,73 @@ describe("dispatchReadyInstallationOrders", () => {
     });
     expect(createAssignment).not.toHaveBeenCalled();
     expect(upsertNotification).not.toHaveBeenCalled();
+  });
+
+  it("opens an admin issue when automatic dispatch selects an already-requested installer", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        source: { memo: "설치비 (K100) x1", addressEncrypted: null },
+        activeCustomerRequestId: "request-1",
+        customerRequests: [
+          {
+            id: "request-1",
+            installAddressEncrypted: "서울 강남구 테헤란로 1",
+            installAddress1Encrypted: "서울 강남구",
+            installDate: "2026-06-20",
+          },
+        ],
+      },
+    ]);
+    findManyInstallers.mockResolvedValue([
+      {
+        id: "installer-1",
+        name: "기요청기사",
+        phone: "010-1111-2222",
+        branch: "서울강남지점",
+        region: "서울",
+        coverage: null,
+        serviceAreas: ["서울 강남구"],
+        capabilities: ["DOORLOCK"],
+        aqaraAppCapability: "NONE",
+        monthlyDispatchCount: 0,
+        active: true,
+      },
+    ]);
+    findFirstAssignment
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "assignment-old" });
+    createCandidateRun.mockResolvedValue({ id: "candidate-run-1" });
+    createIssue.mockResolvedValue({ id: "issue-1" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    await expect(
+      dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" }),
+    ).resolves.toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
+
+    expect(createIssue).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        installationOrderId: "order-1",
+        type: "INSTALLER_CANDIDATE_EXHAUSTED",
+        title: "자동 배정 중복 요청 차단",
+        metadata: expect.objectContaining({
+          customerRequestId: "request-1",
+          installerId: "installer-1",
+          reasonCode: "DUPLICATE_INSTALLER_REQUEST",
+        }),
+      }),
+      select: { id: true },
+    });
+    expect(createStatusEvent).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        installationOrderId: "order-1",
+        eventType: "INSTALLER_CANDIDATE_EXHAUSTED",
+        reason: "DUPLICATE_INSTALLER_REQUEST",
+        metadata: expect.objectContaining({ issueId: "issue-1" }),
+      }),
+    });
+    expect(createAssignment).not.toHaveBeenCalled();
   });
 
   it("sends installer assignment SMS only after admin approval", async () => {
@@ -633,7 +792,7 @@ describe("dispatchReadyInstallationOrders", () => {
 
     const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
 
-    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(createIssue).toHaveBeenCalledWith({
       data: expect.objectContaining({
         installationOrderId: "order-1",
@@ -728,7 +887,7 @@ describe("dispatchReadyInstallationOrders", () => {
 
     const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
 
-    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(createCandidateRun).toHaveBeenCalledWith({
       data: expect.objectContaining({
         installationOrderId: "order-1",
@@ -776,7 +935,7 @@ describe("dispatchReadyInstallationOrders", () => {
 
     const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
 
-    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(createCandidateRun).toHaveBeenCalledWith({
       data: expect.objectContaining({
         installationOrderId: "order-1",
@@ -817,7 +976,7 @@ describe("dispatchReadyInstallationOrders", () => {
 
     const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
 
-    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1 });
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
     expect(findManyInstallers).not.toHaveBeenCalled();
     expect(createIssue).toHaveBeenCalledWith({
       data: expect.objectContaining({

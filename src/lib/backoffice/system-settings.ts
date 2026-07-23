@@ -22,6 +22,8 @@ export const SYSTEM_SETTING_KEYS = {
   installationCustomerInputRequestMode: "installation.sms.customerInputRequestMode",
   installationSmsDeliveryMode: "installation.sms.deliveryMode",
   installationSmsTestPhoneNumber: "installation.sms.testPhoneNumber",
+  installationSmsSendWindowStart: "installation.sms.sendWindowStart",
+  installationSmsSendWindowEnd: "installation.sms.sendWindowEnd",
 } as const;
 
 type SystemSettingRow = {
@@ -44,6 +46,7 @@ type SystemSettingSpec = {
   | { type: "boolean"; defaultValue: "false" }
   | { type: "enum"; allowedValues: readonly string[]; defaultValue: string }
   | { type: "integer"; min: number; max: number; defaultValue: number }
+  | { type: "time"; defaultValue: string }
   | { type: "phoneList"; defaultValue: "" }
 );
 
@@ -90,6 +93,20 @@ const SYSTEM_SETTING_SPECS = ([
     validationHint: `${dispatcherConfig.lockTtlMs.min}-${dispatcherConfig.lockTtlMs.max} 사이의 정수`,
   },
   ...dispatcherLimitSpecs,
+  {
+    key: dispatcherConfig.smsSendWindow.start.key,
+    description: dispatcherConfig.smsSendWindow.start.description,
+    type: "time" as const,
+    defaultValue: dispatcherConfig.smsSendWindow.start.default,
+    validationHint: "00:00-23:59 형식(HH:mm)",
+  },
+  {
+    key: dispatcherConfig.smsSendWindow.end.key,
+    description: dispatcherConfig.smsSendWindow.end.description,
+    type: "time" as const,
+    defaultValue: dispatcherConfig.smsSendWindow.end.default,
+    validationHint: "00:00-23:59 형식(HH:mm)",
+  },
   {
     key: SYSTEM_SETTING_KEYS.installationSmsDeliveryMode,
     description: "설치 문자 발송 상태(disabled/test/production)",
@@ -180,6 +197,12 @@ export function validateSystemSettingValue(key: string, rawValue: string) {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed >= spec.min && parsed <= spec.max
       ? { ok: true as const, value: String(parsed) }
+      : { ok: false as const };
+  }
+
+  if (spec.type === "time") {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+      ? { ok: true as const, value }
       : { ok: false as const };
   }
 

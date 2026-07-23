@@ -9,8 +9,11 @@ import InstallationSearchDetailPage from "./installation-search/[installationId]
 import InstallationsPage from "./installations/page";
 import InstallationDetailPage from "./installations/[installationId]/page";
 import { InstallationOrderListView } from "./installations/views";
-import { getBackofficeDashboardChartSummary } from "@/lib/backoffice/dashboard";
-import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import {
+  getBackofficeDashboardChartSummary,
+  getBackofficeSystemStatusSummary,
+} from "@/lib/backoffice/dashboard";
+import { getCurrentBackofficeUser, requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import { listActiveInstallerRequestAssignments } from "@/lib/installation/installer/review";
 import { listDispatchCandidateInstallers } from "@/lib/installation/installer/source";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
@@ -48,6 +51,7 @@ vi.mock("@/lib/login/backofficeAuth", () => ({
 
 vi.mock("@/lib/backoffice/dashboard", () => ({
   getBackofficeDashboardChartSummary: vi.fn(),
+  getBackofficeSystemStatusSummary: vi.fn(),
 }));
 
 vi.mock("@/lib/installation/installer/matcher", () => ({
@@ -225,6 +229,10 @@ describe("backoffice installation order routes", () => {
         { key: "waitingAdminReview", label: "관리자 검토 대기", count: 0 },
         { key: "waitingInstallerResponse", label: "기사 응답 대기", count: 0 },
       ],
+      attentionCount: 0,
+    });
+    vi.mocked(getBackofficeSystemStatusSummary).mockResolvedValue({
+      cronJobs: [],
     });
   });
 
@@ -236,6 +244,35 @@ describe("backoffice installation order routes", () => {
     expect(existsSync(legacyRoutesDir)).toBe(false);
   });
 
+  it("opens installation details in a non-modal master-detail panel from both lists", () => {
+    const detailSlotDir = join(backofficeDir, "@detail");
+    const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
+    const panelSource = readFileSync(join(backofficeDir, "InstallationOrderDetailPanel.tsx"), "utf8");
+    const catchAllSource = readFileSync(join(detailSlotDir, "[...catchAll]", "page.tsx"), "utf8");
+
+    expect(existsSync(join(detailSlotDir, "default.tsx"))).toBe(true);
+    expect(existsSync(join(detailSlotDir, "[...catchAll]", "page.tsx"))).toBe(true);
+    expect(existsSync(join(detailSlotDir, "(.)installations", "[installationId]", "page.tsx"))).toBe(true);
+    expect(existsSync(join(detailSlotDir, "(.)installation-search", "[installationId]", "page.tsx"))).toBe(true);
+    expect(layoutSource).toContain("detail: ReactNode");
+    expect(layoutSource).toContain("{detail}");
+    expect(layoutSource).toContain('className="flex min-w-0 flex-1 overflow-hidden md:min-h-0"');
+    expect(panelSource).toContain('aria-label="설치 주문 상세"');
+    expect(panelSource).toContain("lg:w-1/2");
+    expect(panelSource).not.toContain("lg:w-[72%]");
+    expect(panelSource).not.toContain("fixed inset-0");
+    expect(panelSource).not.toContain("bg-black/");
+    expect(catchAllSource).toContain("return null");
+  });
+
+  it("keeps the desktop sidebar fixed while only the main content scrolls", () => {
+    const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
+
+    expect(layoutSource).toContain("md:h-screen md:overflow-hidden");
+    expect(layoutSource).toContain("md:h-full md:min-h-0 md:flex-row");
+    expect(layoutSource).toContain("md:overflow-y-auto");
+  });
+
   it("exposes login as the canonical backoffice authentication route", () => {
     expect(existsSync(join(loginDir, "page.tsx"))).toBe(true);
     expect(existsSync(join(loginDir, "BackofficeAuthClient.tsx"))).toBe(true);
@@ -244,22 +281,24 @@ describe("backoffice installation order routes", () => {
 
   it("shows the logged-in email and logout control in the backoffice sidebar", () => {
     const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(join(backofficeDir, "BackofficeDesktopSidebar.tsx"), "utf8");
     const userMenuSource = readFileSync(join(backofficeDir, "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("getCurrentBackofficeUser");
-    expect(layoutSource).toContain("{user.email}");
-    expect(layoutSource).toContain("<BackofficeUserMenu email={user.email} />");
+    expect(layoutSource).toContain('requireBackofficeUserPage("/backoffice")');
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} />");
+    expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
     expect(userMenuSource).toContain('aria-label={`${email} 계정 메뉴`}');
-    expect(userMenuSource).toContain('fetch("/api/login/logout", { method: "POST" })');
+    expect(userMenuSource).toContain("signOutBackofficeAction()");
+    expect(userMenuSource).not.toContain("/api/login/logout");
     expect(userMenuSource).toContain('window.location.assign("/")');
   });
 
   it("links the backoffice sidebar title to the backoffice root", () => {
-    const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(join(backofficeDir, "BackofficeDesktopSidebar.tsx"), "utf8");
 
-    expect(layoutSource).toContain('import Link from "next/link"');
-    expect(layoutSource).toContain('href="/backoffice"');
-    expect(layoutSource).toMatch(/<Link\s+href="\/backoffice"[\s\S]*Backoffice[\s\S]*<\/Link>/);
+    expect(desktopSidebarSource).toContain('import Link from "next/link"');
+    expect(desktopSidebarSource).toContain('href="/backoffice"');
+    expect(desktopSidebarSource).toMatch(/<Link[\s\S]*href="\/backoffice"[\s\S]*Backoffice[\s\S]*<\/Link>/);
   });
 
   it("shows the ERP installation order source menu in the backoffice sidebar", () => {
@@ -281,9 +320,11 @@ describe("backoffice installation order routes", () => {
 
   it("shows a selected state for the active backoffice sidebar menu item", () => {
     const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(join(backofficeDir, "BackofficeDesktopSidebar.tsx"), "utf8");
     const sidebarSource = readFileSync(join(backofficeDir, "BackofficeSidebarNav.tsx"), "utf8");
 
-    expect(layoutSource).toContain("<BackofficeSidebarNav />");
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar");
+    expect(desktopSidebarSource).toContain("<BackofficeSidebarNav");
     expect(sidebarSource).toContain("usePathname");
     expect(sidebarSource).toContain("aria-current");
     expect(sidebarSource).toContain("bg-white font-semibold text-slate-950 shadow-sm ring-1 ring-slate-200");
@@ -293,15 +334,8 @@ describe("backoffice installation order routes", () => {
     expect(sidebarSource).not.toContain("menuSections");
   });
 
-  it("does not expose the installer list in the backoffice menu", () => {
-    const layoutSource = readFileSync(join(backofficeDir, "layout.tsx"), "utf8");
-    const backofficePageSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
-
-    expect(existsSync(join(backofficeDir, "installers"))).toBe(false);
-    expect(layoutSource).not.toContain('href: "/backoffice/installers"');
-    expect(layoutSource).not.toContain('label: "기사 리스트"');
-    expect(backofficePageSource).not.toContain('href="/backoffice/installers"');
-    expect(backofficePageSource).not.toContain("기사 리스트");
+  it("exposes installer management in the backoffice menu", () => {
+    expect(existsSync(join(backofficeDir, "installers"))).toBe(true);
   });
 
   it("does not keep mock or raw query handling in backoffice page implementations", () => {
@@ -357,47 +391,30 @@ describe("backoffice installation order routes", () => {
     expect(clientSource).not.toContain("sampleVars");
   });
 
-  it("shows an in-page loading animation while ERP installation orders load", () => {
-    const loadingSource = readFileSync(join(backofficeDir, "installation-order-source", "loading.tsx"), "utf8");
-
-    expect(loadingSource).toContain("ERP 주문 데이터");
-    expect(loadingSource).toContain("ERP_SOURCE_LOADING_COLUMN_COUNT");
-    expect(loadingSource).toContain("ERP_SOURCE_LOADING_COLUMNS.length");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).not.toContain('"customer_name"');
-    expect(loadingSource).not.toContain('"order_numbers"');
-    expect(loadingSource).not.toContain('"ERP 주문"');
-    expect(loadingSource).not.toContain('"주문일"');
-    expect(loadingSource).not.toContain("데이터를 불러오는 중입니다.");
-    expect(loadingSource).toContain("animate-spin");
-    expect(loadingSource).toContain("flex items-center gap-2");
-    expect(loadingSource).not.toContain("justify-between");
+  it("uses the shared backoffice loader for ERP installation orders", () => {
+    expect(existsSync(join(backofficeDir, "installation-order-source", "loading.tsx"))).toBe(false);
   });
 
   it("supports a lazy query parameter for visually checking the installation management loading state", () => {
     const pageSource = readFileSync(join(routesDir, "page.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
 
     expect(pageSource).toContain('resolvedSearchParams.lazy === "true"');
     expect(pageSource).toContain("await sleep(5_000)");
     expect(pageSource).toContain("function sleep");
-    expect(loadingSource).toContain("설치 주문");
-    expect(loadingSource).toContain("진행 중");
-    expect(loadingSource).toContain("INSTALLATION_ORDER_LOADING_COLUMNS");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).toContain("animate-spin");
-    expect(loadingSource).toContain('aria-label="설치 주문 로딩 중"');
-    expect(loadingSource).not.toContain("배정 요청");
   });
 
-  it("shows only the item count next to the ERP installation order data page title", () => {
+  it("shows the ERP installation order item count below the table", () => {
     const tableSource = readFileSync(installationOrderSourceTablePath, "utf8");
     const pageSource = readFileSync(join(backofficeDir, "installation-order-source", "page.tsx"), "utf8");
 
     expect(tableSource).toContain("{initialItems.length}건");
     expect(tableSource).toContain("<BackofficePageHeader");
     expect(tableSource).toContain('title="ERP 주문 데이터"');
-    expect(tableSource).toContain("meta={`${initialItems.length}건`}");
+    expect(tableSource).not.toContain("meta={`${initialItems.length}건`}");
+    expect(tableSource).toContain('className="mt-3 text-sm font-medium text-zinc-500"');
+    expect(tableSource.indexOf("{initialItems.length}건")).toBeGreaterThan(
+      tableSource.indexOf("<BackofficeDataTable"),
+    );
     expect(tableSource).not.toContain("<p className=\"mt-1 text-sm text-zinc-500\">");
     expect(tableSource).not.toContain("ERP 원천 조회 결과");
     expect(tableSource).not.toContain("조회 시각");
@@ -555,9 +572,9 @@ describe("backoffice installation order routes", () => {
     expect(dataTableSource).toContain("onColumnVisibilityChange");
     expect(dataTableSource).toContain("getAllLeafColumns");
     expect(dataTableSource).toContain("getToggleVisibilityHandler");
-    expect(dataTableSource).toContain("컬럼 선택");
+    expect(dataTableSource).toContain("컬럼 보기");
     expect(dataTableSource).toContain("showColumnVisibilityPopup");
-    expect(dataTableSource).toContain("컬럼 표시 설정");
+    expect(dataTableSource).toContain("컬럼 보기 설정");
     expect(dataTableSource).toContain('type="checkbox"');
   });
 
@@ -583,9 +600,9 @@ describe("backoffice installation order routes", () => {
     expect(tableSource).toContain("onColumnVisibilityChange");
     expect(tableSource).toContain("getAllLeafColumns");
     expect(tableSource).toContain("getToggleVisibilityHandler");
-    expect(tableSource).toContain("컬럼 선택");
+    expect(tableSource).toContain("컬럼 보기");
     expect(tableSource).toContain("showColumnVisibilityPopup");
-    expect(tableSource).toContain("컬럼 표시 설정");
+    expect(tableSource).toContain("컬럼 보기 설정");
     expect(tableSource).toContain('type="checkbox"');
   });
 
@@ -620,12 +637,8 @@ describe("backoffice installation order routes", () => {
       join(process.cwd(), "src", "lib", "login", "backofficeAuth.ts"),
       "utf8",
     );
-    const passwordSource = readFileSync(
-      join(process.cwd(), "src", "app", "api", "login", "password", "route.ts"),
-      "utf8",
-    );
-    const logoutSource = readFileSync(
-      join(process.cwd(), "src", "app", "api", "login", "logout", "route.ts"),
+    const actionsSource = readFileSync(
+      join(process.cwd(), "src", "app", "login", "actions.ts"),
       "utf8",
     );
     const middlewareSource = readFileSync(join(process.cwd(), "src", "middleware.ts"), "utf8");
@@ -635,8 +648,12 @@ describe("backoffice installation order routes", () => {
     expect(authSource).toContain("auth.getUser()");
     expect(authSource).not.toContain("createHmac");
     expect(authSource).not.toContain("BACKOFFICE_COOKIE_NAME");
-    expect(passwordSource).toContain("cookiesToSet");
-    expect(logoutSource).toContain("auth.signOut()");
+    expect(actionsSource).toContain('"use server"');
+    expect(actionsSource).toContain("signInBackofficeWithPassword");
+    expect(actionsSource).toContain("changeBackofficePassword");
+    expect(actionsSource).toContain("PASSWORD_CONFIRMATION_MISMATCH");
+    expect(actionsSource).toContain("auth.signOut()");
+    expect(actionsSource).toContain("cookieStore.set");
     expect(middlewareSource).toContain('matcher: ["/backoffice/:path*"]');
     expect(middlewareSource).toContain('Cache-Control", "private, no-store"');
   });
@@ -885,6 +902,69 @@ describe("backoffice installation order routes", () => {
     });
   });
 
+  it("resolves installer identity for installer SMS history", async () => {
+    vi.mocked(getInstallationOrderStatusDetail).mockResolvedValue(
+      createInstallationOrderDetail({
+        assignmentAttempts: [
+          {
+            id: "assignment-1",
+            installerId: "installer-1",
+            installer: { name: "송지용", branch: "지용열쇠" },
+            assignmentNumber: 1,
+            assignmentSource: "AUTO",
+            status: "WAITING_INSTALLER_RESPONSE",
+            acceptedAt: null,
+            rejectedAt: null,
+            rejectReason: null,
+            timedOutAt: null,
+            createdAt: new Date("2026-07-16T05:14:57.000Z"),
+          },
+        ],
+        notifications: [
+          {
+            id: "notification-1",
+            smsType: "INSTALLER_AVAILABILITY_REQUEST",
+            recipientType: "INSTALLER",
+            recipientPhone: "01091703550",
+            assignmentAttemptId: "assignment-1",
+            status: "FAILED",
+            providerStatus: null,
+            providerStatusCode: null,
+            providerReason: null,
+            providerReportedAt: null,
+            providerCheckedAt: null,
+            errorCode: "4000",
+            errorMessage: null,
+            retryCount: 0,
+            deliveryCheckCount: 1,
+            sentAt: null,
+            createdAt: new Date("2026-07-16T05:14:57.000Z"),
+          },
+        ],
+      }),
+    );
+    vi.mocked(listDispatchCandidateInstallers).mockResolvedValue([]);
+
+    const element = await InstallationDetailPage({
+      params: Promise.resolve({ installationId: "1" }),
+      searchParams: Promise.resolve({}),
+    });
+
+    expect(element).toMatchObject({
+      props: {
+        item: {
+          smsNotifications: [
+            expect.objectContaining({
+              recipientName: "송지용",
+              recipientBranch: "지용열쇠",
+              recipientPhone: "01091703550",
+            }),
+          ],
+        },
+      },
+    });
+  });
+
   it("renders the search-context installation detail route", async () => {
     vi.mocked(requireBackofficeUserPage).mockClear();
     vi.mocked(getInstallationOrderStatusDetail).mockResolvedValue(createInstallationOrderDetail());
@@ -901,7 +981,8 @@ describe("backoffice installation order routes", () => {
     expect(getInstallationOrderStatusDetail).toHaveBeenCalledWith("1");
     expect(element).toMatchObject({
       props: {
-        returnPath: "/backoffice/installation-search",
+        returnPath:
+          "/backoffice/installation-search?searchField=customerName&searchKeyword=%ED%99%8D%EA%B8%B8%EB%8F%99",
         item: expect.objectContaining({
           id: "1",
           sourceErpOrderNo: "ORDER-001",
@@ -1011,14 +1092,12 @@ describe("backoffice installation order routes", () => {
 
   it("does not show the current page item count next to the installation order list title", () => {
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
 
     expect(listSource).toContain("<BackofficePageHeader");
     expect(listSource).toContain("title={title}");
     expect(listSource).not.toContain("meta={`${initialItems.length}건`}");
     expect(listSource).not.toContain("{initialItems.length}건");
     expect(listSource).not.toContain("전체 {initialItems.length}건 / 표시");
-    expect(loadingSource).not.toContain("<span className=\"text-sm text-zinc-500\">-건</span>");
   });
 
   it("keeps only active workflow statuses as filters inside the installation queue page", () => {
@@ -1047,21 +1126,8 @@ describe("backoffice installation order routes", () => {
     expect(pageSource).not.toContain('label: "취소"');
   });
 
-  it("keeps the installation order loading state on the current list UI", () => {
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
-
-    expect(loadingSource).toContain("설치 업무 큐");
-    expect(loadingSource).toContain("전체 진행 중");
-    expect(loadingSource).toContain("INSTALLATION_ORDER_LOADING_COLUMNS");
-    expect(loadingSource).toContain('aria-label="컬럼 헤더 로딩 중"');
-    expect(loadingSource).toContain("w-max min-w-full");
-    expect(loadingSource).not.toContain("고객 입력 대기");
-    expect(loadingSource).not.toContain("배정 승인 대기");
-    expect(loadingSource).not.toContain("기사 배정 완료");
-    expect(loadingSource).not.toContain("-건");
-    expect(loadingSource).not.toContain("진행 단계");
-    expect(loadingSource).not.toContain("배정 요청");
-    expect(loadingSource).not.toContain("border-b-2 border-zinc-950");
+  it("uses the shared backoffice loader for the installation queue", () => {
+    expect(existsSync(join(routesDir, "loading.tsx"))).toBe(false);
   });
 
   it("removes separate board filter and sort controls from the installation order list", () => {
@@ -1095,8 +1161,8 @@ describe("backoffice installation order routes", () => {
     expect(dataTableSource).toContain("columnVisibility");
     expect(dataTableSource).toContain("onColumnVisibilityChange");
     expect(dataTableSource).toContain("getVisibleLeafColumns()");
-    expect(dataTableSource).toContain("컬럼 선택");
-    expect(dataTableSource).toContain("컬럼 표시 설정");
+    expect(dataTableSource).toContain("컬럼 보기");
+    expect(dataTableSource).toContain("컬럼 보기 설정");
     expect(dataTableSource).toContain("getCanHide()");
     expect(dataTableSource).toContain("getToggleVisibilityHandler()");
     expect(dataTableSource).toContain("renderBeforeTable?.(columnControls)");
@@ -1106,7 +1172,7 @@ describe("backoffice installation order routes", () => {
     expect(listSource.indexOf("<InstallationOrderInlineSearchForm")).toBeLessThan(
       listSource.indexOf("InstallationOrderStatusViewTabs"),
     );
-    expect(dataTableSource.indexOf("컬럼 선택")).toBeLessThan(
+    expect(dataTableSource.indexOf("컬럼 보기")).toBeLessThan(
       dataTableSource.indexOf('className="overflow-hidden rounded-md border border-zinc-200 bg-white"'),
     );
   });
@@ -1116,7 +1182,9 @@ describe("backoffice installation order routes", () => {
     const dataTableSource = readFileSync(join(backofficeDir, "BackofficeDataTable.tsx"), "utf8");
 
     expect(dataTableSource).toContain("whitespace-nowrap");
-    expect(listSource).toContain('className="whitespace-nowrap leading-5 text-zinc-800"');
+    expect(dataTableSource).toContain('className={`overflow-hidden ${cellClassName}`}');
+    expect(listSource).toContain('className="truncate leading-5 text-zinc-800"');
+    expect(listSource).toContain("title={formatText(getInstallationOrderAddress(row.original))}");
     expect(listSource).toContain('cellClassName="align-top px-4 py-3 text-zinc-600"');
     expect(listSource).not.toContain("whitespace-normal");
     expect(listSource).not.toContain("break-keep");
@@ -1171,7 +1239,8 @@ describe("backoffice installation order routes", () => {
     expect(listSource).toContain('header: "배정-기사"');
     expect(listSource).toContain('header: "배정-상태"');
     expect(listSource).toContain('header: "운영-상태"');
-    expect(listSource).toContain('header: "운영-확인 필요"');
+    expect(listSource).toContain('header: "운영-처리 사유"');
+    expect(listSource).toContain('header: "운영-다음 조치"');
     expect(listSource.match(/enableHiding: false/g)?.length).toBeGreaterThanOrEqual(2);
     expect(listSource).not.toContain("stickyColumnIds");
     expect(listSource).not.toContain('header: "상세"');
@@ -1221,7 +1290,9 @@ describe("backoffice installation order routes", () => {
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
 
     expect(listSource).toContain("getInstallationOrderDate(row.original)");
-    expect(listSource).toContain("getRowClassName={getInstallationOrderRowClassName}");
+    expect(listSource).toContain("getRowClassName={(row) =>");
+    expect(listSource).toContain("getInstallationOrderRowClassName(row)");
+    expect(listSource).toContain("ring-2 ring-inset ring-blue-300");
     expect(listSource).toContain('row.status === "WAITING_CUSTOMER_INPUT"');
     expect(listSource).toContain("getAdminAttentionLabel");
     expect(listSource).toContain('return "희망일 확인 필요"');
@@ -1295,8 +1366,10 @@ describe("backoffice installation order routes", () => {
   it("links installation orders to the current list detail route", () => {
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
 
-    expect(listSource).not.toContain("detailQueryString");
-    expect(listSource).toContain("href={`${basePath}/${row.original.id}`}");
+    expect(listSource).toContain("detailSearchQuery");
+    expect(listSource).toContain(
+      'href={`${basePath}/${row.original.id}${detailSearchQuery ? `?${detailSearchQuery}` : ""}`}',
+    );
   });
 
   it("shows read-only source order information on the detail page", () => {
@@ -1364,7 +1437,7 @@ describe("backoffice installation order routes", () => {
     expect(detailSource).toContain("whitespace-nowrap");
     expect(detailSource).toContain("shrink-0");
     expect(detailSource).not.toContain("flex flex-wrap gap-2 border-b");
-    expect(detailSource).toContain('className="grid gap-5"');
+    expect(detailSource).toContain('className="grid min-w-0 max-w-full gap-5"');
     expect(detailSource).toContain("OperationSummary");
     expect(detailSource).toContain("StatusActions");
     expect(detailSource).toContain("고객 정보");
@@ -1396,13 +1469,13 @@ describe("backoffice installation order routes", () => {
       "utf8",
     );
 
-    expect(detailSource).toContain("statusEvents.map");
+    expect(detailSource).toContain("groupedStatusEvents.map");
     expect(detailSource).toContain("assignmentAttempts.map");
     expect(detailSource).toContain("event.fromStatus");
     expect(detailSource).toContain("assignment.assignmentNumber");
   });
 
-  it("keeps linked detail data in tabs and renders history as chronological single rows", () => {
+  it("keeps linked detail data in tabs and renders dated history with the newest rows first", () => {
     const detailSource = readFileSync(
       join(routesDir, "[installationId]", "InstallationOrderDetail.tsx"),
       "utf8",
@@ -1410,20 +1483,20 @@ describe("backoffice installation order routes", () => {
 
     expect(detailSource).toContain("HistoryRows");
     expect(detailSource).toContain("HistoryRow");
-    expect(detailSource).toContain("sortByCreatedAtAsc");
-    expect(detailSource).toContain("sortByIssueTimelineAsc");
-    expect(detailSource).toContain("sortByNotificationTimelineAsc");
-    expect(detailSource).toContain("const statusEvents = sortByCreatedAtAsc(item.statusEvents)");
-    expect(detailSource).toContain("const assignmentAttempts = sortByCreatedAtAsc(item.assignmentAttempts)");
-    expect(detailSource).toContain("const customerRequests = sortByCreatedAtAsc(item.customerRequests)");
-    expect(detailSource).toContain("const candidateRuns = sortByCreatedAtAsc(item.candidateRuns)");
-    expect(detailSource).toContain("const smsNotifications = sortByNotificationTimelineAsc(item.smsNotifications)");
-    expect(detailSource).toContain("statusEvents.map");
+    expect(detailSource).toContain("sortByCreatedAtDesc");
+    expect(detailSource).toContain("sortByIssueTimelineDesc");
+    expect(detailSource).toContain("sortByNotificationTimelineDesc");
+    expect(detailSource).toContain("const statusEvents = sortByCreatedAtDesc(item.statusEvents)");
+    expect(detailSource).toContain("const assignmentAttempts = sortByCreatedAtDesc(item.assignmentAttempts)");
+    expect(detailSource).toContain("const customerRequests = sortByCreatedAtDesc(item.customerRequests)");
+    expect(detailSource).toContain("const candidateRuns = sortByCreatedAtDesc(item.candidateRuns)");
+    expect(detailSource).toContain("const smsNotifications = sortByNotificationTimelineDesc(item.smsNotifications)");
+    expect(detailSource).toContain("groupedStatusEvents.map");
     expect(detailSource).toContain("assignmentAttempts.map");
     expect(detailSource).toContain("notifications.map");
     expect(detailSource).toContain("customerRequests.map");
-    expect(detailSource).toContain("<CandidateRunSummary runs={candidateRuns} />");
-    expect(detailSource).toContain("runs.map");
+    expect(detailSource).toContain("<CandidateRunHistory key={item.id} runs={candidateRuns} />");
+    expect(detailSource).toContain("visibleRuns.map");
     expect(detailSource).not.toContain('className="rounded-md border border-zinc-200 p-3"');
   });
 
@@ -1448,10 +1521,15 @@ describe("backoffice installation order routes", () => {
     );
 
     expect(detailSource).toContain('CUSTOMER_INPUT_LINK: "고객 예약 정보 입력 안내"');
-    expect(detailSource).toContain("notification.assignmentId ? (");
-    expect(detailSource).not.toContain("배정 {formatText(notification.assignmentId)}");
+    expect(detailSource).toContain('notification.recipientType === "INSTALLER"');
+    expect(detailSource).toContain("formatText(notification.recipientName)");
+    expect(detailSource).toContain("notification.recipientBranch");
+    expect(detailSource).toContain("formatBackofficePhone(notification.recipientPhone)");
+    expect(detailSource).not.toContain("배정 {notification.assignmentId}");
     expect(detailSource).toContain("getSmsFailureReasonText(notification)");
-    expect(detailSource).toContain("if (notification.status === \"SENT\") return \"-\";");
+    expect(detailSource).toContain(
+      'notification.status === "SENT" || notification.status === "DELIVERED"',
+    );
     expect(detailSource).toContain("<SmsDeliveryStatus notification={notification} />");
     expect(detailSource).toContain("도달 실패");
     expect(detailSource).toContain("도달 성공");
@@ -1459,14 +1537,14 @@ describe("backoffice installation order routes", () => {
     expect(detailSource).toContain("failureReason: null");
   });
 
-  it("formats phone numbers on the installation detail summary", () => {
+  it("formats phone numbers outside the address-focused installation summary", () => {
     const detailSource = readFileSync(
       join(routesDir, "[installationId]", "InstallationOrderDetail.tsx"),
       "utf8",
     );
 
     expect(detailSource).toContain("formatBackofficePhone");
-    expect(detailSource).toContain("formatBackofficePhone(activeCustomerRequest?.customerPhone ?? item.sourcePhone)");
+    expect(detailSource).not.toContain("formatBackofficePhone(activeCustomerRequest?.customerPhone ?? item.sourcePhone)");
     expect(detailSource).toContain("formatBackofficePhone(item.sourcePhone)");
   });
 
@@ -1487,15 +1565,47 @@ describe("backoffice installation order routes", () => {
       "utf8",
     );
 
-    expect(detailSource).toContain('aria-label="설치 주문 목록으로 돌아가기"');
+    expect(detailSource).toContain('"설치 주문 목록으로 돌아가기"');
+    expect(detailSource).toContain('"목록으로 돌아가는 중"');
+    expect(detailSource).toContain('displayMode === "panel"');
+    expect(detailSource).toContain('isLeavingDetail ? "닫는 중..." : "닫기"');
+    expect(detailSource).not.toContain("상세 닫기");
     expect(detailSource).toContain("router.back()");
     expect(detailSource).toContain("router.push(returnPath)");
     expect(detailSource).toContain('<div className="flex min-w-0 items-start gap-3">');
-    expect(detailSource).toContain('className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3"');
+    expect(detailSource).toContain('className="min-w-0"');
     expect(detailSource).toContain('className="shrink-0 whitespace-nowrap text-2xl font-semibold tracking-tight text-zinc-950"');
-    expect(detailSource).toContain('className="min-w-0 truncate font-mono text-sm text-zinc-500"');
-    expect(detailSource).toContain("{item.sourceErpOrderNo}");
+    expect(detailSource).not.toContain('className="min-w-0 truncate font-mono text-sm text-zinc-500"');
+    expect(detailSource).toContain('{ label: "주문번호", value: item.sourceErpOrderNo }');
+    expect(detailSource).toContain('value: openIssues.length > 0 ? `열린 예외 ${openIssues.length}건` : "없음"');
+    expect(detailSource).toContain('label: "설치 희망"');
+    expect(detailSource).toContain('{ label: "설치 주소", value: formatText(activeCustomerRequest?.installAddress) }');
+    expect(detailSource).toContain('{ label: "설치 기사 이름", value: currentInstallerName }');
+    expect(detailSource).toContain('{ label: "설치 기사 브랜치", value: currentInstallerBranch }');
+    expect(detailSource.indexOf('{ label: "주문번호"')).toBeLessThan(detailSource.indexOf('{ label: "현재 상태"'));
+    expect(detailSource.indexOf('{ label: "현재 상태"')).toBeLessThan(detailSource.indexOf('{ label: "예외"'));
+    expect(detailSource.indexOf('{ label: "예외"')).toBeLessThan(detailSource.indexOf('{ label: "설치 희망"'));
+    expect(detailSource.indexOf('{ label: "설치 희망"')).toBeLessThan(detailSource.indexOf('{ label: "설치 주소"'));
+    expect(detailSource.indexOf('{ label: "설치 주소"')).toBeLessThan(detailSource.indexOf('{ label: "설치 기사 이름"'));
+    expect(detailSource.indexOf('{ label: "설치 기사 이름"')).toBeLessThan(detailSource.indexOf('{ label: "설치 기사 브랜치"'));
+    expect(detailSource).not.toContain('{ label: "고객", value: formatText(item.sourceCustomerName) }');
+    expect(detailSource).not.toContain('{ label: "전화", value: formatBackofficePhone(activeCustomerRequest?.customerPhone ?? item.sourcePhone) }');
+    expect(detailSource).toContain('row.colSpan === 2 ? "col-span-2"');
+    expect(detailSource).not.toContain('{ label: "희망시간", value:');
     expect(detailSource).not.toContain('meta={item.sourceErpOrderNo}');
+  });
+
+  it("keeps wide assignment and SMS content inside the detail panel", () => {
+    const detailSource = readFileSync(
+      join(routesDir, "[installationId]", "InstallationOrderDetail.tsx"),
+      "utf8",
+    );
+
+    expect(detailSource).toContain("grid-cols-2 border-y border-zinc-200 bg-white lg:grid-cols-4");
+    expect(detailSource).toContain("min-w-0 max-w-full overflow-hidden border-y border-zinc-200");
+    expect(detailSource).toContain("min-w-0 max-w-full overflow-x-auto overscroll-x-contain border-y border-zinc-200");
+    expect(detailSource).toContain('className="w-max min-w-[1040px] border-collapse text-left text-sm"');
+    expect(detailSource).toContain('className="w-max min-w-[1200px] border-collapse text-left text-sm"');
   });
 
   it("shows SMS history and retry action on the detail page", () => {
@@ -1506,7 +1616,9 @@ describe("backoffice installation order routes", () => {
     );
 
     expect(detailPageSource).toContain("order.notifications.map");
-    expect(detailPageSource).toContain("recipientId");
+    expect(detailPageSource).toContain("assignmentInstallerById");
+    expect(detailPageSource).toContain("recipientName");
+    expect(detailPageSource).toContain("recipientBranch");
     expect(detailSource).toContain("notifications.map");
     expect(detailSource).toContain("retrySmsNotificationAction");
     expect(detailSource).toContain("getSmsNotificationAction");
@@ -1525,7 +1637,9 @@ describe("backoffice installation order routes", () => {
     expect(detailSource).toContain('eligibilityLabel: "재발송 가능"');
     expect(detailSource).toContain('failureReason: "실패 SMS"');
     expect(detailSource).toContain("재발송");
-    expect(detailSource).toContain("if (notification.status === \"SENT\") return \"-\";");
+    expect(detailSource).toContain(
+      'notification.status === "SENT" || notification.status === "DELIVERED"',
+    );
   });
 
   it("maps detail aliases from the spec contract", () => {
@@ -1571,8 +1685,10 @@ describe("backoffice installation order routes", () => {
     expect(detailPageSource).toContain("findBestMatchingInstallers");
     expect(detailPageSource).toContain("candidateRuns");
     expect(detailSource).toContain('title="현재 기사 후보"');
-    expect(detailSource).toContain("<CandidateRunSummary runs={candidateRuns} />");
-    expect(detailSource).toContain("runs.map");
+    expect(detailSource).toContain('title="기사 후보 탐색 이력"');
+    expect(detailSource).toContain("<CandidateRunHistory key={item.id} runs={candidateRuns} />");
+    expect(detailSource).toContain("visibleRuns.map");
+    expect(detailSource).toContain("이력 {Math.min(CANDIDATE_RUN_HISTORY_PAGE_SIZE, remainingCount)}건 더보기");
     expect(detailSource).toContain("candidates.map");
   });
 
@@ -1642,7 +1758,7 @@ describe("backoffice installation order routes", () => {
     expect(detailSource).toContain("pending || !action.enabled");
     expect(detailSource).not.toContain("결과 상태");
     expect(detailSource).not.toContain("nextStep");
-    expect(detailSource).not.toContain("다음 단계");
+    expect(detailSource).toContain("OperationalDecisionCard");
     expect(detailSource).toContain("자동 후보/기사 응답 흐름을 멈추고 처리 필요 항목으로 표시합니다. 이후 직접 기사 지정 또는 후보 다시 찾기를 실행할 수 있으며, 고객이나 기사에게 자동 SMS는 발송하지 않습니다.");
     expect(detailSource).toContain("기사가 실제 설치를 끝낸 건으로 확정합니다. 활성 배정 시도가 있으면 관리자 완료로 닫고, 설치건은 완료 상태로 종료합니다.");
     expect(detailSource).toContain("설치건을 취소 상태로 종료합니다. 자동 배정, 고객 리마인드, 기사 timeout 처리를 모두 멈추며, 원천 주문 시스템에는 주문 취소 요청을 보내지 않습니다.");
@@ -1821,16 +1937,17 @@ describe("backoffice installation order routes", () => {
     });
   });
 
-  it("protects the backoffice root without automatically entering installation management", () => {
+  it("keeps the backoffice root as a landing page without redirecting to an operational screen", () => {
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
 
-    expect(rootSource).toContain('requireBackofficeUserPage("/backoffice", 1)');
+    expect(rootSource).toContain("getCurrentBackofficeUser");
     expect(rootSource).not.toContain('redirect("/backoffice/installations")');
-    expect(rootSource).toContain("getBackofficeDashboardChartSummary");
+    expect(rootSource).toContain("사이드바 메뉴를 선택하세요.");
+    expect(rootSource).not.toContain("getBackofficeDashboardChartSummary");
   });
 
-  it("requires approved backoffice access on the backoffice root", async () => {
-    vi.mocked(requireBackofficeUserPage).mockResolvedValue({
+  it("reads the current backoffice user before rendering the landing page", async () => {
+    vi.mocked(getCurrentBackofficeUser).mockResolvedValue({
       id: "bo-1",
       supabaseUserId: "supabase-1",
       email: "viewer@example.com",
@@ -1839,32 +1956,25 @@ describe("backoffice installation order routes", () => {
 
     const element = await BackofficePage();
 
-    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice", 1);
-    expect(getBackofficeDashboardChartSummary).toHaveBeenCalledWith({ days: 14 });
+    expect(getCurrentBackofficeUser).toHaveBeenCalledOnce();
+    expect(requireBackofficeUserPage).not.toHaveBeenCalled();
+    expect(getBackofficeDashboardChartSummary).not.toHaveBeenCalled();
     expect(isValidElement(element)).toBe(true);
 
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
-    expect(rootSource).toContain("신규 주문과 설치 완료 추이");
-    expect(rootSource).toContain("현재 대기 상태 분포");
-    expect(rootSource).toContain("기간 집계가 아니라 지금 남아 있는 상태별 주문 수입니다.");
-    expect(rootSource).not.toContain("권한 승인 대기");
-    expect(rootSource).not.toContain("Cron 호출 상태");
-    expect(rootSource).not.toContain("처리 필요 항목");
-    expect(rootSource).not.toContain("설치 주문 보기");
-    expect(rootSource).not.toContain("운영 설정");
-    expect(rootSource).not.toContain("데이터 가져오기");
-    expect(rootSource).not.toContain("관리 메뉴");
-    expect(rootSource).not.toContain("진행 중인 설치 주문과 전체 주문을 조회합니다.");
+    expect(rootSource).toContain("AQARALIFE SERVICE BACKOFFICE");
+    expect(rootSource).toContain("사이드바 메뉴를 선택하세요.");
   });
 
-  it("keeps the backoffice root focused on charts instead of dashboard cards", () => {
+  it("keeps dashboard charts on the dedicated installation dashboard route", () => {
     const rootSource = readFileSync(join(backofficeDir, "page.tsx"), "utf8");
+    const dashboardSource = readFileSync(join(backofficeDir, "installation-dashboard", "page.tsx"), "utf8");
 
-    expect(rootSource).toContain("DailyOrdersChart");
-    expect(rootSource).toContain("QueueStatusChart");
-    expect(rootSource).not.toContain("renderDashboardInfoCard");
-    expect(rootSource).not.toContain("attentionItems.map");
-    expect(rootSource).not.toContain("Cron 호출 상태");
+    expect(rootSource).not.toContain("DailyOrdersChart");
+    expect(rootSource).not.toContain("QueueStatusChart");
+    expect(dashboardSource).toContain("DailyOrdersChart");
+    expect(dashboardSource).toContain("QueueStatusChart");
+    expect(dashboardSource).toContain("getBackofficeDashboardChartSummary");
   });
 
   it("passes the current installation board query string as the login return path", async () => {
@@ -1914,24 +2024,26 @@ describe("backoffice installation order routes", () => {
     });
   });
 
-  it("redirects the dedicated order search page to the default order date query on first load", async () => {
+  it("loads the default order date range on the dedicated order search page without redirecting", async () => {
     vi.mocked(requireBackofficeUserPage).mockClear();
     vi.mocked(listInstallationOrderStatuses).mockResolvedValue([]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-24T01:00:00+09:00"));
 
     try {
-      await expect(
-        InstallationSearchPage({
-          searchParams: Promise.resolve({}),
-        }),
-      ).rejects.toThrow(
-        "NEXT_REDIRECT:/backoffice/installation-search?searchField=orderDate&searchFrom=2026-05-25&searchTo=2026-06-24",
-      );
-      expect(redirectMock).toHaveBeenCalledWith(
-        "/backoffice/installation-search?searchField=orderDate&searchFrom=2026-05-25&searchTo=2026-06-24",
-      );
-      expect(listInstallationOrderStatuses).not.toHaveBeenCalled();
+      const element = await InstallationSearchPage({
+        searchParams: Promise.resolve({}),
+      });
+      await renderServerElement(element);
+
+      expect(listInstallationOrderStatuses).toHaveBeenCalledWith({
+        query: "",
+        searchCondition: { field: "orderDate", from: "2026-05-25", to: "2026-06-24" },
+        statusView: "all",
+        limit: 20,
+        offset: 0,
+      });
+      expect(redirectMock).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -2121,13 +2233,11 @@ describe("backoffice installation order routes", () => {
 
   it("shows status filter tabs with counts instead of a separate progress step section", () => {
     const pageSource = readFileSync(join(routesDir, "page.tsx"), "utf8");
-    const loadingSource = readFileSync(join(routesDir, "loading.tsx"), "utf8");
     const listSource = readFileSync(join(routesDir, "InstallationOrderList.tsx"), "utf8");
 
     expect(pageSource).toContain("statusFilterItems");
     expect(pageSource).not.toContain("progressStepItems");
     expect(pageSource).toContain("normalizeInstallationOrderStatusView");
-    expect(loadingSource).not.toContain("진행 단계");
     expect(listSource).not.toContain("InstallationOrderProgressSteps");
     expect(listSource).not.toContain("aria-label=\"설치 주문 진행 단계\"");
     expect(listSource).not.toContain("→");

@@ -362,6 +362,9 @@ function normalizeAssignmentResult(
   fallback: { status: string; assignmentType: string },
 ): InstallationActionResult {
   if (isAssignmentActionResult(result)) {
+    if (!result.assignmentId && result.reasonCode === "DUPLICATE_INSTALLER_REQUEST") {
+      return { ok: false, error: "DUPLICATE_INSTALLER_REQUEST" };
+    }
     return { ok: true, ...result };
   }
 

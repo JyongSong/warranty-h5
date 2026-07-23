@@ -16,6 +16,7 @@ import { fallbackExpiredInstallationCustomerRequests } from "@/lib/installation/
 import { remindExpiredInstallationCustomerRequests } from "@/lib/installation/customer/reminder";
 import { dispatchReadyInstallationOrders } from "@/lib/installation/installer/dispatch";
 import {
+  alertOrphanedInstallationOrders,
   alertDueSoonUnassignedOrders,
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/installation/notifications/outbox";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
+import { isInstallationSmsSendWindowOpen } from "@/lib/installation/notifications/sms-send-window";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,10 @@ export async function GET(request: Request) {
     const baseUrl = getSmsLinkBaseUrl();
     try {
       startedAt = new Date();
+      const smsSendWindowOpen = isInstallationSmsSendWindowOpen(
+        startedAt,
+        config.smsSendWindow,
+      );
       const metrics: Record<string, { durationMs: number }> = {};
       const results = {
         processInstallationOrders:
@@ -124,9 +130,20 @@ export async function GET(request: Request) {
           "sendInstallationNotifications",
           metrics,
           () =>
-            sendPendingInstallationNotifications({
-              limit: config.limits.sendInstallationNotifications,
-            }),
+            smsSendWindowOpen
+              ? sendPendingInstallationNotifications({
+                  limit: config.limits.sendInstallationNotifications,
+                })
+              : Promise.resolve({
+                  sentCount: 0,
+                  failedCount: 0,
+                  skippedQuietHours: true,
+                }),
+        ),
+        alertOrphanedOrders: await runDispatcherStep("alertOrphanedOrders", metrics, () =>
+          alertOrphanedInstallationOrders({
+            limit: config.limits.alertDueSoonOrders,
+          }),
         ),
         syncSmsDeliveryReports: await runDispatcherStep("syncSmsDeliveryReports", metrics, () =>
           syncInstallationSmsDeliveryReports({
@@ -141,10 +158,25 @@ export async function GET(request: Request) {
         config: {
           lockTtlMs: config.lockTtlMs,
           customerInputRequestMode: config.customerInputRequestMode,
+          smsSendWindow: config.smsSendWindow,
+          smsSendWindowOpen,
           limits: config.limits,
         },
       });
-      await recordCronJobFinished(INSTALLATION_DISPATCHER_CRON_JOB, "SUCCESS", startedAt, null);
+      const degraded =
+        results.processInstallationOrders.failedCount > 0 ||
+        results.remindCustomerRequests.failedCount > 0 ||
+        results.dispatchReadyOrders.failedCount > 0 ||
+        results.timeoutInstallerAssignments.failedCount > 0 ||
+        results.sendInstallationNotifications.failedCount > 0 ||
+        results.syncSmsDeliveryReports.failedCount > 0 ||
+        results.alertOrphanedOrders.issueCount > 0;
+      await recordCronJobFinished(
+        INSTALLATION_DISPATCHER_CRON_JOB,
+        degraded ? "DEGRADED" : "SUCCESS",
+        startedAt,
+        degraded ? "INSTALLATION_DISPATCHER_PARTIAL_FAILURE" : null,
+      );
 
       return NextResponse.json({
         ok: true,
@@ -154,6 +186,8 @@ export async function GET(request: Request) {
         config: {
           lockTtlMs: config.lockTtlMs,
           customerInputRequestMode: config.customerInputRequestMode,
+          smsSendWindow: config.smsSendWindow,
+          smsSendWindowOpen,
           limits: config.limits,
         },
       });

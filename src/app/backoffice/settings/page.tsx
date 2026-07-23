@@ -1,7 +1,8 @@
-import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import { redirect } from "next/navigation";
 
 export default async function BackofficeSettingsPage() {
-  await requireBackofficeUserPage("/backoffice/settings", 1);
-
-  return <div className="min-h-screen bg-white" />;
+  // The settings item is a menu group, not a content page. Leaving this route
+  // empty makes a slow navigation look like a blank page, so always land on a
+  // concrete settings screen instead.
+  redirect("/backoffice/settings/users");
 }

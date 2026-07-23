@@ -320,6 +320,19 @@ describe("installation order management actions", () => {
     });
   });
 
+  it("returns an actionable error when admin retry selects an already requested installer", async () => {
+    retryInstallationOrderAssignmentByAdminMock.mockResolvedValue({
+      assignmentId: null,
+      status: "WAITING_ADMIN_REVIEW",
+      activeAttempt: null,
+      reasonCode: "DUPLICATE_INSTALLER_REQUEST",
+    });
+
+    const result = await retryInstallationOrderAssignmentByAdminAction("order-1", "후보 재검색");
+
+    expect(result).toEqual({ ok: false, error: "DUPLICATE_INSTALLER_REQUEST" });
+  });
+
   it("queues customer input SMS notifications for selected installation orders", async () => {
     createCustomerInputRequestsForInstallationOrdersMock.mockResolvedValue({
       processedCount: 2,

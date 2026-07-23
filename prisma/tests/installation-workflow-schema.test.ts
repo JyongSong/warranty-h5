@@ -3,6 +3,34 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(join(process.cwd(), "prisma/schema.prisma"), "utf8");
+const notificationOutcomeMigration = readFileSync(
+  join(
+    process.cwd(),
+    "prisma/migrations/20260715000000_add_installation_orphan_issue_types/migration.sql",
+  ),
+  "utf8",
+);
+const repairSmsDeliveryMigration = readFileSync(
+  join(
+    process.cwd(),
+    "prisma/migrations/20260716010000_repair_sms_delivery_and_open_issues/migration.sql",
+  ),
+  "utf8",
+);
+const finalizeSmsDeliveryMigration = readFileSync(
+  join(
+    process.cwd(),
+    "prisma/migrations/20260716135045_finalize_sms_delivery_state/migration.sql",
+  ),
+  "utf8",
+);
+const resolveDeliveredSmsIssuesMigration = readFileSync(
+  join(
+    process.cwd(),
+    "prisma/migrations/20260716143000_resolve_delivered_sms_send_issues/migration.sql",
+  ),
+  "utf8",
+);
 
 describe("Prisma installation workflow schema", () => {
   it("defines the installation workflow models used by the application code", () => {
@@ -54,6 +82,31 @@ describe("Prisma installation workflow schema", () => {
     ]);
   });
 
+  it("keeps explicit delivered and unknown notification outcomes", () => {
+    expect(getEnumValues("InstallationNotificationStatus")).toEqual([
+      "PENDING",
+      "SENT",
+      "DELIVERED",
+      "FAILED",
+      "UNKNOWN",
+    ]);
+    expect(notificationOutcomeMigration).not.toContain(`'DELIVERED'`);
+    expect(finalizeSmsDeliveryMigration).toContain(
+      `ADD VALUE IF NOT EXISTS 'DELIVERED' AFTER 'SENT'`,
+    );
+    expect(schema).toMatch(/deliveryCheckCount\s+Int\s+@default\(0\)\s+@map\("delivery_check_count"\)/);
+  });
+
+  it("repairs valid SOLAPI 4000 rows into the terminal delivered state", () => {
+    expect(repairSmsDeliveryMigration).toContain(`"status" = 'SENT'`);
+    expect(finalizeSmsDeliveryMigration).toContain(`"status" = 'DELIVERED'`);
+    expect(finalizeSmsDeliveryMigration).toContain(`"delivery_check_count" = 0`);
+    expect(finalizeSmsDeliveryMigration).toContain(`"provider_status_code" = '4000'`);
+    expect(resolveDeliveredSmsIssuesMigration).toContain(`notification."status" = 'DELIVERED'`);
+    expect(resolveDeliveredSmsIssuesMigration).toContain(`issue."metadata"->>'notificationId'`);
+    expect(resolveDeliveredSmsIssuesMigration).not.toContain(`"failureStage"`);
+  });
+
   it("keeps installation issue types limited to the operational failure definitions", () => {
     expect(getEnumValues("InstallationIssueType")).toEqual([
       "ORDER_CUSTOMER_PHONE_MISSING",
@@ -66,6 +119,8 @@ describe("Prisma installation workflow schema", () => {
       "INSTALLER_CANDIDATE_EXHAUSTED",
       "INSTALLER_NOT_ASSIGNED",
       "INSTALLATION_NOT_COMPLETED",
+      "INSTALLATION_AUTOMATION_FAILED",
+      "INSTALLATION_WORKFLOW_ORPHANED",
       "INSTALLER_ASSIGNMENT_SMS_SEND_FAILED",
       "CUSTOMER_ASSIGNMENT_SMS_SEND_FAILED",
     ]);

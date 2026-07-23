@@ -65,8 +65,8 @@ describe("GET /api/internal/cron/installation/sync-orders", () => {
     syncInstallationOrdersFromErpMock.mockReset();
   });
 
-  it("does not register the sync job in Vercel cron config", () => {
-    expect(vercelConfig.crons).not.toContainEqual({
+  it("registers the sync job in Vercel cron config", () => {
+    expect(vercelConfig.crons).toContainEqual({
       path: "/api/internal/cron/installation/sync-orders",
       schedule: "*/30 * * * *",
     });

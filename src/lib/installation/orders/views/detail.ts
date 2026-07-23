@@ -52,7 +52,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
         },
       },
       assignmentAttempts: {
-        orderBy: { assignmentNumber: "asc" },
+        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           installerId: true,
@@ -73,7 +73,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
         },
       },
       statusEvents: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           fromStatus: true,
@@ -117,6 +117,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
           errorCode: true,
           errorMessage: true,
           retryCount: true,
+          deliveryCheckCount: true,
           sentAt: true,
           createdAt: true,
         },
@@ -153,10 +154,32 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
 
   if (!order) return null;
 
+  const adminActorIds = uniqueActorIds(order.statusEvents, "ADMIN");
+  const installerActorIds = uniqueActorIds(order.statusEvents, "INSTALLER");
+  const [adminActors, installerActors] = await Promise.all([
+    adminActorIds.length > 0
+      ? prisma.backofficeUser.findMany({
+          where: { id: { in: adminActorIds } },
+          select: { id: true, emailEncrypted: true },
+        })
+      : [],
+    installerActorIds.length > 0
+      ? prisma.installer.findMany({
+          where: { id: { in: installerActorIds } },
+          select: { id: true, name: true, branch: true, phone: true },
+        })
+      : [],
+  ]);
+  const adminEmailById = new Map(
+    adminActors.map((actor) => [actor.id, decryptNullablePii(actor.emailEncrypted)]),
+  );
+  const installerById = new Map(installerActors.map((actor) => [actor.id, actor]));
+
   const {
     source,
     customerRequests,
     notifications,
+    statusEvents,
     ...orderFields
   } = order;
 
@@ -175,6 +198,22 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
     sourceCustomerName: decryptNullablePii(source?.customerNameEncrypted),
     sourcePhone: decryptNullablePii(source?.phoneEncrypted),
     sourceAddress: decryptNullablePii(source?.addressEncrypted),
+    statusEvents: statusEvents.map((event) => {
+      const { actorId, ...eventFields } = event;
+      const installer = event.actorType === "INSTALLER" && actorId
+        ? installerById.get(actorId)
+        : null;
+
+      return {
+        ...eventFields,
+        actorEmail: event.actorType === "ADMIN" && actorId
+          ? adminEmailById.get(actorId) ?? null
+          : null,
+        actorInstallerName: installer?.name ?? null,
+        actorInstallerBranch: installer?.branch ?? null,
+        actorInstallerPhone: installer?.phone ?? null,
+      };
+    }),
     customerRequests: customerRequests.map((request) => {
       const {
         installAddressEncrypted,
@@ -199,4 +238,18 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
       };
     }),
   };
+}
+
+function uniqueActorIds(
+  events: Array<{ actorType: string; actorId: string | null }>,
+  actorType: string,
+) {
+  return Array.from(
+    new Set(
+      events
+        .filter((event) => event.actorType === actorType)
+        .map((event) => event.actorId)
+        .filter((actorId): actorId is string => Boolean(actorId)),
+    ),
+  );
 }

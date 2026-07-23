@@ -191,7 +191,7 @@ type SubmitInstallerResponseResult =
 
 ### 설치 기사 응답 초기 조회 shape
 
-수락 전에는 고객 전체 이름, 전화번호, 상세 주소를 노출하지 않는다.
+수락 전에는 고객 전체 이름을 노출하지 않는다. 유효한 배정 응답 링크에는 고객 전화번호와 상세 주소를 제공한다.
 
 ```ts
 type InstallerResponsePageInfo =
@@ -452,7 +452,7 @@ type InstallationOrderDetailItem = InstallationOrderListItem & {
     recipientType: "CUSTOMER" | "INSTALLER";
     recipientId: string | null;
     assignmentId: string | null;
-    status: "PENDING" | "SENT" | "FAILED";
+    status: "PENDING" | "SENT" | "DELIVERED" | "FAILED" | "UNKNOWN";
     retryable: boolean;
     failureReason: string | null;
     sentAt: string | null;
@@ -536,4 +536,4 @@ Failure:
 
 SMS 발송은 공용 internal SMS API를 호출하지 않는다. 발송이 필요한 기능 코드에서 해당 업무 이벤트에 맞는 발송 함수 또는 outbox 유틸을 만들어 직접 발송한다.
 
-SMS 발송 실패는 최초 발송 포함 최대 3회까지, SMS 도달 실패는 최초 발송 포함 최대 2회까지 같은 업무 대상 기준으로 재시도한다. 배정 요청 SMS 최종 실패는 상태 전이를 막고 배정 시도 실패 정책을 따른다. 비배정 SMS 최종 실패는 업무 상태 전이를 rollback하지 않고 `SMS_FAILED` 예외로 관리한다.
+SMS 발송 실패와 SMS 도달 실패는 각각 최초 시도와 자동 재시도 1회를 합쳐 최대 2회까지 같은 업무 대상 기준으로 재시도한다. 배정 요청 SMS 최종 실패는 상태 전이를 막고 배정 시도 실패 정책을 따른다. 비배정 SMS 최종 실패는 업무 상태 전이를 rollback하지 않고 `SMS_FAILED` 예외로 관리한다.

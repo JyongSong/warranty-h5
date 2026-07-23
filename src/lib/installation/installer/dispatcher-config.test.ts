@@ -31,6 +31,8 @@ describe("loadInstallationDispatcherConfig", () => {
       setting("installation.dispatcher.lockTtlMs", "180000"),
       setting("installation.dispatcher.limit.processInstallationOrders", "7"),
       setting("installation.dispatcher.limit.sendInstallationNotifications", "9"),
+      setting("installation.sms.sendWindowStart", "09:30"),
+      setting("installation.sms.sendWindowEnd", "19:45"),
     ]);
 
     const config = await loadInstallationDispatcherConfig();
@@ -42,6 +44,7 @@ describe("loadInstallationDispatcherConfig", () => {
     expect(config.limits.processInstallationOrders).toBe(7);
     expect(config.limits.remindCustomerRequests).toBe(25);
     expect(config.limits.sendInstallationNotifications).toBe(9);
+    expect(config.smsSendWindow).toEqual({ start: "09:30", end: "19:45" });
   });
 
   it("loads manual customer input request mode from system settings", async () => {
@@ -83,6 +86,8 @@ describe("loadInstallationDispatcherConfig", () => {
       setting("installation.dispatcher.lockTtlMs", "999999"),
       setting("installation.dispatcher.limit.processInstallationOrders", "0"),
       setting("installation.dispatcher.limit.sendInstallationNotifications", "abc"),
+      setting("installation.sms.sendWindowStart", "8:00"),
+      setting("installation.sms.sendWindowEnd", "24:00"),
     ]);
 
     const config = await loadInstallationDispatcherConfig();
@@ -90,6 +95,7 @@ describe("loadInstallationDispatcherConfig", () => {
     expect(config.lockTtlMs).toBe(240000);
     expect(config.limits.processInstallationOrders).toBe(25);
     expect(config.limits.sendInstallationNotifications).toBe(10);
+    expect(config.smsSendWindow).toEqual({ start: "08:00", end: "20:00" });
   });
 });
 
@@ -98,6 +104,7 @@ describe("getInstallationDispatcherConfigRows", () => {
     const rows = getInstallationDispatcherConfigRows({
       enabled: true,
       customerInputRequestMode: "manual",
+      smsSendWindow: { start: "08:00", end: "20:00" },
       lockTtlMs: 180000,
       limits: {
         processInstallationOrders: 7,
@@ -120,6 +127,16 @@ describe("getInstallationDispatcherConfigRows", () => {
       key: "installation.sms.customerInputRequestMode",
       value: "manual",
       description: "고객 입력 요청 문자 발송 방식(auto/manual)",
+    });
+    expect(rows).toContainEqual({
+      key: "installation.sms.sendWindowStart",
+      value: "08:00",
+      description: "설치 자동 문자 발송 허용 시작 시각(Asia/Seoul)",
+    });
+    expect(rows).toContainEqual({
+      key: "installation.sms.sendWindowEnd",
+      value: "20:00",
+      description: "설치 자동 문자 발송 허용 종료 시각(Asia/Seoul, 종료 시각 제외)",
     });
     expect(rows).toContainEqual({
       key: "installation.dispatcher.limit.sendInstallationNotifications",

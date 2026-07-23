@@ -62,4 +62,13 @@ describe("InstallerResponseClient response UI", () => {
     expect(source).toContain("detail.productItems.map((item, index)");
     expect(source).toContain("key={`${item.name}-${index}`}");
   });
+
+  it("shows the detailed address and customer phone in installation details", () => {
+    expect(source).toContain("address: formatInstallAddress(request)");
+    expect(source).toContain("request?.customerPhone ?? assignment?.installationOrder.sourcePhone");
+    expect(source).toContain('<InlineSummaryRow label="주소" value={detail.address} />');
+    expect(source).toContain(
+      '<InlineSummaryRow label="고객 전화번호" value={detail.customerPhone} />',
+    );
+  });
 });

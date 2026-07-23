@@ -46,7 +46,8 @@ describe("getBackofficeDashboardChartSummary", () => {
       .mockResolvedValueOnce(4)
       .mockResolvedValueOnce(3)
       .mockResolvedValueOnce(2)
-      .mockResolvedValueOnce(1);
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(6);
 
     await expect(
       getBackofficeDashboardChartSummary({
@@ -81,6 +82,7 @@ describe("getBackofficeDashboardChartSummary", () => {
         { key: "waitingAdminReview", label: "관리자 검토 대기", count: 2 },
         { key: "waitingInstallerResponse", label: "기사 응답 대기", count: 1 },
       ],
+      attentionCount: 6,
     });
 
     expect(installationOrderCount).toHaveBeenNthCalledWith(1, {
@@ -105,6 +107,15 @@ describe("getBackofficeDashboardChartSummary", () => {
     });
     expect(installationOrderCount).toHaveBeenNthCalledWith(9, {
       where: { status: "WAITING_INSTALLER_RESPONSE" },
+    });
+    expect(installationOrderCount).toHaveBeenNthCalledWith(10, {
+      where: {
+        OR: [
+          { hasOpenIssue: true },
+          { status: "CUSTOMER_INPUT_SMS_REQUIRED" },
+          { status: "WAITING_ADMIN_REVIEW" },
+        ],
+      },
     });
   });
 });

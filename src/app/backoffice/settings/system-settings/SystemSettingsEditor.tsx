@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 import type { SystemSettingListItem } from "@/lib/backoffice/system-settings";
+import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import { updateSystemSettingAction } from "./actions";
 
 const errorMessage: Record<string, string> = {
@@ -75,9 +76,8 @@ export default function SystemSettingsEditor({
         <table className="w-max min-w-full border-collapse text-left text-sm whitespace-nowrap">
           <thead className="bg-zinc-50 text-xs font-semibold text-zinc-500">
             <tr>
-              <th className="w-[32%] border-b border-zinc-200 px-4 py-3">키</th>
-              <th className="w-[18%] border-b border-zinc-200 px-4 py-3">저장값</th>
-              <th className="w-[18%] border-b border-zinc-200 px-4 py-3">적용값</th>
+              <th className="w-[40%] border-b border-zinc-200 px-4 py-3">키</th>
+              <th className="w-[20%] border-b border-zinc-200 px-4 py-3">현재값</th>
               <th className="border-b border-zinc-200 px-4 py-3">설명</th>
               <th className="w-24 border-b border-zinc-200 px-4 py-3">작업</th>
             </tr>
@@ -89,10 +89,6 @@ export default function SystemSettingsEditor({
                   {setting.key}
                 </td>
                 <td className="align-top px-4 py-3 font-mono text-xs leading-5 text-zinc-950">
-                  <div>{setting.value || "-"}</div>
-                  <SystemSettingValueStatus status={setting.valueStatus} />
-                </td>
-                <td className="align-top px-4 py-3 font-mono text-xs leading-5 text-zinc-950">
                   {setting.effectiveValue}
                 </td>
                 <td className="align-top px-4 py-3 text-sm leading-5 text-zinc-700">
@@ -102,7 +98,7 @@ export default function SystemSettingsEditor({
                   <button
                     type="button"
                     onClick={() => openEditor(setting)}
-                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold whitespace-nowrap text-zinc-900 transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-950"
+                    className={getBackofficeButtonClass("primary")}
                   >
                     편집
                   </button>
@@ -168,14 +164,14 @@ export default function SystemSettingsEditor({
                   type="button"
                   onClick={closeEditor}
                   disabled={isPending}
-                  className="h-10 rounded-md border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={getBackofficeButtonClass("secondary", "lg")}
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="h-10 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={getBackofficeButtonClass("primary", "lg")}
                 >
                   {isPending ? "저장 중..." : "저장"}
                 </button>
@@ -186,13 +182,4 @@ export default function SystemSettingsEditor({
       ) : null}
     </>
   );
-}
-
-function SystemSettingValueStatus({ status }: { status: SystemSettingListItem["valueStatus"] }) {
-  if (status === "stored") return null;
-
-  const className = status === "invalid" ? "text-red-700" : "text-zinc-500";
-  const label = status === "invalid" ? "무효값" : "미설정";
-
-  return <div className={`mt-1 text-xs font-medium ${className}`}>{label}</div>;
 }

@@ -15,6 +15,18 @@
     "description": "고객 입력 요청 문자 발송 방식(auto/manual)",
     "default": "manual"
   },
+  "smsSendWindow": {
+    "start": {
+      "key": "installation.sms.sendWindowStart",
+      "description": "설치 자동 문자 발송 허용 시작 시각(Asia/Seoul)",
+      "default": "08:00"
+    },
+    "end": {
+      "key": "installation.sms.sendWindowEnd",
+      "description": "설치 자동 문자 발송 허용 종료 시각(Asia/Seoul, 종료 시각 제외)",
+      "default": "20:00"
+    }
+  },
   "limits": {
     "processInstallationOrders": {
       "key": "installation.dispatcher.limit.processInstallationOrders",

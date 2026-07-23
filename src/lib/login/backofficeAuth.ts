@@ -50,8 +50,25 @@ function tryDecryptBackofficeEmail(emailEncrypted: string) {
   }
 }
 
-function getAuthErrorMessage(error: { message?: string } | null) {
+function getAuthErrorMessage(error: { code?: string; message?: string } | null) {
+  if (error?.code === "invalid_credentials") {
+    return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  }
+
   return error?.message || "SUPABASE_AUTH_FAILED";
+}
+
+function getPasswordChangeErrorCode(error: { code?: string }) {
+  if (error.code === "invalid_credentials") return "CURRENT_PASSWORD_INVALID";
+
+  if (error.code === "same_password") return "PASSWORD_UNCHANGED";
+  if (error.code === "weak_password") return "PASSWORD_TOO_WEAK";
+  if (error.code === "over_request_rate_limit") return "PASSWORD_CHANGE_RATE_LIMITED";
+  if (error.code === "reauthentication_needed") return "REAUTHENTICATION_REQUIRED";
+  if (["no_authorization", "session_expired", "session_not_found"].includes(error.code ?? "")) {
+    return "UNAUTHORIZED";
+  }
+  return "PASSWORD_CHANGE_FAILED";
 }
 
 export async function createBackofficeSupabaseClient(
@@ -123,7 +140,7 @@ export async function signInBackofficeWithPassword(
         },
         select: userSelect,
       })
-    : await linkOrCreateBackofficeUserForSupabaseSignIn({
+    : await linkBackofficeUserForSupabaseSignIn({
         supabaseUserId,
         emailEncrypted,
         emailHash,
@@ -131,11 +148,59 @@ export async function signInBackofficeWithPassword(
         userSelect,
       });
 
-  const { emailEncrypted: nextEmailEncrypted, ...userFields } = user;
-  return { ...userFields, supabaseUserId, email: decryptPii(nextEmailEncrypted) };
+  if (!user) {
+    await supabase.auth.signOut({ scope: "local" });
+    throw new Error("등록되지 않은 백오피스 계정입니다.");
+  }
+
+  return {
+    id: user.id,
+    supabaseUserId,
+    email: decryptPii(user.emailEncrypted),
+    level: user.level,
+  };
 }
 
-async function linkOrCreateBackofficeUserForSupabaseSignIn({
+export async function changeBackofficePassword(
+  currentPassword: string,
+  newPassword: string,
+  cookiesToSet: SupabaseCookieToSet[],
+) {
+  if (!currentPassword) throw new Error("CURRENT_PASSWORD_REQUIRED");
+  if (!newPassword) throw new Error("NEW_PASSWORD_REQUIRED");
+  if (currentPassword === newPassword) throw new Error("PASSWORD_UNCHANGED");
+
+  const supabase = await createBackofficeSupabaseClient(cookiesToSet);
+  const { data, error: userError } = await supabase.auth.getUser();
+
+  const userId = data.user?.id?.trim();
+  const email = normalizeEmail(data.user?.email ?? "");
+  if (userError || !userId || !email) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  const { data: reauthenticated, error: reauthenticationError } =
+    await supabase.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+  if (reauthenticationError) {
+    throw new Error(getPasswordChangeErrorCode(reauthenticationError));
+  }
+  if (reauthenticated.user?.id !== userId) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    throw new Error(getPasswordChangeErrorCode(error));
+  }
+}
+
+async function linkBackofficeUserForSupabaseSignIn({
   supabaseUserId,
   emailEncrypted,
   emailHash,
@@ -174,16 +239,7 @@ async function linkOrCreateBackofficeUserForSupabaseSignIn({
     });
   }
 
-  return prisma.backofficeUser.create({
-    data: {
-      supabaseUserId,
-      emailEncrypted,
-      emailHash,
-      level: 0,
-      lastLoginAt,
-    },
-    select: userSelect,
-  });
+  return null;
 }
 
 export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | null> {
@@ -206,9 +262,15 @@ export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | n
 
   if (!user) return null;
 
-  const { emailEncrypted, ...userFields } = user;
-  const email = tryDecryptBackofficeEmail(emailEncrypted);
-  if (email) return { ...userFields, supabaseUserId: data.user.id, email };
+  const email = tryDecryptBackofficeEmail(user.emailEncrypted);
+  if (email) {
+    return {
+      id: user.id,
+      supabaseUserId: data.user.id,
+      email,
+      level: user.level,
+    };
+  }
 
   const supabaseEmail = normalizeEmail(data.user.email ?? "");
   if (!supabaseEmail) return null;
@@ -223,7 +285,12 @@ export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | n
     });
   }
 
-  return { ...userFields, supabaseUserId: data.user.id, email: supabaseEmail };
+  return {
+    id: user.id,
+    supabaseUserId: data.user.id,
+    email: supabaseEmail,
+    level: user.level,
+  };
 }
 
 export async function requireBackofficeUserPage(

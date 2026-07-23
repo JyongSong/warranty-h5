@@ -11,7 +11,7 @@ export default function AuthClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const nextPath = searchParams.get("next") || "/installers";
+  const nextPath = searchParams.get("next") || "/backoffice/installers";
   const forbidden = searchParams.get("error") === "forbidden";
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {

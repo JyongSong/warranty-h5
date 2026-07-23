@@ -115,6 +115,7 @@ type CandidateRunInput = {
 export type DispatchReadyInstallationOrdersResult = {
   dispatchedCount: number;
   skippedCount: number;
+  failedCount: number;
 };
 
 export async function dispatchReadyInstallationOrders({
@@ -131,6 +132,7 @@ export async function dispatchReadyInstallationOrders({
       ...(orderId ? { id: orderId } : {}),
       status: INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
       activeAssignmentId: null,
+      hasOpenIssue: false,
       customerRequests: {
         some: {
           status: { in: ["SUBMITTED", "FALLBACK_USED"] },
@@ -172,13 +174,15 @@ export async function dispatchReadyInstallationOrders({
   if (orderId && orders.length === 0) {
     const skipped = await recordSkippedAutoRequestCandidateRun(orderId, now);
     if (skipped) {
-      return { dispatchedCount: 0, skippedCount: 1 };
+      return { dispatchedCount: 0, skippedCount: 1, failedCount: 0 };
     }
   }
 
   let dispatchedCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
   for (const order of orders as ReadyOrder[]) {
+    try {
     const customerRequest = getActiveCustomerRequest(order);
     const installAddress = decryptNullablePii(customerRequest?.installAddressEncrypted);
     if (!installAddress) {
@@ -267,9 +271,24 @@ export async function dispatchReadyInstallationOrders({
     } else {
       skippedCount += 1;
     }
+    } catch (error) {
+      await createInstallationIssue({
+        installationOrderId: order.id,
+        type: "INSTALLATION_AUTOMATION_FAILED",
+        title: "자동 배정 처리 실패",
+        description: error instanceof Error ? error.message : "UNKNOWN_DISPATCH_ERROR",
+        metadata: {
+          stage: "DISPATCH_READY_ORDER",
+        },
+        now,
+      });
+      console.error("[installation/installer/dispatch]", { orderId: order.id, error });
+      skippedCount += 1;
+      failedCount += 1;
+    }
   }
 
-  return { dispatchedCount, skippedCount };
+  return { dispatchedCount, skippedCount, failedCount };
 }
 
 export async function retryInstallationOrderAssignmentByAdmin(
@@ -768,6 +787,40 @@ async function createWaitingInstallerResponseAssignment(
           selectedInstallerId: null,
         });
       }
+      if (options.assignmentSource === "AUTO") {
+        const issue = await createInstallationIssue(
+          {
+            installationOrderId: orderId,
+            type: "INSTALLER_CANDIDATE_EXHAUSTED",
+            title: "자동 배정 중복 요청 차단",
+            description: "이미 요청한 기사만 다시 선정되어 자동 배정을 계속할 수 없습니다.",
+            metadata: {
+              customerRequestId,
+              installerId: candidate.businessNumber,
+              reasonCode: "DUPLICATE_INSTALLER_REQUEST",
+            },
+            now: options.now,
+          },
+          tx as never,
+        );
+        await tx.installationOrderStatusEvent.create({
+          data: {
+            installationOrderId: orderId,
+            fromStatus: INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
+            toStatus: INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
+            eventType: "INSTALLER_CANDIDATE_EXHAUSTED",
+            actorType: "SYSTEM",
+            actorId: null,
+            reason: "DUPLICATE_INSTALLER_REQUEST",
+            metadata: {
+              customerRequestId,
+              installerId: candidate.businessNumber,
+              issueId: issue.id,
+            },
+            createdAt: options.now,
+          },
+        });
+      }
       return {
         assignmentId: null,
         status:
@@ -950,6 +1003,7 @@ function normalizeDispatchProgressStatus(status: string | null | undefined): Ass
 async function recordCandidateRun(
   tx: {
     installationInstallerCandidateRun: {
+      findFirst: (args: unknown) => Promise<{ id: string } | null>;
       create: (args: unknown) => Promise<unknown>;
     };
   },
@@ -957,6 +1011,19 @@ async function recordCandidateRun(
   now: Date,
   run: CandidateRunInput,
 ) {
+  if (run.assignmentSource === "AUTO" && run.reasonCode) {
+    const existingRun = await tx.installationInstallerCandidateRun.findFirst({
+      where: {
+        installationOrderId: orderId,
+        customerRequestId: run.customerRequestId,
+        assignmentSource: "AUTO",
+        reasonCode: run.reasonCode,
+      },
+      select: { id: true },
+    });
+    if (existingRun) return;
+  }
+
   await tx.installationInstallerCandidateRun.create({
     data: {
       installationOrderId: orderId,

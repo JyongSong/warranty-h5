@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBackofficeMenuItemActive } from "./BackofficeSidebarNav";
+import { isBackofficeMenuItemActive, isBackofficeSubmenuExpanded } from "./BackofficeSidebarNav";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -25,6 +25,48 @@ describe("isBackofficeMenuItemActive", () => {
     expect(isBackofficeMenuItemActive("/backoffice/installations-archive", "/backoffice/installations")).toBe(false);
     expect(isBackofficeMenuItemActive("/backoffice/installations", "/backoffice")).toBe(false);
     expect(isBackofficeMenuItemActive("/backoffice/settings/system-settings", "/backoffice/settings")).toBe(true);
+  });
+
+  it("keeps active submenus open only while the desktop sidebar is expanded", () => {
+    const activeSettingsState = {
+      isActive: true,
+      manuallyExpandedPathname: null,
+      collapsedPathname: null,
+      pathname: "/backoffice/settings/system-status",
+    };
+
+    expect(isBackofficeSubmenuExpanded({ ...activeSettingsState, collapsed: false })).toBe(true);
+    expect(isBackofficeSubmenuExpanded({ ...activeSettingsState, collapsed: true })).toBe(false);
+  });
+
+  it("does not keep a manually expanded submenu open after the route changes", () => {
+    const manuallyExpandedOnOperationsPage = {
+      isActive: false,
+      manuallyExpandedPathname: "/backoffice/installations",
+      collapsedPathname: null,
+    };
+
+    expect(
+      isBackofficeSubmenuExpanded({
+        ...manuallyExpandedOnOperationsPage,
+        collapsed: false,
+        pathname: "/backoffice/installations",
+      }),
+    ).toBe(true);
+    expect(
+      isBackofficeSubmenuExpanded({
+        ...manuallyExpandedOnOperationsPage,
+        collapsed: false,
+        pathname: "/backoffice/installation-order-source",
+      }),
+    ).toBe(false);
+    expect(
+      isBackofficeSubmenuExpanded({
+        ...manuallyExpandedOnOperationsPage,
+        collapsed: true,
+        pathname: "/backoffice/installation-order-source",
+      }),
+    ).toBe(false);
   });
 
   it("renders sidebar menu labels with a controlled medium weight", () => {
@@ -70,27 +112,19 @@ describe("isBackofficeMenuItemActive", () => {
     expect(settingsSubMenuIndexes).toEqual([...settingsSubMenuIndexes].sort((a, b) => a - b));
   });
 
-  it("uses the current backoffice route title while shared loading UI is shown", () => {
+  it("uses a server-rendered shared loading UI", () => {
     const loadingSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "loading.tsx"), "utf8");
 
-    expect(loadingSource).toContain("usePathname");
-    expect(loadingSource).toContain("getBackofficeLoadingTitle(pathname)");
-    expect(loadingSource).toContain('href: "/backoffice", title: "운영 현황"');
-    expect(loadingSource).not.toContain('title="Backoffice"');
-    expect(loadingSource).toContain('if (normalizedPathname === "/backoffice")');
-    expect(loadingSource).toContain("<BackofficeDashboardLoading />");
-    expect(loadingSource).toContain("신규 주문과 설치 완료 추이 로딩 중");
-    expect(loadingSource).toContain("현재 대기 상태 분포 로딩 중");
-    expect(loadingSource).toContain('href: "/backoffice/settings/system-status", title: "시스템 상태"');
-    expect(loadingSource).toContain('href: "/backoffice/settings/system-settings", title: "시스템 설정"');
-    expect(loadingSource).not.toContain('href: "/backoffice/settings/data-import/shipped-devices", title: "출고 기기 가져오기"');
-    expect(loadingSource).toContain('href: "/backoffice/settings/data-import/installers", title: "설치 기사 가져오기"');
+    expect(loadingSource).not.toContain('"use client"');
+    expect(loadingSource).toContain('title="페이지를 불러오는 중"');
+    expect(loadingSource).toContain("페이지를 불러오는 중입니다.");
   });
 
-  it("shows only frequently used operational pages and the settings entry in the sidebar", () => {
+  it("shows the order dashboard and frequently used operational pages in the sidebar", () => {
     const source = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
 
-    expect(source).not.toContain('label: "운영 현황"');
+    expect(source).toContain('label: "주문 대시보드"');
+    expect(source).toContain('href: "/backoffice/installation-dashboard"');
     expect(source).not.toContain('href: "/backoffice",');
     expect(source).toContain('label: "ERP 주문 데이터"');
     expect(source).toContain('label: "설치 업무 큐"');
@@ -111,7 +145,7 @@ describe("isBackofficeMenuItemActive", () => {
     expect(source).not.toContain('label: "데이터 가져오기"');
   });
 
-  it("keeps the settings landing page blank and moves helper pages under settings routes", () => {
+  it("redirects the settings landing page to a concrete settings screen", () => {
     const settingsPagePath = join(process.cwd(), "src", "app", "backoffice", "settings", "page.tsx");
     const systemSettingsPagePath = join(
       process.cwd(),
@@ -140,15 +174,6 @@ describe("isBackofficeMenuItemActive", () => {
       "system-status",
       "page.tsx",
     );
-    const systemStatusLoadingPath = join(
-      process.cwd(),
-      "src",
-      "app",
-      "backoffice",
-      "settings",
-      "system-status",
-      "loading.tsx",
-    );
     const dataImportPagePath = join(
       process.cwd(),
       "src",
@@ -171,32 +196,21 @@ describe("isBackofficeMenuItemActive", () => {
     expect(existsSync(settingsPagePath)).toBe(true);
     expect(existsSync(systemSettingsPagePath)).toBe(true);
     expect(existsSync(systemStatusPagePath)).toBe(true);
-    expect(existsSync(systemStatusLoadingPath)).toBe(true);
     expect(existsSync(smsTemplatesPagePath)).toBe(true);
     expect(existsSync(dataImportPagePath)).toBe(true);
     expect(existsSync(usersPagePath)).toBe(true);
     expect(existsSync(join(process.cwd(), "src", "app", "backoffice", "settings", "json-entities"))).toBe(true);
 
     const source = readFileSync(settingsPagePath, "utf8");
-    expect(source).toContain('requireBackofficeUserPage("/backoffice/settings", 1)');
+    expect(source).toContain('redirect("/backoffice/settings/users")');
     expect(source).not.toContain("SettingsSectionLayout");
     expect(source).not.toContain("왼쪽 메뉴에서");
     expect(source).not.toContain("<h2");
 
-    const systemStatusLoadingSource = readFileSync(systemStatusLoadingPath, "utf8");
     const systemStatusPageSource = readFileSync(systemStatusPagePath, "utf8");
     expect(systemStatusPageSource).toContain("overflow-auto");
     expect(systemStatusPageSource).toContain("whitespace-nowrap");
     expect(systemStatusPageSource).not.toContain("table-fixed");
-    expect(systemStatusLoadingSource).toContain('title="시스템 상태"');
-    expect(systemStatusLoadingSource).toContain('className="max-w-4xl"');
-    expect(systemStatusLoadingSource).toContain("overflow-auto");
-    expect(systemStatusLoadingSource).toContain("whitespace-nowrap");
-    expect(systemStatusLoadingSource).not.toContain("table-fixed");
-    expect(systemStatusLoadingSource).toContain("자동 작업 실행 상태");
-    expect(systemStatusLoadingSource).toContain("설치 cron 작업별 마지막 실행 상태 로딩 중");
-    expect(systemStatusLoadingSource).toContain("설치 주문 동기화");
-    expect(systemStatusLoadingSource).toContain("설치 Dispatcher");
   });
 
   it("renders settings submenus from the expanded settings menu", () => {
@@ -204,34 +218,79 @@ describe("isBackofficeMenuItemActive", () => {
 
     expect(source).toContain("subItems");
     expect(source).toContain("aria-expanded={isExpanded}");
-    expect(source).toContain("setIsManuallyExpanded(true)");
+    expect(source).toContain("setManuallyExpandedPathname(pathname)");
     expect(source).toContain("setCollapsedPathname(isActive ? pathname : null)");
     expect(source).toContain("isExpanded && item.subItems");
     expect(source).toContain('aria-label={`${item.label} 하위 메뉴`}');
   });
 
+  it("keeps the desktop settings submenu mounted while navigating to the first child page", () => {
+    const source = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
+
+    expect(source).toContain("function handleSubmenuNavigate()");
+    expect(source).toContain("if (collapsed || onNavigate)");
+    expect(source).toContain("setManuallyExpandedPathname(null)");
+    expect(source).toContain("setCollapsedPathname(null)");
+    expect(source).toContain("onNavigate?.()");
+    expect(source).toContain("onClick={handleSubmenuNavigate}");
+  });
+
   it("supports a mobile hamburger menu without duplicating menu item state", () => {
     const layoutSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const sidebarSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"), "utf8");
 
     expect(layoutSource).toContain("BackofficeMobileNav");
-    expect(layoutSource).toContain('className="hidden w-64 shrink-0 border-r border-slate-200 bg-white md:block"');
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar");
+    expect(desktopSidebarSource).toContain('collapsed ? "w-16" : "w-64"');
     expect(mobileNavSource).toContain('aria-label={open ? "백오피스 메뉴 닫기" : "백오피스 메뉴 열기"}');
     expect(mobileNavSource).toContain('className="sticky top-0 z-30 border-b border-zinc-200 bg-white md:hidden"');
     expect(mobileNavSource).toContain('className="relative h-full w-72 max-w-[82vw] border-r border-slate-200 bg-white shadow-xl"');
     expect(mobileNavSource).toContain("<BackofficeSidebarNav");
+    expect(mobileNavSource).toContain("const pathname = usePathname()");
+    expect(mobileNavSource).toContain("setOpen(false);\n  }, [pathname]);");
+    expect(mobileNavSource).toContain('href="/backoffice"\n          onClick={() => setOpen(false)}');
     expect(sidebarSource).toContain("onNavigate?: () => void");
     expect(sidebarSource).toContain("onClick={onNavigate}");
   });
 
+  it("supports a persistent minimized desktop sidebar", () => {
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
+    const sidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeSidebarNav.tsx"),
+      "utf8",
+    );
+
+    expect(desktopSidebarSource).toContain("backoffice-sidebar-collapsed-v1");
+    expect(desktopSidebarSource).toContain("window.localStorage.getItem");
+    expect(desktopSidebarSource).toContain("window.localStorage.setItem");
+    expect(desktopSidebarSource).toContain('collapsed ? "w-16" : "w-64"');
+    expect(desktopSidebarSource).toContain('aria-label={collapsed ? "사이드바 펼치기" : "사이드바 최소화"}');
+    expect(desktopSidebarSource).toContain("iconOnly={collapsed}");
+    expect(sidebarSource).toContain("collapsed?: boolean");
+    expect(sidebarSource).toContain('title={collapsed ? item.label : undefined}');
+    expect(sidebarSource).toContain("group-hover/sidebar-item:opacity-100");
+  });
+
   it("renders the logged-in account as a compact account panel menu button", () => {
     const layoutSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "layout.tsx"), "utf8");
+    const desktopSidebarSource = readFileSync(
+      join(process.cwd(), "src", "app", "backoffice", "BackofficeDesktopSidebar.tsx"),
+      "utf8",
+    );
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("<BackofficeUserMenu email={user.email} />");
-    expect(layoutSource).not.toContain("{user.email}</p>");
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} />");
+    expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
+    expect(desktopSidebarSource).toContain('"mt-auto border-t border-slate-200 bg-white"');
     expect(mobileNavSource).toContain("<BackofficeUserMenu email={userEmail} compact />");
     expect(mobileNavSource).not.toContain("{userEmail}</p>");
     expect(userMenuSource).toContain("email: string");
@@ -242,5 +301,19 @@ describe("isBackofficeMenuItemActive", () => {
     expect(userMenuSource).toContain('aria-label={`${email} 계정 메뉴`}');
     expect(userMenuSource).toContain("border-rose-100");
     expect(userMenuSource).toContain("text-rose-700");
+  });
+
+  it("opens a password change dialog from the logged-in account menu", () => {
+    const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
+    const dialogSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficePasswordDialog.tsx"), "utf8");
+
+    expect(userMenuSource).toContain("비밀번호 변경");
+    expect(userMenuSource).toContain("<BackofficePasswordDialog");
+    expect(dialogSource).toContain("changeBackofficePasswordAction({");
+    expect(dialogSource).not.toContain("/api/login/change-password");
+    expect(dialogSource).toContain('autoComplete="current-password"');
+    expect(dialogSource).toContain('autoComplete="new-password"');
+    expect(dialogSource).toContain('role="dialog"');
+    expect(dialogSource).toContain("비밀번호가 변경되었습니다.");
   });
 });

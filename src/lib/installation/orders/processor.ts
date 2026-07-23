@@ -69,6 +69,7 @@ export async function processPendingInstallationOrders({
     where: {
       status: INSTALLATION_ORDER_STATUSES.CUSTOMER_INPUT_SMS_REQUIRED,
       activeCustomerRequestId: null,
+      hasOpenIssue: false,
     },
     orderBy: { createdAt: "asc" },
     take: limit,
@@ -95,6 +96,18 @@ export async function processPendingInstallationOrders({
       }
       if (isPhoneValidationError(error)) {
         await createSourcePhoneInvalidIssue(order, now);
+      } else {
+        await createInstallationIssue({
+          installationOrderId: order.id,
+          type: "INSTALLATION_AUTOMATION_FAILED",
+          title: "고객 입력 요청 생성 실패",
+          description: error instanceof Error ? error.message : "UNKNOWN_CUSTOMER_REQUEST_PROCESSING_ERROR",
+          metadata: {
+            stage: "CREATE_CUSTOMER_INPUT_REQUEST",
+            sourceKey: order.source?.sourceKey ?? null,
+          },
+          now,
+        });
       }
 
       console.error("[installation/order/processor]", {

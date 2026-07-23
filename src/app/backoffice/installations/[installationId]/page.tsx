@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { notFound } from "next/navigation";
 import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import {
@@ -38,10 +39,12 @@ export async function renderInstallationOrderDetailPage({
   installationId,
   searchParams,
   basePath,
+  displayMode = "page",
 }: {
   installationId: string;
   searchParams: BackofficeSearchParams;
   basePath: string;
+  displayMode?: "page" | "panel";
 }) {
   await requireBackofficeUserPage(
     buildBackofficeNextPath(
@@ -60,7 +63,7 @@ export async function renderInstallationOrderDetailPage({
   const requiredCapabilities = parseRequiredCapabilitiesText(order.requiredCapabilities);
   const requiredAqaraAppCapability = order.requiredAqaraAppCapability ?? "NONE";
   const activeRequest =
-    order.customerRequests.find((request) => request.id === order.activeCustomerRequestId) ??
+    order.customerRequests.find((request: any) => request.id === order.activeCustomerRequestId) ??
     order.customerRequests[0] ??
     null;
   const dispatchInstallers = await listDispatchCandidateInstallers({
@@ -82,11 +85,11 @@ export async function renderInstallationOrderDetailPage({
       index + 1,
     ),
   );
-  const candidateRuns = order.candidateRuns.map((run) => ({
+  const candidateRuns = order.candidateRuns.map((run: any) => ({
     id: run.id,
     reasonCode: run.reasonCode,
     createdAt: run.createdAt.toISOString(),
-    candidates: run.candidates.map((candidate) => ({
+    candidates: run.candidates.map((candidate: any) => ({
       installerId: candidate.installerId,
       installerName: candidate.installer.name,
       installerBranch: candidate.installer.branch,
@@ -99,13 +102,16 @@ export async function renderInstallationOrderDetailPage({
       decisionReason: candidate.decisionReason,
     })),
   }));
+  const assignmentInstallerById = new Map(
+    order.assignmentAttempts.map((assignment) => [assignment.id, assignment.installer]),
+  );
 
   const statusEvents = order.statusEvents.map((event) => ({
     ...event,
     metadata: event.metadata as Record<string, unknown> | null,
     createdAt: event.createdAt.toISOString(),
   }));
-  const issues = order.issues.map((issue) => ({
+  const issues = order.issues.map((issue: any) => ({
     ...issue,
     code: issue.type,
     resolvedAt: issue.resolvedAt ? issue.resolvedAt.toISOString() : null,
@@ -120,12 +126,12 @@ export async function renderInstallationOrderDetailPage({
     manualAssignmentInstallers,
     candidateRuns,
     statusChangedAt: order.statusChangedAt.toISOString(),
-    customerRequests: order.customerRequests.map((request) => ({
+    customerRequests: order.customerRequests.map((request: any) => ({
       ...request,
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
     })),
-    assignmentAttempts: order.assignmentAttempts.map((assignment) => ({
+    assignmentAttempts: order.assignmentAttempts.map((assignment: any) => ({
       ...assignment,
       installerName: assignment.installer.name,
       installerBranch: assignment.installer.branch,
@@ -140,28 +146,41 @@ export async function renderInstallationOrderDetailPage({
     statusEvents,
     auditEvents: statusEvents,
     issues,
-    smsNotifications: order.notifications.map((notification) => ({
-      id: notification.id,
-      businessEvent: notification.smsType,
-      recipientType: notification.recipientType,
-      recipientId: null,
-      recipientPhone: notification.recipientPhone,
-      assignmentId: notification.assignmentAttemptId,
-      status: notification.status,
-      providerStatus: notification.providerStatus,
-      providerStatusCode: notification.providerStatusCode,
-      providerReason: notification.providerReason,
-      providerReportedAt: notification.providerReportedAt?.toISOString() ?? null,
-      providerCheckedAt: notification.providerCheckedAt?.toISOString() ?? null,
-      retryable: notification.status === "FAILED",
-      failureReason: notification.errorMessage ?? notification.errorCode,
-      retryCount: notification.retryCount,
-      sentAt: notification.sentAt?.toISOString() ?? null,
-      createdAt: notification.createdAt.toISOString(),
-    })),
+    smsNotifications: order.notifications.map((notification) => {
+      const recipientInstaller = notification.assignmentAttemptId
+        ? assignmentInstallerById.get(notification.assignmentAttemptId)
+        : null;
+
+      return {
+        id: notification.id,
+        businessEvent: notification.smsType,
+        recipientType: notification.recipientType,
+        recipientName: notification.recipientType === "INSTALLER" ? recipientInstaller?.name ?? null : null,
+        recipientBranch: notification.recipientType === "INSTALLER" ? recipientInstaller?.branch ?? null : null,
+        recipientPhone: notification.recipientPhone,
+        status: notification.status,
+        providerStatus: notification.providerStatus,
+        providerStatusCode: notification.providerStatusCode,
+        providerReason: notification.providerReason,
+        providerReportedAt: notification.providerReportedAt?.toISOString() ?? null,
+        providerCheckedAt: notification.providerCheckedAt?.toISOString() ?? null,
+        retryable: notification.status === "FAILED",
+        failureReason: notification.errorMessage ?? notification.errorCode,
+        retryCount: notification.retryCount,
+        deliveryCheckCount: notification.deliveryCheckCount,
+        sentAt: notification.sentAt?.toISOString() ?? null,
+        createdAt: notification.createdAt.toISOString(),
+      };
+    }),
   };
 
-  return <InstallationOrderDetail item={item} returnPath={basePath} />;
+  return (
+    <InstallationOrderDetail
+      item={item}
+      returnPath={buildBackofficeNextPath(basePath, searchParams)}
+      displayMode={displayMode}
+    />
+  );
 }
 
 function withMatchedTier(

@@ -1,35 +1,29 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
-import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import BackofficeDesktopSidebar from "./BackofficeDesktopSidebar";
 import BackofficeMobileNav from "./BackofficeMobileNav";
-import BackofficeSidebarNav from "./BackofficeSidebarNav";
-import BackofficeUserMenu from "./BackofficeUserMenu";
+import BackofficeNavigationFeedback from "./BackofficeNavigationFeedback";
 
-export default async function BackofficeLayout({ children }: { children: ReactNode }) {
-  const user = await getCurrentBackofficeUser();
+export default async function BackofficeLayout({
+  children,
+  detail,
+}: {
+  children: ReactNode;
+  detail: ReactNode;
+}) {
+  const user = await requireBackofficeUserPage("/backoffice");
 
   return (
-    <div className="min-h-screen bg-white text-zinc-950">
-      <BackofficeMobileNav userEmail={user?.email} />
-      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col md:min-h-screen md:flex-row">
-        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white md:block">
-          <div className="border-b border-slate-200 bg-white px-5 py-5">
-            <h1>
-              <Link href="/backoffice" className="block text-sm font-semibold text-slate-950">
-                <span className="block text-[15px] leading-5">Backoffice</span>
-              </Link>
-            </h1>
-            {user ? (
-              <div className="mt-4 min-w-0">
-                <BackofficeUserMenu email={user.email} />
-              </div>
-            ) : null}
-          </div>
+    <div className="min-h-screen bg-white text-zinc-950 md:h-screen md:overflow-hidden">
+      <BackofficeNavigationFeedback />
+      <BackofficeMobileNav userEmail={user.email} />
+      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col md:h-full md:min-h-0 md:flex-row">
+        <BackofficeDesktopSidebar userEmail={user.email} />
 
-          <BackofficeSidebarNav />
-        </aside>
-
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="flex min-w-0 flex-1 overflow-hidden md:min-h-0">
+          <div className="min-w-0 flex-1 overflow-x-auto md:overflow-y-auto">{children}</div>
+          {detail}
+        </main>
       </div>
     </div>
   );

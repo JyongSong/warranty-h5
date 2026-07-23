@@ -1,41 +1,17 @@
-import { isValidElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { DeleteBackofficeUserForm } from "./DeleteBackofficeUserForm";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 
 describe("DeleteBackofficeUserForm", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  it("submits the target user id", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/app/backoffice/settings/users/DeleteBackofficeUserForm.tsx"),
+      "utf8",
+    );
 
-  it("prevents delete submission when the confirmation is cancelled", () => {
-    const confirmMock = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirmMock);
-
-    const element = DeleteBackofficeUserForm({
-      action: vi.fn(),
-      userEmail: "user@example.com",
-      userId: "user-1",
-    });
-    expect(isValidElement(element)).toBe(true);
-
-    const preventDefault = vi.fn();
-    (element.props as { onSubmit: (event: { preventDefault: () => void }) => void }).onSubmit({ preventDefault });
-
-    expect(confirmMock).toHaveBeenCalledWith("user@example.com 유저를 삭제할까요?");
-    expect(preventDefault).toHaveBeenCalled();
-  });
-
-  it("allows delete submission when the confirmation is accepted", () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
-
-    const element = DeleteBackofficeUserForm({
-      action: vi.fn(),
-      userEmail: "user@example.com",
-      userId: "user-1",
-    });
-    const preventDefault = vi.fn();
-    (element.props as { onSubmit: (event: { preventDefault: () => void }) => void }).onSubmit({ preventDefault });
-
-    expect(preventDefault).not.toHaveBeenCalled();
+    expect(source).toContain('name="id" value={userId}');
+    expect(source).toContain('title="유저 삭제"');
+    expect(source).toContain('tone="danger"');
+    expect(source).not.toContain("window.confirm");
   });
 });

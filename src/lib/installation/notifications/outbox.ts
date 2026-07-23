@@ -54,6 +54,7 @@ type InstallationNotificationForDeliveryReport = {
   smsType: string;
   recipientPhoneEncrypted: string | null;
   retryCount: number;
+  deliveryCheckCount?: number;
   providerMessageId: string | null;
 };
 
@@ -80,6 +81,7 @@ export async function sendPendingInstallationNotifications({
   let failedCount = 0;
 
   for (const notification of notifications) {
+    let providerAccepted = false;
     try {
       if (await skipStaleNotification(notification)) {
         failedCount += 1;
@@ -89,12 +91,19 @@ export async function sendPendingInstallationNotifications({
         decryptNullablePii(notification.recipientPhoneEncrypted),
         notification.smsBody,
       );
+      providerAccepted = true;
       await prisma.installationNotification.update({
         where: { id: notification.id },
         data: {
           status: "SENT",
           provider: "solapi",
           providerMessageId: sendResult?.providerMessageId ?? null,
+          providerStatus: null,
+          providerStatusCode: null,
+          providerReason: null,
+          providerReportedAt: null,
+          providerCheckedAt: null,
+          deliveryCheckCount: 0,
           sentAt: now,
           errorCode: null,
           errorMessage: null,
@@ -105,6 +114,11 @@ export async function sendPendingInstallationNotifications({
     } catch (error) {
       const retryCount = notification.retryCount + 1;
       const errorMessage = getErrorMessage(error);
+      if (providerAccepted) {
+        await handleUnknownSmsSendOutcome(notification, retryCount, errorMessage, now);
+        failedCount += 1;
+        continue;
+      }
       const shouldRetrySend = retryCount < MAX_SMS_SEND_ATTEMPTS;
       await prisma.installationNotification.update({
         where: { id: notification.id },
@@ -171,6 +185,7 @@ export async function syncInstallationSmsDeliveryReports({
       smsType: true,
       recipientPhoneEncrypted: true,
       retryCount: true,
+      deliveryCheckCount: true,
       providerMessageId: true,
     },
   });
@@ -183,17 +198,57 @@ export async function syncInstallationSmsDeliveryReports({
   for (const notification of notifications as InstallationNotificationForDeliveryReport[]) {
     if (!notification.providerMessageId) continue;
 
+    let report: InstallationSmsDeliveryReport | null;
     try {
-      const report = await getDeliveryReport(notification.providerMessageId);
+      report = await getDeliveryReport(notification.providerMessageId);
       checkedCount += 1;
+    } catch (error) {
+      failedCount += 1;
+      try {
+        await handleDeliveryReportLookupFailure(notification, error, now);
+      } catch (recordError) {
+        console.error("[installation/notification/delivery-report-record]", recordError);
+      }
+      console.error("[installation/notification/delivery-report]", error);
+      continue;
+    }
+
+    try {
       const deliveryFailed = isProviderDeliveryFailure(report);
+      const deliveryUnconfirmed = !deliveryFailed && !isProviderDeliverySuccess(report);
       const retryCount = notification.retryCount + 1;
+      const deliveryCheckCount = deliveryUnconfirmed
+        ? (notification.deliveryCheckCount ?? 0) + 1
+        : 0;
       const shouldRetryDelivery =
         deliveryFailed &&
         retryCount < MAX_SMS_DELIVERY_ATTEMPTS;
+      const shouldRetryConfirmation =
+        deliveryUnconfirmed &&
+        deliveryCheckCount < MAX_SMS_DELIVERY_ATTEMPTS;
       const errorMessage = deliveryFailed
         ? formatDeliveryFailureMessage(report)
-        : null;
+        : deliveryUnconfirmed
+          ? "SMS_DELIVERY_STATUS_UNCONFIRMED"
+          : null;
+      const statusUpdate = deliveryFailed
+        ? {
+            status: shouldRetryDelivery ? "PENDING" as const : "FAILED" as const,
+            retryCount,
+            errorCode: "SMS_DELIVERY_FAILED",
+            errorMessage,
+          }
+        : deliveryUnconfirmed
+          ? {
+              status: shouldRetryConfirmation ? "SENT" as const : "FAILED" as const,
+              errorCode: "SMS_DELIVERY_STATUS_UNCONFIRMED",
+              errorMessage,
+            }
+          : {
+              status: "DELIVERED" as const,
+              errorCode: null,
+              errorMessage: null,
+            };
 
       await prisma.installationNotification.update({
         where: { id: notification.id },
@@ -203,14 +258,8 @@ export async function syncInstallationSmsDeliveryReports({
           providerReason: report?.reason ?? null,
           providerReportedAt: parseProviderDate(report?.dateReported),
           providerCheckedAt: now,
-          ...(deliveryFailed
-            ? {
-                status: shouldRetryDelivery ? "PENDING" as const : "FAILED" as const,
-                retryCount,
-                errorCode: "SMS_DELIVERY_FAILED",
-                errorMessage,
-              }
-            : {}),
+          deliveryCheckCount,
+          ...statusUpdate,
         },
       });
       updatedCount += 1;
@@ -239,14 +288,95 @@ export async function syncInstallationSmsDeliveryReports({
           );
         }
         deliveryFailedCount += 1;
+      } else if (deliveryUnconfirmed && !shouldRetryConfirmation) {
+        const normalizedErrorMessage = errorMessage ?? "SMS_DELIVERY_STATUS_UNCONFIRMED";
+        if (
+          notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
+          notification.assignmentAttemptId
+        ) {
+          await handleAssignmentRequestSmsFailure(notification, {
+            retryCount: deliveryCheckCount,
+            errorMessage: normalizedErrorMessage,
+            maxAttempts: MAX_SMS_DELIVERY_ATTEMPTS,
+            now,
+          });
+        } else if (notification.installationOrderId) {
+          await createSmsDeliveryFailedIssue(
+            notification,
+            deliveryCheckCount,
+            normalizedErrorMessage,
+            report,
+            now,
+          );
+        }
+        deliveryFailedCount += 1;
       }
     } catch (error) {
       failedCount += 1;
-      console.error("[installation/notification/delivery-report]", error);
+      console.error("[installation/notification/delivery-report-processing]", error);
+      if (notification.installationOrderId) {
+        try {
+          await createInstallationIssue({
+            installationOrderId: notification.installationOrderId,
+            type: "INSTALLATION_AUTOMATION_FAILED",
+            title: "SMS 도달 결과 반영 실패",
+            description: getErrorMessage(error),
+            metadata: {
+              stage: "SMS_DELIVERY_REPORT_PROCESSING",
+              notificationId: notification.id,
+              providerMessageId: notification.providerMessageId,
+            },
+            now,
+          });
+        } catch (issueError) {
+          console.error("[installation/notification/delivery-report-issue]", issueError);
+        }
+      }
     }
   }
 
   return { checkedCount, updatedCount, deliveryFailedCount, failedCount };
+}
+
+async function handleDeliveryReportLookupFailure(
+  notification: InstallationNotificationForDeliveryReport,
+  error: unknown,
+  now: Date,
+) {
+  const deliveryCheckCount = (notification.deliveryCheckCount ?? 0) + 1;
+  const shouldRetryConfirmation = deliveryCheckCount < MAX_SMS_DELIVERY_ATTEMPTS;
+  const errorMessage = getErrorMessage(error);
+  await prisma.installationNotification.update({
+    where: { id: notification.id },
+    data: {
+      status: shouldRetryConfirmation ? "SENT" : "FAILED",
+      deliveryCheckCount,
+      providerCheckedAt: now,
+      errorCode: "SMS_DELIVERY_REPORT_API_FAILED",
+      errorMessage,
+    },
+  });
+  if (shouldRetryConfirmation) return;
+
+  if (
+    notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
+    notification.assignmentAttemptId
+  ) {
+    await handleAssignmentRequestSmsFailure(notification, {
+      retryCount: deliveryCheckCount,
+      errorMessage,
+      maxAttempts: MAX_SMS_DELIVERY_ATTEMPTS,
+      now,
+    });
+  } else if (notification.installationOrderId) {
+    await createSmsDeliveryFailedIssue(
+      notification,
+      deliveryCheckCount,
+      errorMessage,
+      null,
+      now,
+    );
+  }
 }
 
 export async function sendInstallationNotificationById(
@@ -521,17 +651,25 @@ async function sendOneInstallationNotification(
   notification: InstallationNotificationForSend,
   { now, sendSms }: { now: Date; sendSms: SendSms },
 ) {
+  let providerAccepted = false;
   try {
     const sendResult = await sendSms(
       decryptNullablePii(notification.recipientPhoneEncrypted),
       notification.smsBody,
     );
+    providerAccepted = true;
     await prisma.installationNotification.update({
       where: { id: notification.id },
       data: {
         status: "SENT",
         provider: "solapi",
         providerMessageId: sendResult?.providerMessageId ?? null,
+        providerStatus: null,
+        providerStatusCode: null,
+        providerReason: null,
+        providerReportedAt: null,
+        providerCheckedAt: null,
+        deliveryCheckCount: 0,
         sentAt: now,
         errorCode: null,
         errorMessage: null,
@@ -541,6 +679,10 @@ async function sendOneInstallationNotification(
   } catch (error) {
     const retryCount = notification.retryCount + 1;
     const errorMessage = getErrorMessage(error);
+    if (providerAccepted) {
+      await handleUnknownSmsSendOutcome(notification, retryCount, errorMessage, now);
+      throw error;
+    }
     const shouldRetrySend = retryCount < MAX_SMS_SEND_ATTEMPTS;
     await prisma.installationNotification.update({
       where: { id: notification.id },
@@ -567,6 +709,42 @@ async function sendOneInstallationNotification(
   }
 }
 
+async function handleUnknownSmsSendOutcome(
+  notification: InstallationNotificationForSend,
+  retryCount: number,
+  errorMessage: string,
+  now: Date,
+) {
+  await prisma.installationNotification.update({
+    where: { id: notification.id },
+    data: {
+      status: "UNKNOWN",
+      retryCount,
+      errorCode: "SMS_SEND_OUTCOME_UNKNOWN",
+      errorMessage,
+    },
+  });
+
+  if (
+    notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
+    notification.assignmentAttemptId
+  ) {
+    await handleAssignmentRequestSmsFailure(notification, {
+      retryCount,
+      errorMessage: `SMS_SEND_OUTCOME_UNKNOWN: ${errorMessage}`,
+      maxAttempts: retryCount,
+      now,
+    });
+  } else if (notification.installationOrderId) {
+    await createSmsFailedIssue(
+      notification,
+      retryCount,
+      `SMS_SEND_OUTCOME_UNKNOWN: ${errorMessage}`,
+      now,
+    );
+  }
+}
+
 async function runPostSendNotificationEffects(
   notification: InstallationNotificationForSend,
   now: Date,
@@ -588,11 +766,25 @@ async function runPostSendNotificationEffects(
     }
   } catch (error) {
     console.error("[installation/notification/post-send]", error);
+    if (notification.installationOrderId) {
+      await createInstallationIssue({
+        installationOrderId: notification.installationOrderId,
+        type: "INSTALLATION_AUTOMATION_FAILED",
+        title: "SMS 발송 후 상태 반영 실패",
+        description: getErrorMessage(error),
+        metadata: {
+          stage: "POST_SEND_NOTIFICATION_EFFECTS",
+          notificationId: notification.id,
+          assignmentAttemptId: notification.assignmentAttemptId,
+        },
+        now,
+      });
+    }
   }
 }
 
 const INSTALLER_RESPONSE_TIMEOUT_HOURS = 24;
-const MAX_SMS_SEND_ATTEMPTS = 3;
+const MAX_SMS_SEND_ATTEMPTS = 2;
 const MAX_SMS_DELIVERY_ATTEMPTS = 2;
 
 function getInstallerResponseExpiresAt(now: Date) {
@@ -794,7 +986,20 @@ function isProviderDeliveryFailure(report: InstallationSmsDeliveryReport | null)
   if (status.includes("FAIL") || status.includes("ERROR")) return true;
   if (!report.statusCode || !report.dateReported) return false;
 
-  return report.statusCode !== "2000";
+  // SOLAPI: 2000 is queued, 3000 is sending, and 4000 is delivered.
+  // A polled delivery report must not turn either in-progress state into a failure.
+  return !["2000", "3000", "4000"].includes(report.statusCode);
+}
+
+function isProviderDeliverySuccess(report: InstallationSmsDeliveryReport | null) {
+  if (!report) return false;
+
+  if (report.statusCode) {
+    return report.statusCode === "4000" && Boolean(report.dateReported);
+  }
+
+  const status = report.status?.trim().toUpperCase() ?? "";
+  return status.includes("COMPLETE") || status.includes("SUCCESS") || status.includes("DELIVER");
 }
 
 function formatDeliveryFailureMessage(report: InstallationSmsDeliveryReport | null) {

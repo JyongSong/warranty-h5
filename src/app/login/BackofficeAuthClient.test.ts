@@ -6,6 +6,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+vi.mock("./actions", () => ({
+  signInBackofficeAction: vi.fn(),
+}));
+
 import { getSafeBackofficeNextPath } from "./BackofficeAuthClient";
 
 describe("getSafeBackofficeNextPath", () => {
@@ -61,13 +65,13 @@ describe("BackofficeAuthClient navigation", () => {
     expect(source).not.toContain("router.refresh()");
   });
 
-  it("uses the canonical login API namespace", () => {
+  it("uses the backoffice login server action", () => {
     const source = readFileSync(
       join(process.cwd(), "src", "app", "login", "BackofficeAuthClient.tsx"),
       "utf8",
     );
 
-    expect(source).toContain('fetch("/api/login/password"');
-    expect(source).not.toContain("/api/backoffice/auth");
+    expect(source).toContain("signInBackofficeAction(email, password)");
+    expect(source).not.toContain("/api/login/password");
   });
 });

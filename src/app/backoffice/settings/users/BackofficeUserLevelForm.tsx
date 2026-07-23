@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { BackofficeUserActionDialog } from "./BackofficeUserActionDialog";
+import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 
 type BackofficeUserLevelFormProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -20,49 +22,47 @@ export function BackofficeUserLevelForm({ action, user }: BackofficeUserLevelFor
     setIsEditing(false);
   }
 
-  if (!isEditing) {
-    return (
-      <div className="flex min-h-9 items-center gap-2">
-        <span className="w-24 text-sm font-medium text-slate-950">{user.level}</span>
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold whitespace-nowrap text-slate-900 transition hover:bg-slate-50"
-        >
-          편집
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <form action={action} className="flex gap-2">
-      <input type="hidden" name="id" value={user.id} />
-      <input
-        name="level"
-        type="number"
-        min="0"
-        step="1"
-        required
-        value={level}
-        onChange={(event) => setLevel(event.target.value)}
-        aria-label={`${user.email} 레벨`}
-        className="h-9 w-24 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-      />
-      <button
-        type="submit"
-        disabled={level === String(user.level)}
-        className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold whitespace-nowrap text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
-      >
-        저장
-      </button>
+    <div className="flex min-h-9 items-center gap-2">
+      <span className="w-24 text-sm font-medium text-slate-950">{user.level}</span>
       <button
         type="button"
-        onClick={cancelEditing}
-        className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold whitespace-nowrap text-slate-600 transition hover:bg-slate-50"
+        onClick={() => setIsEditing(true)}
+        className={getBackofficeButtonClass("primary")}
       >
-        취소
+        편집
       </button>
-    </form>
+
+      {isEditing ? (
+        <BackofficeUserActionDialog
+          action={action}
+          title="레벨 편집"
+          description={
+            <>
+              <span className="font-medium text-slate-900">{user.email}</span>의 접근 레벨을 변경합니다.
+            </>
+          }
+          submitLabel="변경하기"
+          submitDisabled={level === String(user.level)}
+          onClose={cancelEditing}
+        >
+          <input type="hidden" name="id" value={user.id} />
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-slate-700">레벨</span>
+            <input
+              name="level"
+              type="number"
+              min="0"
+              step="1"
+              required
+              autoFocus
+              value={level}
+              onChange={(event) => setLevel(event.target.value)}
+              className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+            />
+          </label>
+        </BackofficeUserActionDialog>
+      ) : null}
+    </div>
   );
 }
