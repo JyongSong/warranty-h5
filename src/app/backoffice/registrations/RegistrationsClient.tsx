@@ -133,13 +133,15 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
 
   // Reset states when filters/tabs change
   useEffect(() => {
-    if (selectedSurveyIds.length > 0) {
-      setSelectedSurveyIds([]);
-    }
+    setSelectedSurveyIds([]);
+  }, [surveyFilter, activeTab, query, ratingFilter]);
+
+  // Reset rating filter when survey filter changes to something other than COMPLETED
+  useEffect(() => {
     if (surveyFilter !== "COMPLETED" && ratingFilter !== "ALL") {
       setRatingFilter("ALL");
     }
-  }, [surveyFilter, activeTab, query, selectedSurveyIds, ratingFilter]);
+  }, [surveyFilter, ratingFilter]);
 
   async function handleSendSurvey(registrationId: string) {
     if (sendingSurvey) return;

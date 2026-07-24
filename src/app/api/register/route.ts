@@ -158,7 +158,6 @@ ${confirmLink}
         return NextResponse.json({
             ok: true,
             id: regId,
-            confirmLink,
             status: "submitted",
             installType,
             freeAsEndDate: freeEnd,

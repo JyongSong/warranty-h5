@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { getErrorMessage } from "@/lib/error";
 
 type StoredState = {
-  link: string;
   regId: string;
   installType: string;
   freeAsEndDate: string;
@@ -12,7 +11,6 @@ type StoredState = {
 };
 
 const EMPTY_STATE: StoredState = {
-  link: "",
   regId: "",
   installType: "",
   freeAsEndDate: "",
@@ -35,7 +33,6 @@ export default function SuccessPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStored({
-      link: sessionStorage.getItem("lastConfirmLink") || "",
       regId: sessionStorage.getItem("lastRegistrationId") || "",
       installType: sessionStorage.getItem("lastInstallType") || "",
       freeAsEndDate: sessionStorage.getItem("lastFreeAsEndDate") || "",
@@ -52,7 +49,7 @@ export default function SuccessPage() {
     return () => clearInterval(timer);
   }, [countdown]);
 
-  const { link, regId, installType, freeAsEndDate, registrationStatus } = stored;
+  const { regId, installType, freeAsEndDate, registrationStatus } = stored;
   // self / external: 등록 즉시 완료
   // installer:        기사 confirm 후 완료 (이 페이지에서는 컨펌 대기 안내)
   const isImmediate = installType === "self" || installType === "external" || registrationStatus === "confirmed";
@@ -79,8 +76,6 @@ export default function SuccessPage() {
         return;
       }
 
-      setStored((s) => ({ ...s, link: j.confirmLink }));
-      sessionStorage.setItem("lastConfirmLink", j.confirmLink);
       setMsg("확인 링크를 재전송했습니다.");
       setCountdown(60);
     } catch (error: unknown) {

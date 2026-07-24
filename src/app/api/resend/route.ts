@@ -61,7 +61,7 @@ ${confirmLink}
 
     console.log("[SMS SENT][RESEND] to:", rec.installerPhone, "link:", confirmLink);
 
-    return NextResponse.json({ ok: true, confirmLink });
+    return NextResponse.json({ ok: true });
   } catch (error: unknown) {
     return NextResponse.json({ error: getErrorMessage(error, "UNKNOWN_ERROR") }, { status: 500 });
   }
