@@ -1,14 +1,56 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { fetchOrderDetails } from "@/lib/cafe24";
 
 // 目标商品代码 (Cafe24 商品代码 P00000SE)
 const TARGET_PRODUCT_CODE = "P00000SE";
 
+/**
+ * 校验 Cafe24 webhook 请求是否合法。
+ *
+ * Cafe24 后台配置的接收 URL 上带一个共享 secret（query `key` 或 header
+ * `x-cafe24-webhook-key`），与环境变量 `CAFE24_WEBHOOK_SECRET` 做 timing-safe 比对。
+ *
+ * - 未配置 `CAFE24_WEBHOOK_SECRET`：放行并打警告日志（向后兼容，便于灰度上线，
+ *   在你把 secret 配好之前不会中断现有付款激活）。
+ * - 已配置：缺失或不匹配的 key 一律拒绝。
+ */
+export function isAuthorizedCafe24Webhook(req: Request): boolean {
+  const secret = process.env.CAFE24_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    console.warn(
+      "[Cafe24 Webhook] CAFE24_WEBHOOK_SECRET 未配置 — 跳过校验（不安全）。请尽快在环境变量和 Cafe24 webhook URL 中配置。",
+    );
+    return true;
+  }
+
+  const provided =
+    new URL(req.url).searchParams.get("key")?.trim() ||
+    req.headers.get("x-cafe24-webhook-key")?.trim() ||
+    "";
+  if (!provided) return false;
+
+  const providedBuf = Buffer.from(provided);
+  const secretBuf = Buffer.from(secret);
+  if (providedBuf.length !== secretBuf.length) return false;
+  return crypto.timingSafeEqual(providedBuf, secretBuf);
+}
+
 export async function POST(req: Request) {
+  if (!isAuthorizedCafe24Webhook(req)) {
+    console.warn("[Cafe24 Webhook] 拒绝未授权请求（key 缺失或不匹配）。");
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
-    console.log("[Cafe24 Webhook] Received webhook notification:", body);
+    // 只记录路由所需的非敏感字段，避免把买家 PII（手机/邮箱）打进日志
+    console.log("[Cafe24 Webhook] 收到事件:", {
+      event: body?.event ?? body?.resource?.event_code,
+      resource_id: body?.resource_id ?? body?.resource?.order_id,
+      mall_id: body?.mall_id ?? body?.resource?.mall_id,
+    });
 
     let parsedEvent = body.event;
     let parsedResourceId = body.resource_id;
@@ -41,7 +83,7 @@ export async function POST(req: Request) {
 
     // 3. 校验订单支付状态 (paid === "T" / N10 결제완료)
     // Cafe24 订单支付状态为 paid: "T"
-    const isPaid = order.paid === "T" || (order.items && order.items.some((item: any) => item.order_status === "N10"));
+    const isPaid = order.paid === "T" || (order.items && order.items.some((item: { order_status?: string }) => item.order_status === "N10"));
     if (!isPaid) {
       console.warn(`[Cafe24 Webhook] Order ${orderId} is not fully paid yet. Status: ${order.paid}`);
       return NextResponse.json({ ok: true, message: "Order not paid yet" });
@@ -79,7 +121,7 @@ export async function POST(req: Request) {
           continue;
         }
 
-        console.log(`[Cafe24 Webhook] Activating SN: ${sn} (Contact: ${contact})`);
+        console.log(`[Cafe24 Webhook] Activating SN: ${sn}`);
 
         // 5. 写入数据库激活状态 (device_feature_upgrades)
         await prisma.device_feature_upgrades.upsert({
