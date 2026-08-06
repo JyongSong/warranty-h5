@@ -56,7 +56,7 @@ type Installer = {
 const INSTALLERS: readonly Installer[] = [
   { businessNumber: '211-10-11445', branchName: '강남/열쇠닥터',                phone: '010-5168-2509', installationRegion: '서울',     possibleRegion: '강남구, 서초구, 송파구, 강동구',     impossibleRegion: '' },
   { businessNumber: '204-27-28418', branchName: '동대문/24시출장열쇠',          phone: '010-2122-9140', installationRegion: '서울',     possibleRegion: '동대문구, 중랑구, 성동구, 광진구',   impossibleRegion: '' },
-  { businessNumber: '868-88-00353', branchName: '서울경기포항/24시출장열쇠5G',  phone: '010-6530-6760', installationRegion: '서울',     possibleRegion: '광진구, 하남시',                       impossibleRegion: '' },
+  { businessNumber: '868-88-00353', branchName: '서울경기포항/24시출장열쇠5G',  phone: '010-6530-6760', installationRegion: '서울, 경기도',     possibleRegion: '강동구, 구리시, 남양주',                       impossibleRegion: '' },
   { businessNumber: '112-48-04825', branchName: '관악/신우열쇠',                phone: '010-4003-1382', installationRegion: '서울',     possibleRegion: '영등포구, 동작구, 관악구',            impossibleRegion: '' },
   { businessNumber: '519-19-02649', branchName: '키플레이',                phone: '010-8220-3336', installationRegion: '경기도',     possibleRegion: '하남시, 성남시, 용인시, 수원시, 안성시, 평택시',            impossibleRegion: '' },
   { businessNumber: '110-17-24326', branchName: '용인/24시출장열쇠',            phone: '010-2084-5500', installationRegion: '경기도',   possibleRegion: '용인시, 수원시',                       impossibleRegion: '수원시 영통구' },
