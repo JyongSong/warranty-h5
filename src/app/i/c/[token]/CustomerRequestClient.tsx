@@ -195,10 +195,6 @@ export default function CustomerRequestClient({
     }
   }
 
-  if (error) {
-    return <StatusScreen title="확인 필요" description={error} tone="error" />;
-  }
-
   if (initialAccessBlocked || info?.status === "EXPIRED" || info?.status === "CANCELLED") {
     return (
       <StatusScreen
@@ -348,6 +344,10 @@ export default function CustomerRequestClient({
           onClose={() => setPrivacyOpen(false)}
         />
       ) : null}
+
+      {error ? (
+        <ErrorNoticeModal message={error} onClose={() => setError(null)} />
+      ) : null}
     </>
   );
 }
@@ -493,6 +493,38 @@ function PrivacyPolicyModal({
         </h2>
         <div style={privacyContentStyle}>{privacyPolicy.content}</div>
         <button type="button" onClick={onClose} style={privacyCloseButtonStyle}>
+          확인
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ErrorNoticeModal({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  return (
+    <div style={modalOverlayStyle} role="presentation">
+      <div
+        style={modalPanelStyle}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="reservation-error-title"
+      >
+        <div style={statusMarkStyle("error")}>!</div>
+        <h2 id="reservation-error-title" style={modalTitleStyle}>
+          확인 필요
+        </h2>
+        <p style={modalDescriptionStyle}>{message}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{ ...confirmButtonStyle, width: "100%" }}
+        >
           확인
         </button>
       </div>

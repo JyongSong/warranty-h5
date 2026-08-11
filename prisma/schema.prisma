@@ -71,6 +71,7 @@ model Installer {
   currentOrders        InstallationOrder[] @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[] @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
+  devices              InstallerDevice[]   @relation("InstallerDevices")
 
   @@index([branch])
   @@index([region])
@@ -78,6 +79,36 @@ model Installer {
   @@index([capabilities], map: "installers_capabilities_gin_idx", type: Gin)
   @@index([serviceAreas], map: "installers_service_areas_gin_idx", type: Gin)
   @@map("installers")
+}
+
+// P1 installer app: DB-backed, rate-limited OTP (replaces the in-memory
+// api/auth/sms). Stores only a hash of the phone and of the code.
+model InstallerAuthOtp {
+  id         String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  phoneHash  String    @map("phone_hash")
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  attempts   Int       @default(0)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([phoneHash, createdAt])
+  @@map("installer_auth_otps")
+}
+
+// P1 installer app: FCM device tokens per installer (productionizes the
+// throwaway push_test_fcm_token table).
+model InstallerDevice {
+  id          String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId String    @map("installer_id")
+  installer   Installer @relation("InstallerDevices", fields: [installerId], references: [id], onDelete: Cascade)
+  fcmToken    String    @unique @map("fcm_token")
+  platform    String    @default("android")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime  @default(now()) @updatedAt @map("last_seen_at") @db.Timestamptz(6)
+
+  @@index([installerId])
+  @@map("installer_devices")
 }
 
 model Admin {

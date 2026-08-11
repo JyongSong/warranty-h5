@@ -32,6 +32,7 @@
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.22.0",
     "csv-parse": "^6.1.0",
+    "firebase-admin": "^14.2.0",
     "mssql": "^12.5.4",
     "next": "16.1.6",
     "pg": "^8.20.0",

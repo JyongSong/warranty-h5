@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
+import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
 import {
   getInstallationSmsDeliveryReport as defaultGetDeliveryReport,
@@ -755,14 +756,27 @@ async function runPostSendNotificationEffects(
       notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
       notification.assignmentAttemptId
     ) {
-      await prisma.installationInstallerAssignmentAttempt.update({
+      const attempt = await prisma.installationInstallerAssignmentAttempt.update({
         where: { id: notification.assignmentAttemptId },
         data: {
           installerNotifiedAt: now,
           installerTokenExpiresAt: getInstallerResponseExpiresAt(now),
           status: "WAITING_INSTALLER_RESPONSE",
         },
+        select: { installerId: true },
       });
+
+      // Best-effort native FCM push (validated to wake Android from Doze). The
+      // SMS just sent is the reliable fallback, so push failures only log and
+      // must not create an automation issue.
+      try {
+        await sendAssignmentPushToInstaller(attempt.installerId, {
+          title: "새 작업이 배정되었습니다",
+          body: "앱에서 확인하고 수락/거절해 주세요.",
+        });
+      } catch (pushError) {
+        console.error("[installation/notification/installer-push]", pushError);
+      }
     }
   } catch (error) {
     console.error("[installation/notification/post-send]", error);
