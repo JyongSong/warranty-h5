@@ -21,6 +21,32 @@ const ERR: Record<string, string> = {
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
 
+// Downscale + re-encode to keep the upload well under the Server Action /
+// Vercel body limits (phone photos are several MB each).
+async function compressImage(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.7),
+    );
+    if (!blob) return file;
+    return new File([blob], `${file.name.replace(/\.\w+$/, "")}.jpg`, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 export default function CompleteClient({
   orderId,
   erpOrderNo,
@@ -37,15 +63,20 @@ export default function CompleteClient({
   const [installEndAt, setInstallEndAt] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasLinkage = capability !== "NONE";
-  const canSubmit = installEndAt.length > 0 && photos.length >= 1 && photos.length <= 4 && !busy;
+  const canSubmit =
+    installEndAt.length > 0 && photos.length >= 1 && photos.length <= 4 && !busy && !compressing;
 
-  function addPhotos(list: FileList | null) {
+  async function addPhotos(list: FileList | null) {
     if (!list) return;
-    const next = [...photos, ...Array.from(list)].slice(0, 4);
-    setPhotos(next);
+    setCompressing(true);
+    const incoming = Array.from(list).slice(0, 4 - photos.length);
+    const compressed = await Promise.all(incoming.map(compressImage));
+    setPhotos((prev) => [...prev, ...compressed].slice(0, 4));
+    setCompressing(false);
   }
 
   async function submit() {
@@ -126,14 +157,18 @@ export default function CompleteClient({
         <div style={ui.card}>
           <div style={ui.label}>사진 (1~4장)</div>
           <label style={fileBtn}>
-            사진 촬영/선택
+            {compressing ? "처리 중…" : "사진 촬영/선택"}
             <input
               type="file"
               accept="image/*"
               capture="environment"
               multiple
+              disabled={compressing || photos.length >= 4}
               style={{ display: "none" }}
-              onChange={(e) => addPhotos(e.target.files)}
+              onChange={(e) => {
+                void addPhotos(e.target.files);
+                e.target.value = "";
+              }}
             />
           </label>
           {photos.length > 0 ? (
