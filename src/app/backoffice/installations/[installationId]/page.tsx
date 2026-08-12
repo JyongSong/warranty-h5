@@ -15,7 +15,9 @@ import {
 } from "@/lib/installation/installer/source";
 import { parseRequiredCapabilitiesText } from "@/lib/installation/orders/source/source-items";
 import { getInstallationOrderStatusDetail } from "@/lib/installation/orders/views/detail";
+import { getInstallationCompletionForOrder } from "@/lib/installation/completion/service";
 import InstallationOrderDetail, { type InstallationOrderDetailItem } from "./InstallationOrderDetail";
+import CompletionReviewPanel from "./CompletionReviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,8 @@ export async function renderInstallationOrderDetailPage({
   if (!order) {
     notFound();
   }
+
+  const completion = await getInstallationCompletionForOrder(installationId);
 
   const requiredCapabilities = parseRequiredCapabilitiesText(order.requiredCapabilities);
   const requiredAqaraAppCapability = order.requiredAqaraAppCapability ?? "NONE";
@@ -175,11 +179,21 @@ export async function renderInstallationOrderDetailPage({
   };
 
   return (
-    <InstallationOrderDetail
-      item={item}
-      returnPath={buildBackofficeNextPath(basePath, searchParams)}
-      displayMode={displayMode}
-    />
+    <>
+      {completion ? (
+        <CompletionReviewPanel
+          orderId={installationId}
+          orderStatus={order.status}
+          requiredAqaraAppCapability={requiredAqaraAppCapability}
+          completion={completion}
+        />
+      ) : null}
+      <InstallationOrderDetail
+        item={item}
+        returnPath={buildBackofficeNextPath(basePath, searchParams)}
+        displayMode={displayMode}
+      />
+    </>
   );
 }
 

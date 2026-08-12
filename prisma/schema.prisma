@@ -333,6 +333,7 @@ enum InstallationOrderStatus {
   WAITING_ADMIN_REVIEW
   WAITING_INSTALLER_RESPONSE
   INSTALLER_ASSIGNED
+  WAITING_HQ_REVIEW
   CANCELLED
   COMPLETED
 }
@@ -459,10 +460,35 @@ model InstallationOrder {
   statusEvents            InstallationOrderStatusEvent[]
   issues                  InstallationIssue[]                      @relation("InstallationOrderIssues")
   notifications           InstallationNotification[]
+  completion              InstallationCompletion?
 
   @@index([status, createdAt])
   @@index([status, statusChangedAt])
   @@map("installation_orders")
+}
+
+// P2: installer completion registration (photos, install-end time, achieved
+// linkage level) + HQ review/rejection. One row per order, upserted on resubmit.
+model InstallationCompletion {
+  id                        String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId       String            @unique @map("installation_order_id")
+  installationOrder         InstallationOrder @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  submittedInstallerId      String            @map("submitted_installer_id")
+  submittedAt               DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  achievedAqaraAppCapability String           @default("NONE") @map("achieved_aqara_app_capability")
+  wallpadLinked             Boolean           @default(false) @map("wallpad_linked")
+  wallpadAmount             Int?              @map("wallpad_amount")
+  installEndAt              DateTime           @map("install_end_at") @db.Timestamptz(6)
+  photoPaths                String[]          @default([]) @map("photo_paths")
+  reviewStatus              String            @default("PENDING") @map("review_status")
+  reviewedByAdminId         String?           @map("reviewed_by_admin_id")
+  reviewedAt                DateTime?         @map("reviewed_at") @db.Timestamptz(6)
+  rejectionReason           String?           @map("rejection_reason")
+  createdAt                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([reviewStatus])
+  @@map("installation_completions")
 }
 
 model InstallationOrderSource {

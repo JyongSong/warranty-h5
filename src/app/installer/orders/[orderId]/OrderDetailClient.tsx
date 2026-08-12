@@ -87,6 +87,17 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
 
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
+        {item.status === "ACCEPTED" ? (
+          <div style={{ marginTop: 16 }}>
+            <button
+              style={ui.primaryButton(false)}
+              onClick={() => router.push(`/installer/orders/${item.orderId}/complete`)}
+            >
+              완료 등록
+            </button>
+          </div>
+        ) : null}
+
         {actionable ? (
           !rejectOpen ? (
             <div style={{ marginTop: 16 }}>

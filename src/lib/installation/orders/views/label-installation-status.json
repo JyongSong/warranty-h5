@@ -5,6 +5,7 @@
   "WAITING_ADMIN_REVIEW": "관리자 검토 대기",
   "WAITING_INSTALLER_RESPONSE": "기사 응답 대기",
   "INSTALLER_ASSIGNED": "기사 배정 완료",
+  "WAITING_HQ_REVIEW": "완료 검수 대기",
   "CANCELLED": "취소",
   "COMPLETED": "설치 완료"
 }

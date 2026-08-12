@@ -15,6 +15,11 @@ import {
 } from "@/lib/installation/installer/manual-operations";
 import { InstallationIssueResolveError, resolveInstallationIssue } from "@/lib/installation/orders/issues/resolve";
 import {
+  approveInstallerCompletion,
+  InstallationCompletionError,
+  rejectInstallerCompletion,
+} from "@/lib/installation/completion/service";
+import {
   retrySmsNotification,
   sendInstallationNotificationById,
   SmsNotificationRetryError,
@@ -485,5 +490,50 @@ export async function resolveInstallationIssueAction(
     }
     console.error("[action/installations/resolve-issue]", error);
     return { ok: false, error: "INSTALLATION_ISSUE_RESOLVE_FAILED" };
+  }
+}
+
+export async function approveInstallationCompletionAction(
+  orderId: string,
+): Promise<InstallationActionResult> {
+  const auth = await requireInstallationAdmin();
+  if (!auth.ok) return auth;
+
+  const normalizedOrderId = orderId.trim();
+  if (!normalizedOrderId) return { ok: false, error: "ORDER_ID_REQUIRED" };
+
+  try {
+    await approveInstallerCompletion({ adminId: auth.admin.id, orderId: normalizedOrderId });
+    return { ok: true, status: "COMPLETED" };
+  } catch (error) {
+    if (error instanceof InstallationCompletionError) return { ok: false, error: error.message };
+    console.error("[action/installations/completion-approve]", error);
+    return { ok: false, error: "COMPLETION_APPROVE_FAILED" };
+  }
+}
+
+export async function rejectInstallationCompletionAction(
+  orderId: string,
+  reason: string,
+): Promise<InstallationActionResult> {
+  const auth = await requireInstallationAdmin();
+  if (!auth.ok) return auth;
+
+  const normalizedOrderId = orderId.trim();
+  const normalizedReason = (reason ?? "").trim();
+  if (!normalizedOrderId) return { ok: false, error: "ORDER_ID_REQUIRED" };
+  if (!normalizedReason) return { ok: false, error: "REJECTION_REASON_REQUIRED" };
+
+  try {
+    await rejectInstallerCompletion({
+      adminId: auth.admin.id,
+      orderId: normalizedOrderId,
+      reason: normalizedReason,
+    });
+    return { ok: true, status: "INSTALLER_ASSIGNED" };
+  } catch (error) {
+    if (error instanceof InstallationCompletionError) return { ok: false, error: error.message };
+    console.error("[action/installations/completion-reject]", error);
+    return { ok: false, error: "COMPLETION_REJECT_FAILED" };
   }
 }
