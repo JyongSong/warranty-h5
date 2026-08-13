@@ -82,7 +82,13 @@ function CompletedByDateSection({ items }: { items: InstallerOrderItem[] }) {
 function OrderCard({ item }: { item: InstallerOrderItem }) {
   return (
     <Link href={`/installer/orders/${item.orderId}`} style={cardLink}>
-      <div style={ui.card}>
+      <div style={{ ...ui.card, ...(item.rejectionReason ? { border: "2px solid #ef4444" } : {}) }}>
+        {item.rejectionReason ? (
+          <div style={rejectBanner}>
+            ⚠ 반려됨 · 재등록 필요
+            <div style={{ fontWeight: 400, marginTop: 2 }}>사유: {item.rejectionReason}</div>
+          </div>
+        ) : null}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <StatusBadge status={item.status} />
           <span style={{ fontSize: 12, color: "#a1a1aa" }}>{item.erpOrderNo}</span>
@@ -147,6 +153,18 @@ const dateHeader: CSSProperties = {
   fontWeight: 700,
   color: "#52525b",
   padding: "6px 0 4px",
+};
+
+const rejectBanner: CSSProperties = {
+  background: "#fef2f2",
+  color: "#b91c1c",
+  border: "1px solid #fecaca",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.5,
+  marginBottom: 10,
 };
 
 const cardLink: CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };

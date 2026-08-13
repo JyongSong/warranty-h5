@@ -71,6 +71,14 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           <StatusBadge status={item.status} />
         </div>
 
+        {item.rejectionReason ? (
+          <div style={rejectAlert}>
+            <div style={{ fontWeight: 800 }}>⚠ 완료 등록이 반려되었습니다</div>
+            <div style={{ marginTop: 4 }}>본사 반려 사유: {item.rejectionReason}</div>
+            <div style={{ marginTop: 4, fontWeight: 400 }}>내용을 수정한 뒤 다시 완료 등록해 주세요.</div>
+          </div>
+        ) : null}
+
         <div style={ui.card}>
           <Row label="주문번호" value={item.erpOrderNo || "-"} />
           {item.productSummary ? <Row label="제품" value={item.productSummary} /> : null}
@@ -188,4 +196,15 @@ const reasonRow: CSSProperties = {
   gap: 10,
   padding: "8px 0",
   fontSize: 15,
+};
+
+const rejectAlert: CSSProperties = {
+  background: "#fef2f2",
+  color: "#b91c1c",
+  border: "2px solid #ef4444",
+  borderRadius: 10,
+  padding: "12px 14px",
+  fontSize: 14,
+  lineHeight: 1.55,
+  marginBottom: 14,
 };

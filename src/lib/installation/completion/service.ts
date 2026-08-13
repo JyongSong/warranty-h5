@@ -4,6 +4,8 @@ import {
   transitionInstallationOrderStatus,
 } from "@/lib/installation/orders/status";
 import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
+import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
+import { sendSms } from "@/lib/sms";
 
 export class InstallationCompletionError extends Error {
   constructor(message: string) {
@@ -148,10 +150,10 @@ export async function rejectInstallerCompletion(input: {
   const reason = input.reason.trim();
   if (!reason) throw new InstallationCompletionError("REJECTION_REASON_REQUIRED");
 
-  await prisma.$transaction(async (tx) => {
+  const installerId = await prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
       where: { id: input.orderId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, currentInstallerId: true },
     });
     if (!order) throw new InstallationCompletionError("ORDER_NOT_FOUND");
     if (order.status !== INSTALLATION_ORDER_STATUSES.WAITING_HQ_REVIEW) {
@@ -181,7 +183,43 @@ export async function rejectInstallerCompletion(input: {
       },
       tx as never,
     );
+
+    return order.currentInstallerId;
   });
+
+  // Best-effort notify the installer (push + SMS fallback) so a rejection isn't
+  // silently sitting in the app.
+  if (installerId) {
+    await notifyInstallerOfCompletionRejection(installerId, reason);
+  }
+}
+
+async function notifyInstallerOfCompletionRejection(installerId: string, reason: string) {
+  const shortReason = reason.length > 40 ? `${reason.slice(0, 40)}…` : reason;
+
+  try {
+    await sendAssignmentPushToInstaller(installerId, {
+      title: "완료 등록이 반려되었습니다",
+      body: `사유: ${shortReason}`,
+    });
+  } catch (error) {
+    console.error("[installer/completion/reject-push]", error);
+  }
+
+  try {
+    const installer = await prisma.installer.findUnique({
+      where: { id: installerId },
+      select: { phone: true },
+    });
+    if (installer?.phone) {
+      await sendSms(
+        installer.phone,
+        `[Aqara 기사] 완료 등록이 반려되었습니다.\n사유: ${shortReason}\n앱에서 다시 등록해 주세요.`,
+      );
+    }
+  } catch (error) {
+    console.error("[installer/completion/reject-sms]", error);
+  }
 }
 
 export type InstallationCompletionView = {

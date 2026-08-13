@@ -16,6 +16,7 @@ export type InstallerOrderItem = {
   customerName: string | null;
   customerPhone: string | null;
   completedDate?: string | null; // YYYY-MM-DD (KST), set for COMPLETED items
+  rejectionReason?: string | null; // set on ACCEPTED items with an unhandled HQ rejection
 };
 
 export type InstallerOrdersGrouped = {
@@ -49,6 +50,7 @@ const orderContentSelect = {
       customerPhoneEncrypted: true,
     },
   },
+  completion: { select: { reviewStatus: true, rejectionReason: true, installEndAt: true } },
 } as const;
 
 type OrderContent = {
@@ -69,6 +71,7 @@ type OrderContent = {
     installTimeSlot: string | null;
     customerPhoneEncrypted: string | null;
   }>;
+  completion: { reviewStatus: string; rejectionReason: string | null; installEndAt: Date } | null;
 };
 
 function summarizeProducts(memo: string | null | undefined): string {
@@ -88,6 +91,13 @@ function shapeOrder(
       .filter(Boolean)
       .join(" ") || null;
 
+  // Unhandled rejection: back with the installer (ACCEPTED) but the last
+  // completion was rejected and not yet resubmitted.
+  const rejectionReason =
+    status === "ACCEPTED" && order.completion?.reviewStatus === "REJECTED"
+      ? order.completion.rejectionReason
+      : null;
+
   return {
     orderId: order.id,
     attemptId,
@@ -101,6 +111,7 @@ function shapeOrder(
     customerPhone: piiVisible
       ? decryptNullablePii(req?.customerPhoneEncrypted) ?? decryptNullablePii(order.source?.phoneEncrypted)
       : null,
+    rejectionReason,
   };
 }
 
@@ -123,7 +134,6 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
       select: {
         ...orderContentSelect,
         statusChangedAt: true,
-        completion: { select: { installEndAt: true } },
       },
     }),
     prisma.installationInstallerAssignmentAttempt.findMany({
@@ -144,7 +154,7 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
   );
 
   const completed: InstallerOrderItem[] = (
-    completedOrders as Array<OrderContent & { statusChangedAt: Date; completion: { installEndAt: Date } | null }>
+    completedOrders as Array<OrderContent & { statusChangedAt: Date }>
   ).map((o) => {
     const base = shapeOrder(o, { attemptId: null, status: "COMPLETED", piiVisible: true });
     const dateSource = o.completion?.installEndAt ?? o.statusChangedAt;
