@@ -3,8 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
-import { submitCompletionAction } from "./actions";
+import { createClient } from "@supabase/supabase-js";
+import { getCompletionUploadTargetsAction, submitCompletionAction } from "./actions";
 import * as ui from "../../../ui";
+
+let supabaseBrowser: ReturnType<typeof createClient> | null = null;
+function getSupabaseBrowser() {
+  if (!supabaseBrowser) {
+    supabaseBrowser = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+      { auth: { persistSession: false } },
+    );
+  }
+  return supabaseBrowser;
+}
 
 const CAPABILITIES = [
   { value: "NONE", label: "없음 (연동 안 함)" },
@@ -82,18 +95,43 @@ export default function CompleteClient({
   async function submit() {
     setBusy(true);
     setError(null);
-    const fd = new FormData();
-    fd.set("orderId", orderId);
-    fd.set("capability", capability);
-    fd.set("wallpadLinked", String(wallpadLinked));
-    fd.set("wallpadAmount", wallpadAmount);
-    fd.set("installEndAt", installEndAt);
-    photos.forEach((p) => fd.append("photos", p));
+    try {
+      // 1) Signed upload targets (scoped to this order).
+      const targetsRes = await getCompletionUploadTargetsAction(orderId, photos.length);
+      if (!targetsRes.ok) {
+        setError(ERR[targetsRes.error] ?? ERR.DEFAULT);
+        return;
+      }
 
-    const res = await submitCompletionAction(fd);
-    setBusy(false);
-    if (res.ok) router.push("/installer");
-    else setError(ERR[res.error] ?? ERR.DEFAULT);
+      // 2) Upload each photo DIRECTLY to Supabase Storage (no Vercel hop).
+      const supabase = getSupabaseBrowser();
+      const paths: string[] = [];
+      for (let i = 0; i < photos.length; i++) {
+        const target = targetsRes.targets[i];
+        const { error: upErr } = await supabase.storage
+          .from(targetsRes.bucket)
+          .uploadToSignedUrl(target.path, target.token, photos[i]);
+        if (upErr) throw new Error(upErr.message);
+        paths.push(target.path);
+      }
+
+      // 3) Submit the completion with the uploaded paths (tiny payload).
+      const amount = wallpadAmount.replace(/[^\d]/g, "");
+      const res = await submitCompletionAction({
+        orderId,
+        capability,
+        wallpadLinked,
+        wallpadAmount: amount ? Number(amount) : null,
+        installEndAt,
+        photoPaths: paths,
+      });
+      if (res.ok) router.push("/installer");
+      else setError(ERR[res.error] ?? ERR.DEFAULT);
+    } catch {
+      setError("사진 업로드에 실패했습니다. 네트워크 확인 후 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
