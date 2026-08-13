@@ -3,11 +3,13 @@
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
 import {
   AsOrderError,
+  approveAsCompletion,
   assignAsOrderInstaller,
   cancelAsOrder,
   createAsOrder,
   findOriginalInstallerForAs,
   recommendInstallersForAs,
+  rejectAsCompletion,
   type AsInstallerRecommendation,
 } from "@/lib/installation/as/service";
 
@@ -112,5 +114,38 @@ export async function cancelAsOrderAction(
     if (error instanceof AsOrderError) return { ok: false, error: error.message };
     console.error("[as/cancel]", error);
     return { ok: false, error: "AS_CANCEL_FAILED" };
+  }
+}
+
+export async function approveAsCompletionAction(
+  asOrderId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireAsAdmin();
+  if (!auth.ok) return auth;
+  try {
+    await approveAsCompletion({ adminId: auth.admin.id, asOrderId });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof AsOrderError) return { ok: false, error: error.message };
+    console.error("[as/approve-completion]", error);
+    return { ok: false, error: "AS_APPROVE_FAILED" };
+  }
+}
+
+export async function rejectAsCompletionAction(
+  asOrderId: string,
+  reason: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireAsAdmin();
+  if (!auth.ok) return auth;
+  const normalized = (reason ?? "").trim();
+  if (!normalized) return { ok: false, error: "REJECTION_REASON_REQUIRED" };
+  try {
+    await rejectAsCompletion({ adminId: auth.admin.id, asOrderId, reason: normalized });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof AsOrderError) return { ok: false, error: error.message };
+    console.error("[as/reject-completion]", error);
+    return { ok: false, error: "AS_REJECT_FAILED" };
   }
 }

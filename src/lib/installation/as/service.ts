@@ -11,6 +11,8 @@ import { normalizePhone } from "@/lib/phone";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
 import { listDispatchCandidateInstallers } from "@/lib/installation/installer/source";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
+import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
+import { sendSms } from "@/lib/sms";
 import { getAsSymptomLabel, isValidAsSymptomCode } from "@/lib/installation/as/symptom-codes";
 
 export class AsOrderError extends Error {
@@ -238,6 +240,46 @@ export async function assignAsOrderInstaller(input: {
   }
 }
 
+// Installer accept/reject. Reject routes back to admin (WAITING_ASSIGNMENT) and
+// clears the installer — NO auto-reassign (PRD §7.3, M3).
+export async function respondToAsAssignmentAsInstaller(input: {
+  installerId: string;
+  asOrderId: string;
+  response: "ACCEPT" | "REJECT";
+  rejectReason?: string | null;
+}): Promise<void> {
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.asOrder.findUnique({
+      where: { id: input.asOrderId },
+      select: { status: true, currentInstallerId: true },
+    });
+    if (!order) throw new AsOrderError("AS_ORDER_NOT_FOUND");
+    if (order.currentInstallerId !== input.installerId) throw new AsOrderError("NOT_YOUR_AS_ORDER");
+    if (order.status !== "WAITING_INSTALLER_RESPONSE") throw new AsOrderError("AS_ORDER_NOT_RESPONDABLE");
+
+    if (input.response === "ACCEPT") {
+      await transitionAsOrderStatus(tx, input.asOrderId, "INSTALLER_ASSIGNED", {
+        now,
+        orderData: { respondedAt: now },
+        event: { eventType: "INSTALLER_ACCEPTED_AS", actorType: "INSTALLER", actorId: input.installerId },
+      });
+    } else {
+      const reason = input.rejectReason?.trim() || null;
+      await transitionAsOrderStatus(tx, input.asOrderId, "WAITING_ASSIGNMENT", {
+        now,
+        orderData: { currentInstallerId: null, respondedAt: now, installerRejectReason: reason },
+        event: {
+          eventType: "INSTALLER_REJECTED_AS",
+          actorType: "INSTALLER",
+          actorId: input.installerId,
+          reason,
+        },
+      });
+    }
+  });
+}
+
 export async function cancelAsOrder(input: { adminId: string; asOrderId: string; reason: string }): Promise<void> {
   const reason = input.reason.trim();
   if (!reason) throw new AsOrderError("CANCEL_REASON_REQUIRED");
@@ -247,6 +289,180 @@ export async function cancelAsOrder(input: { adminId: string; asOrderId: string;
       event: { eventType: "ADMIN_CANCELLED_AS", actorType: "ADMIN", actorId: input.adminId, reason },
     });
   });
+}
+
+// --- Installer completion (처리 details + 용역비 + optional photos) ---
+export async function submitAsCompletion(input: {
+  installerId: string;
+  asOrderId: string;
+  resolutionDetail: string;
+  serviceFee: number | null;
+  photoPaths: string[];
+}): Promise<void> {
+  const resolutionDetail = input.resolutionDetail.trim();
+  if (!resolutionDetail) throw new AsOrderError("RESOLUTION_DETAIL_REQUIRED");
+  if (input.photoPaths.length > 4) throw new AsOrderError("PHOTO_COUNT_INVALID");
+
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.asOrder.findUnique({
+      where: { id: input.asOrderId },
+      select: { status: true, currentInstallerId: true },
+    });
+    if (!order || order.currentInstallerId !== input.installerId) throw new AsOrderError("NOT_YOUR_AS_ORDER");
+    if (order.status !== "INSTALLER_ASSIGNED") throw new AsOrderError("AS_ORDER_NOT_SUBMITTABLE");
+
+    await transitionAsOrderStatus(tx, input.asOrderId, "WAITING_HQ_REVIEW", {
+      orderData: {
+        resolutionDetail,
+        serviceFee: input.serviceFee,
+        completionPhotoPaths: input.photoPaths,
+        submittedAt: new Date(),
+        reviewStatus: "PENDING",
+        reviewedByAdminId: null,
+        reviewedAt: null,
+        hqRejectionReason: null,
+      },
+      event: { eventType: "INSTALLER_SUBMITTED_AS_COMPLETION", actorType: "INSTALLER", actorId: input.installerId },
+    });
+  });
+}
+
+export async function approveAsCompletion(input: { adminId: string; asOrderId: string }): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.asOrder.findUnique({ where: { id: input.asOrderId }, select: { status: true } });
+    if (!order) throw new AsOrderError("AS_ORDER_NOT_FOUND");
+    if (order.status !== "WAITING_HQ_REVIEW") throw new AsOrderError("AS_ORDER_NOT_IN_REVIEW");
+
+    await transitionAsOrderStatus(tx, input.asOrderId, "COMPLETED", {
+      orderData: {
+        reviewStatus: "APPROVED",
+        reviewedByAdminId: input.adminId,
+        reviewedAt: new Date(),
+        hqRejectionReason: null,
+      },
+      event: { eventType: "ADMIN_APPROVED_AS_COMPLETION", actorType: "ADMIN", actorId: input.adminId },
+    });
+  });
+}
+
+export async function rejectAsCompletion(input: {
+  adminId: string;
+  asOrderId: string;
+  reason: string;
+}): Promise<void> {
+  const reason = input.reason.trim();
+  if (!reason) throw new AsOrderError("REJECTION_REASON_REQUIRED");
+
+  const installerId = await prisma.$transaction(async (tx) => {
+    const order = await tx.asOrder.findUnique({
+      where: { id: input.asOrderId },
+      select: { status: true, currentInstallerId: true },
+    });
+    if (!order) throw new AsOrderError("AS_ORDER_NOT_FOUND");
+    if (order.status !== "WAITING_HQ_REVIEW") throw new AsOrderError("AS_ORDER_NOT_IN_REVIEW");
+
+    await transitionAsOrderStatus(tx, input.asOrderId, "INSTALLER_ASSIGNED", {
+      orderData: {
+        reviewStatus: "REJECTED",
+        reviewedByAdminId: input.adminId,
+        reviewedAt: new Date(),
+        hqRejectionReason: reason,
+      },
+      event: { eventType: "ADMIN_REJECTED_AS_COMPLETION", actorType: "ADMIN", actorId: input.adminId, reason },
+    });
+    return order.currentInstallerId;
+  });
+
+  if (installerId) {
+    const shortReason = reason.length > 40 ? `${reason.slice(0, 40)}…` : reason;
+    try {
+      await sendAssignmentPushToInstaller(installerId, {
+        title: "A/S 처리가 반려되었습니다",
+        body: `사유: ${shortReason}`,
+      });
+    } catch (error) {
+      console.error("[as/reject-push]", error);
+    }
+    try {
+      const installer = await prisma.installer.findUnique({ where: { id: installerId }, select: { phone: true } });
+      if (installer?.phone) {
+        await sendSms(
+          installer.phone,
+          `[Aqara 기사] A/S 처리가 반려되었습니다.\n사유: ${shortReason}\n앱에서 다시 등록해 주세요.`,
+        );
+      }
+    } catch (error) {
+      console.error("[as/reject-sms]", error);
+    }
+  }
+}
+
+export type AsAdminDetail = {
+  id: string;
+  status: string;
+  symptomCode: string;
+  symptomLabel: string;
+  symptomDetail: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  address: string | null;
+  orderNo: string | null;
+  memo: string | null;
+  installerName: string | null;
+  installerRejectReason: string | null;
+  resolutionDetail: string | null;
+  serviceFee: number | null;
+  reviewStatus: string | null;
+  hqRejectionReason: string | null;
+  photoUrls: string[];
+  createdAt: string;
+};
+
+export async function getAsOrderForAdmin(asOrderId: string): Promise<AsAdminDetail | null> {
+  const o = await prisma.asOrder.findUnique({
+    where: { id: asOrderId },
+    select: {
+      id: true,
+      status: true,
+      symptomCode: true,
+      symptomDetail: true,
+      customerNameEncrypted: true,
+      customerPhoneEncrypted: true,
+      addressEncrypted: true,
+      orderNo: true,
+      memo: true,
+      installerRejectReason: true,
+      resolutionDetail: true,
+      serviceFee: true,
+      reviewStatus: true,
+      hqRejectionReason: true,
+      completionPhotoPaths: true,
+      createdAt: true,
+      currentInstaller: { select: { name: true } },
+    },
+  });
+  if (!o) return null;
+
+  return {
+    id: o.id,
+    status: o.status,
+    symptomCode: o.symptomCode,
+    symptomLabel: getAsSymptomLabel(o.symptomCode),
+    symptomDetail: o.symptomDetail,
+    customerName: decryptNullablePii(o.customerNameEncrypted),
+    customerPhone: decryptNullablePii(o.customerPhoneEncrypted),
+    address: decryptNullablePii(o.addressEncrypted),
+    orderNo: o.orderNo,
+    memo: o.memo,
+    installerName: o.currentInstaller?.name ?? null,
+    installerRejectReason: o.installerRejectReason,
+    resolutionDetail: o.resolutionDetail,
+    serviceFee: o.serviceFee,
+    reviewStatus: o.reviewStatus,
+    hqRejectionReason: o.hqRejectionReason,
+    photoUrls: await getCompletionPhotoSignedUrls(o.completionPhotoPaths),
+    createdAt: o.createdAt.toISOString(),
+  };
 }
 
 // --- Admin list/detail ---

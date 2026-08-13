@@ -66,12 +66,13 @@ export default async function AsSearchPage({
               <th className="p-3">주소</th>
               <th className="p-3">기사</th>
               <th className="p-3">등록일</th>
+              <th className="p-3"></th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-zinc-400">
+                <td colSpan={7} className="p-6 text-center text-zinc-400">
                   A/S 내역이 없습니다.
                 </td>
               </tr>
@@ -87,6 +88,11 @@ export default async function AsSearchPage({
                   <td className="p-3 whitespace-nowrap">{it.installerName ?? "-"}</td>
                   <td className="p-3 whitespace-nowrap text-zinc-500">
                     {new Date(it.createdAt).toLocaleDateString("ko-KR")}
+                  </td>
+                  <td className="p-3 whitespace-nowrap">
+                    <Link href={`/backoffice/as/${it.id}`} className="text-sm font-semibold text-zinc-900 underline">
+                      상세
+                    </Link>
                   </td>
                 </tr>
               ))

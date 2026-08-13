@@ -39,15 +39,15 @@ export const COMPLETION_PHOTO_BUCKET = BUCKET;
 // Create one signed upload target per photo so the client uploads DIRECTLY to
 // Supabase Storage (bypassing the Vercel Server-Action body limit). Paths are
 // scoped to the order; the submit action re-checks the prefix.
-export async function createCompletionUploadTargets(
-  orderId: string,
+async function createUploadTargets(
+  prefix: string,
   count: number,
 ): Promise<Array<{ path: string; token: string }>> {
   await ensureBucket();
   const supabase = getServiceClient();
   const targets: Array<{ path: string; token: string }> = [];
   for (let i = 0; i < count; i++) {
-    const path = `orders/${orderId}/${crypto.randomUUID()}.jpg`;
+    const path = `${prefix}${crypto.randomUUID()}.jpg`;
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
     if (error || !data) {
       throw new Error(`SIGN_UPLOAD_FAILED: ${error?.message ?? "unknown"}`);
@@ -55,6 +55,14 @@ export async function createCompletionUploadTargets(
     targets.push({ path: data.path, token: data.token });
   }
   return targets;
+}
+
+export function createCompletionUploadTargets(orderId: string, count: number) {
+  return createUploadTargets(`orders/${orderId}/`, count);
+}
+
+export function createAsCompletionUploadTargets(asOrderId: string, count: number) {
+  return createUploadTargets(`as/${asOrderId}/`, count);
 }
 
 export async function uploadCompletionPhoto(
