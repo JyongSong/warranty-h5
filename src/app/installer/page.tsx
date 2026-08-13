@@ -4,6 +4,7 @@ import { requireInstallerPage } from "@/lib/installer/session";
 import { getInstallerOrders, type InstallerOrderItem } from "@/lib/installer/orders";
 import { logoutInstallerAction } from "./actions";
 import PushRegister from "./PushRegister";
+import CompletionQueueBanner from "./CompletionQueueBanner";
 import * as ui from "./ui";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export default async function InstallerOrdersPage() {
             </button>
           </form>
         </div>
+
+        <CompletionQueueBanner />
 
         <Section title="응답 대기" items={pending} emptyText="대기 중인 배정이 없습니다." />
         <Section title="진행 중" items={active} emptyText="진행 중인 작업이 없습니다." />

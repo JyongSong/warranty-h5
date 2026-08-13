@@ -3,21 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { getCompletionUploadTargetsAction, submitCompletionAction } from "./actions";
+import {
+  enqueueCompletion,
+  uploadAndSubmitCompletion,
+  type QueuedCompletionInput,
+} from "@/lib/installer/completionQueue";
 import * as ui from "../../../ui";
-
-let supabaseBrowser: ReturnType<typeof createClient> | null = null;
-function getSupabaseBrowser() {
-  if (!supabaseBrowser) {
-    supabaseBrowser = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-      { auth: { persistSession: false } },
-    );
-  }
-  return supabaseBrowser;
-}
 
 const CAPABILITIES = [
   { value: "NONE", label: "없음 (연동 안 함)" },
@@ -95,43 +86,48 @@ export default function CompleteClient({
   async function submit() {
     setBusy(true);
     setError(null);
-    try {
-      // 1) Signed upload targets (scoped to this order).
-      const targetsRes = await getCompletionUploadTargetsAction(orderId, photos.length);
-      if (!targetsRes.ok) {
-        setError(ERR[targetsRes.error] ?? ERR.DEFAULT);
-        return;
-      }
 
-      // 2) Upload each photo DIRECTLY to Supabase Storage (no Vercel hop).
-      const supabase = getSupabaseBrowser();
-      const paths: string[] = [];
-      for (let i = 0; i < photos.length; i++) {
-        const target = targetsRes.targets[i];
-        const { error: upErr } = await supabase.storage
-          .from(targetsRes.bucket)
-          .uploadToSignedUrl(target.path, target.token, photos[i]);
-        if (upErr) throw new Error(upErr.message);
-        paths.push(target.path);
-      }
+    const amount = wallpadAmount.replace(/[^\d]/g, "");
+    const entry: QueuedCompletionInput = {
+      orderId,
+      capability,
+      wallpadLinked,
+      wallpadAmount: amount ? Number(amount) : null,
+      installEndAt,
+      photos,
+    };
 
-      // 3) Submit the completion with the uploaded paths (tiny payload).
-      const amount = wallpadAmount.replace(/[^\d]/g, "");
-      const res = await submitCompletionAction({
-        orderId,
-        capability,
-        wallpadLinked,
-        wallpadAmount: amount ? Number(amount) : null,
-        installEndAt,
-        photoPaths: paths,
-      });
-      if (res.ok) router.push("/installer");
-      else setError(ERR[res.error] ?? ERR.DEFAULT);
-    } catch {
-      setError("사진 업로드에 실패했습니다. 네트워크 확인 후 다시 시도해 주세요.");
-    } finally {
+    // Offline → save locally and auto-send when connectivity returns.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      try {
+        await enqueueCompletion(entry);
+      } catch {
+        // ignore — nothing more we can do offline
+      }
       setBusy(false);
+      router.push("/installer");
+      return;
     }
+
+    const res = await uploadAndSubmitCompletion(entry);
+    if (res.ok) {
+      setBusy(false);
+      router.push("/installer");
+      return;
+    }
+    if (res.retriable) {
+      // network dropped mid-submit → queue for auto-retry
+      try {
+        await enqueueCompletion(entry);
+      } catch {
+        // ignore
+      }
+      setBusy(false);
+      router.push("/installer");
+      return;
+    }
+    setBusy(false);
+    setError(ERR[res.error] ?? ERR.DEFAULT);
   }
 
   return (
