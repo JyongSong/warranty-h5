@@ -18,6 +18,7 @@ export type InstallationOrderStatusView =
   | "waitingAdminReview"
   | "waitingInstallerResponse"
   | "assigned"
+  | "waitingHqReview"
   | "completed"
   | "cancelled";
 export type InstallationOrderSearchField =
@@ -27,7 +28,8 @@ export type InstallationOrderSearchField =
   | "orderNumber"
   | "installerName"
   | "installerPhone"
-  | "orderDate";
+  | "orderDate"
+  | "installerDateRange";
 export type InstallationOrderSearchCondition = {
   field: InstallationOrderSearchField;
   keyword?: string;
@@ -316,6 +318,7 @@ function buildInstallationOrderStatusViewWhere(
   if (statusView === "waitingAdminReview") return { status: "WAITING_ADMIN_REVIEW" };
   if (statusView === "waitingInstallerResponse") return { status: "WAITING_INSTALLER_RESPONSE" };
   if (statusView === "assigned") return { status: "INSTALLER_ASSIGNED" };
+  if (statusView === "waitingHqReview") return { status: "WAITING_HQ_REVIEW" };
   if (statusView === "completed") return { status: "COMPLETED" };
   if (statusView === "cancelled") return { status: "CANCELLED" };
 
@@ -370,6 +373,27 @@ async function buildInstallationOrderSelectedSearchWhere(
     const range = buildCompactStringDateRange(condition);
     if (!range) return null;
     return { source: { is: { dueDate: range } } };
+  }
+
+  // Combined: a specific installer AND an order-date range.
+  if (condition.field === "installerDateRange") {
+    const installerKeyword = condition.keyword?.trim();
+    const range = buildCompactStringDateRange(condition);
+    if (!installerKeyword || !range) return null;
+
+    const orClauses: Prisma.InstallerWhereInput[] = [
+      { name: { contains: installerKeyword, mode: "insensitive" } },
+      { branch: { contains: installerKeyword, mode: "insensitive" } },
+    ];
+    const phoneKeyword = normalizePhone(installerKeyword);
+    if (phoneKeyword) {
+      orClauses.push({ phone: { contains: phoneKeyword, mode: "insensitive" } });
+    }
+    const installerIds = await findInstallerIds({ OR: orClauses });
+
+    return {
+      AND: [buildInstallerIdOrderWhere(installerIds), { source: { is: { dueDate: range } } }],
+    };
   }
 
   const keyword = condition.keyword?.trim();

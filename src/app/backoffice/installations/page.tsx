@@ -46,6 +46,8 @@ export default async function InstallationOrdersPage({ searchParams }: PageProps
     { statusView: "waitingAdminReview", label: "배정 승인 대기" },
     { statusView: "waitingInstallerResponse", label: "기사 응답 대기" },
     { statusView: "assigned", label: "기사 배정 완료" },
+    { statusView: "waitingHqReview", label: "완료 검수 대기" },
+    { statusView: "completed", label: "설치 완료" },
   ];
 
   return (
@@ -120,7 +122,9 @@ function normalizeInstallationOrderStatusView(value: string | string[] | undefin
     statusView === "preAssignment" ||
     statusView === "waitingAdminReview" ||
     statusView === "waitingInstallerResponse" ||
-    statusView === "assigned"
+    statusView === "assigned" ||
+    statusView === "waitingHqReview" ||
+    statusView === "completed"
   ) {
     return statusView;
   }

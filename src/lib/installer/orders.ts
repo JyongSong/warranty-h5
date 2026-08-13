@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 
-export type InstallerOrderStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "TIMED_OUT";
+export type InstallerOrderStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "TIMED_OUT" | "COMPLETED";
 
 export type InstallerOrderItem = {
   orderId: string;
@@ -15,11 +15,13 @@ export type InstallerOrderItem = {
   // Customer name/phone are hidden until the installer accepts (PRD §6.2).
   customerName: string | null;
   customerPhone: string | null;
+  completedDate?: string | null; // YYYY-MM-DD (KST), set for COMPLETED items
 };
 
 export type InstallerOrdersGrouped = {
   pending: InstallerOrderItem[];
   active: InstallerOrderItem[];
+  completed: InstallerOrderItem[];
   history: InstallerOrderItem[];
 };
 
@@ -103,7 +105,7 @@ function shapeOrder(
 }
 
 export async function getInstallerOrders(installerId: string): Promise<InstallerOrdersGrouped> {
-  const [pendingAttempts, activeOrders, historyAttempts] = await Promise.all([
+  const [pendingAttempts, activeOrders, completedOrders, historyAttempts] = await Promise.all([
     prisma.installationInstallerAssignmentAttempt.findMany({
       where: { installerId, status: "WAITING_INSTALLER_RESPONSE" },
       orderBy: { createdAt: "desc" },
@@ -113,6 +115,16 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
       where: { currentInstallerId: installerId, status: "INSTALLER_ASSIGNED" },
       orderBy: { updatedAt: "desc" },
       select: orderContentSelect,
+    }),
+    prisma.installationOrder.findMany({
+      where: { currentInstallerId: installerId, status: "COMPLETED" },
+      orderBy: { statusChangedAt: "desc" },
+      take: 60,
+      select: {
+        ...orderContentSelect,
+        statusChangedAt: true,
+        completion: { select: { installEndAt: true } },
+      },
     }),
     prisma.installationInstallerAssignmentAttempt.findMany({
       where: { installerId, status: { in: ["INSTALLER_REJECTED", "INSTALLER_RESPONSE_TIMED_OUT"] } },
@@ -131,6 +143,14 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
     shapeOrder(o, { attemptId: null, status: "ACCEPTED", piiVisible: true }),
   );
 
+  const completed: InstallerOrderItem[] = (
+    completedOrders as Array<OrderContent & { statusChangedAt: Date; completion: { installEndAt: Date } | null }>
+  ).map((o) => {
+    const base = shapeOrder(o, { attemptId: null, status: "COMPLETED", piiVisible: true });
+    const dateSource = o.completion?.installEndAt ?? o.statusChangedAt;
+    return { ...base, completedDate: toKstDateStr(dateSource) };
+  });
+
   const history: InstallerOrderItem[] = (
     historyAttempts as Array<{ id: string; status: string; installationOrder: OrderContent }>
   ).map((a) =>
@@ -141,7 +161,11 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
     }),
   );
 
-  return { pending, active, history };
+  return { pending, active, completed, history };
+}
+
+function toKstDateStr(d: Date): string {
+  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 // Single order for the detail / accept-reject page, scoped to this installer.
@@ -159,6 +183,11 @@ export async function getInstallerOrderView(
   // Accepted / in-progress job for this installer.
   if (order.currentInstallerId === installerId && order.status === "INSTALLER_ASSIGNED") {
     return shapeOrder(order, { attemptId: null, status: "ACCEPTED", piiVisible: true });
+  }
+
+  // Completed job for this installer.
+  if (order.currentInstallerId === installerId && order.status === "COMPLETED") {
+    return shapeOrder(order, { attemptId: null, status: "COMPLETED", piiVisible: true });
   }
 
   // Otherwise find this installer's most recent attempt on the order.

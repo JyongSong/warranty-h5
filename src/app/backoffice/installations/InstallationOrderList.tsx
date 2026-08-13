@@ -102,6 +102,7 @@ const SEARCH_FIELD_OPTIONS: Array<{ field: InstallationOrderSearchField; label: 
   { field: "customerPhone", label: "고객전화번호" },
   { field: "installerName", label: "기사이름" },
   { field: "installerPhone", label: "기사전화번호" },
+  { field: "installerDateRange", label: "기사+기간" },
 ];
 
 type InlineSearchDateRange = {
@@ -713,10 +714,11 @@ function InstallationOrderInlineSearchForm({
     getInitialInlineSearchDateRange(searchCondition, initialSelectedField),
   );
   const isDateField = selectedField === "desiredInstallDate" || selectedField === "orderDate";
+  const isInstallerDateRange = selectedField === "installerDateRange";
   const handleSearchFieldChange = useCallback(
     (field: InstallationOrderSearchField) => {
       setSelectedField(field);
-      if (field === "desiredInstallDate" || field === "orderDate") {
+      if (field === "desiredInstallDate" || field === "orderDate" || field === "installerDateRange") {
         setDateRange(getInitialInlineSearchDateRange(searchCondition, field));
       }
     },
@@ -753,7 +755,7 @@ function InstallationOrderInlineSearchForm({
             ))}
           </select>
         </label>
-        {isDateField ? (
+        {isDateField || isInstallerDateRange ? (
           <div className="col-span-2 grid min-w-0 grid-cols-2 gap-2 @3xl:col-span-1">
             <label className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-zinc-600">시작일</span>
@@ -778,9 +780,12 @@ function InstallationOrderInlineSearchForm({
               />
             </label>
           </div>
-        ) : (
+        ) : null}
+        {!isDateField ? (
           <label className="col-span-2 flex min-w-0 flex-col gap-1 @3xl:col-span-1">
-            <span className="text-xs font-semibold text-zinc-600">키워드</span>
+            <span className="text-xs font-semibold text-zinc-600">
+              {isInstallerDateRange ? "기사 (이름/전화)" : "키워드"}
+            </span>
             <input
               type="search"
               name="searchKeyword"
@@ -790,7 +795,7 @@ function InstallationOrderInlineSearchForm({
               className="h-9 rounded-md border border-zinc-300 px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950"
             />
           </label>
-        )}
+        ) : null}
         <button type="submit" className={`${getBackofficeButtonClass("primary")} w-full @3xl:w-auto`}>
           검색
         </button>
@@ -1017,6 +1022,7 @@ function getSearchKeywordPlaceholder(field: InstallationOrderSearchField) {
     orderNumber: "ONS20260604942",
     installerName: "서울강남기사",
     installerPhone: "01012345678",
+    installerDateRange: "기사이름 또는 전화번호",
   };
 
   return placeholders[field] ?? "검색어";

@@ -163,6 +163,7 @@ function StatusBadge({ status }: { status: InstallerOrderItem["status"] }) {
   const map: Record<InstallerOrderItem["status"], { text: string; bg: string; color: string }> = {
     PENDING: { text: "응답 대기", bg: "#fef3c7", color: "#92400e" },
     ACCEPTED: { text: "진행 중", bg: "#dcfce7", color: "#166534" },
+    COMPLETED: { text: "완료", bg: "#dbeafe", color: "#1e40af" },
     REJECTED: { text: "거절", bg: "#f4f4f5", color: "#71717a" },
     TIMED_OUT: { text: "시간 초과", bg: "#f4f4f5", color: "#71717a" },
   };

@@ -94,6 +94,15 @@ function normalizeInstallationOrderSearchCondition(
     return { field, ...(from ? { from } : {}), ...(to ? { to } : {}) };
   }
 
+  if (field === "installerDateRange") {
+    const keyword = getSingleSearchParam(searchParams.searchKeyword);
+    const from = getDateOnlySearchParam(searchParams.searchFrom);
+    const to = getDateOnlySearchParam(searchParams.searchTo);
+    if (!keyword || !from || !to) return undefined;
+    if (from > to) return undefined;
+    return { field, keyword, from, to };
+  }
+
   const keyword = getSingleSearchParam(searchParams.searchKeyword);
   if (!keyword) return undefined;
   return { field, keyword };
@@ -108,7 +117,8 @@ function normalizeInstallationOrderSearchField(value: string | string[] | undefi
     field === "orderNumber" ||
     field === "installerName" ||
     field === "installerPhone" ||
-    field === "orderDate"
+    field === "orderDate" ||
+    field === "installerDateRange"
   ) {
     return field;
   }

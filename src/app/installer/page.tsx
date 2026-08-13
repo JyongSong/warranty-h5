@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function InstallerOrdersPage() {
   const installer = await requireInstallerPage("/installer");
-  const { pending, active, history } = await getInstallerOrders(installer.id);
+  const { pending, active, completed, history } = await getInstallerOrders(installer.id);
 
   return (
     <main style={ui.page}>
@@ -30,6 +30,7 @@ export default async function InstallerOrdersPage() {
 
         <Section title="응답 대기" items={pending} emptyText="대기 중인 배정이 없습니다." />
         <Section title="진행 중" items={active} emptyText="진행 중인 작업이 없습니다." />
+        {completed.length > 0 ? <CompletedByDateSection items={completed} /> : null}
         {history.length > 0 ? <Section title="지난 내역" items={history} emptyText="" /> : null}
       </div>
     </main>
@@ -51,6 +52,33 @@ function Section({ title, items, emptyText }: { title: string; items: InstallerO
   );
 }
 
+function CompletedByDateSection({ items }: { items: InstallerOrderItem[] }) {
+  // items arrive sorted newest-first; group consecutive same-date runs.
+  const groups: Array<{ date: string; items: InstallerOrderItem[] }> = [];
+  for (const item of items) {
+    const date = item.completedDate ?? "-";
+    const last = groups[groups.length - 1];
+    if (last && last.date === date) last.items.push(item);
+    else groups.push({ date, items: [item] });
+  }
+
+  return (
+    <section style={{ marginBottom: 20 }}>
+      <h2 style={sectionTitle}>
+        완료 <span style={{ color: "#a1a1aa" }}>{items.length}</span>
+      </h2>
+      {groups.map((g) => (
+        <div key={g.date} style={{ marginBottom: 10 }}>
+          <div style={dateHeader}>{g.date}</div>
+          {g.items.map((item) => (
+            <OrderCard key={item.orderId} item={item} />
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function OrderCard({ item }: { item: InstallerOrderItem }) {
   return (
     <Link href={`/installer/orders/${item.orderId}`} style={cardLink}>
@@ -62,7 +90,9 @@ function OrderCard({ item }: { item: InstallerOrderItem }) {
         {item.productSummary ? <div style={{ ...ui.rowValue, marginBottom: 8 }}>{item.productSummary}</div> : null}
         <Row label="희망 일정" value={[item.installDate, item.installTimeSlot].filter(Boolean).join(" ") || "-"} />
         <Row label="주소" value={item.address ?? "-"} />
-        {item.status === "ACCEPTED" && item.customerName ? <Row label="고객" value={item.customerName} /> : null}
+        {(item.status === "ACCEPTED" || item.status === "COMPLETED") && item.customerName ? (
+          <Row label="고객" value={item.customerName} />
+        ) : null}
         {item.status === "PENDING" ? (
           <div style={{ fontSize: 12, color: "#92400e", marginTop: 6 }}>고객 정보는 수락 후 표시됩니다.</div>
         ) : null}
@@ -84,6 +114,7 @@ function StatusBadge({ status }: { status: InstallerOrderItem["status"] }) {
   const map: Record<InstallerOrderItem["status"], { text: string; bg: string; color: string }> = {
     PENDING: { text: "응답 대기", bg: "#fef3c7", color: "#92400e" },
     ACCEPTED: { text: "진행 중", bg: "#dcfce7", color: "#166534" },
+    COMPLETED: { text: "완료", bg: "#dbeafe", color: "#1e40af" },
     REJECTED: { text: "거절", bg: "#f4f4f5", color: "#71717a" },
     TIMED_OUT: { text: "시간 초과", bg: "#f4f4f5", color: "#71717a" },
   };
@@ -110,5 +141,12 @@ const logoutButton: CSSProperties = {
 };
 
 const sectionTitle: CSSProperties = { fontSize: 15, fontWeight: 700, margin: "0 0 10px" };
+
+const dateHeader: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#52525b",
+  padding: "6px 0 4px",
+};
 
 const cardLink: CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };
