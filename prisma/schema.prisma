@@ -72,6 +72,7 @@ model Installer {
   assignmentAttempts   InstallationInstallerAssignmentAttempt[] @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
   devices              InstallerDevice[]   @relation("InstallerDevices")
+  asOrders             AsOrder[]           @relation("AsCurrentInstaller")
 
   @@index([branch])
   @@index([region])
@@ -670,6 +671,80 @@ model InstallationOrderStatusEvent {
   @@index([installationOrderId, createdAt])
   @@index([eventType, createdAt])
   @@map("installation_order_status_events")
+}
+
+// P3: A/S (after-sales repair). Admin-created; dispatched to an installer
+// (prefer the original installer, else by address). Reject routes back to
+// admin (no auto-reassign). Completion (처리 details + 용역비 + optional photos)
+// is HQ-reviewed. Completion fields are inline (1:1 with the order).
+enum AsOrderStatus {
+  WAITING_ASSIGNMENT
+  WAITING_INSTALLER_RESPONSE
+  INSTALLER_ASSIGNED
+  WAITING_HQ_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+model AsOrder {
+  id                          String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  status                      AsOrderStatus @default(WAITING_ASSIGNMENT)
+  // customer (PII: encrypted for display, hashed for search)
+  customerNameEncrypted       String?       @map("customer_name_encrypted")
+  customerNameHash            String?       @map("customer_name_hash")
+  customerPhoneEncrypted      String?       @map("customer_phone_encrypted")
+  customerPhoneHash           String?       @map("customer_phone_hash")
+  addressEncrypted            String?       @map("address_encrypted")
+  // symptom
+  symptomCode                 String        @map("symptom_code")
+  symptomDetail               String?       @map("symptom_detail")
+  // reference to the original install (plain refs; no FK coupling)
+  orderNo                     String?       @map("order_no")
+  originalInstallationOrderId String?       @map("original_installation_order_id")
+  memo                        String?
+  // assignment
+  currentInstallerId          String?       @map("current_installer_id")
+  currentInstaller            Installer?    @relation("AsCurrentInstaller", fields: [currentInstallerId], references: [id], onDelete: SetNull)
+  assignedAt                  DateTime?     @map("assigned_at") @db.Timestamptz(6)
+  respondedAt                 DateTime?     @map("responded_at") @db.Timestamptz(6)
+  installerRejectReason       String?       @map("installer_reject_reason")
+  // completion (inline)
+  resolutionDetail            String?       @map("resolution_detail")
+  serviceFee                  Int?          @map("service_fee")
+  completionPhotoPaths        String[]      @default([]) @map("completion_photo_paths")
+  submittedAt                 DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  reviewStatus                String?       @map("review_status")
+  reviewedByAdminId           String?       @map("reviewed_by_admin_id")
+  reviewedAt                  DateTime?     @map("reviewed_at") @db.Timestamptz(6)
+  hqRejectionReason           String?       @map("hq_rejection_reason")
+  // meta
+  createdByAdminId            String?       @map("created_by_admin_id")
+  statusChangedAt             DateTime      @default(now()) @map("status_changed_at") @db.Timestamptz(6)
+  createdAt                   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  statusEvents                AsOrderStatusEvent[]
+
+  @@index([status, createdAt])
+  @@index([currentInstallerId])
+  @@index([customerPhoneHash])
+  @@map("as_orders")
+}
+
+model AsOrderStatusEvent {
+  id         String         @id @default(dbgenerated("(gen_random_uuid())::text"))
+  asOrderId  String         @map("as_order_id")
+  asOrder    AsOrder        @relation(fields: [asOrderId], references: [id], onDelete: Cascade)
+  fromStatus AsOrderStatus? @map("from_status")
+  toStatus   AsOrderStatus  @map("to_status")
+  eventType  String         @map("event_type")
+  actorType  String         @map("actor_type")
+  actorId    String?        @map("actor_id")
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([asOrderId, createdAt])
+  @@map("as_order_status_events")
 }
 
 model InstallationIssue {
