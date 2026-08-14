@@ -64,6 +64,7 @@ export default function CompleteClient({
   const [capability, setCapability] = useState<string>("NONE");
   const [wallpadLinked, setWallpadLinked] = useState(false);
   const [wallpadAmount, setWallpadAmount] = useState("");
+  const [longDistanceAmount, setLongDistanceAmount] = useState("");
   const [installEndAt, setInstallEndAt] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -88,11 +89,13 @@ export default function CompleteClient({
     setError(null);
 
     const amount = wallpadAmount.replace(/[^\d]/g, "");
+    const longDistance = longDistanceAmount.replace(/[^\d]/g, "");
     const entry: QueuedCompletionInput = {
       orderId,
       capability,
       wallpadLinked,
       wallpadAmount: amount ? Number(amount) : null,
+      longDistanceAmount: longDistance ? Number(longDistance) : null,
       installEndAt,
       photos,
     };
@@ -176,6 +179,17 @@ export default function CompleteClient({
               placeholder="현장 금액 (원, 선택)"
             />
           ) : null}
+        </div>
+
+        <div style={ui.card}>
+          <label style={ui.label}>장거리 비용 (선택)</label>
+          <input
+            style={ui.input}
+            value={longDistanceAmount}
+            onChange={(e) => setLongDistanceAmount(e.target.value)}
+            inputMode="numeric"
+            placeholder="장거리 금액 (원, 관리자 확인 후 정산)"
+          />
         </div>
 
         <div style={ui.card}>

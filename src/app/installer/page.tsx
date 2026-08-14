@@ -39,6 +39,10 @@ export default async function InstallerOrdersPage() {
 
         <CompletionQueueBanner />
 
+        <Link href="/installer/settlement" style={settlementLink}>
+          💰 내 정산 내역 보기
+        </Link>
+
         <Section title="응답 대기" items={pending} emptyText="대기 중인 배정이 없습니다." />
         <Section title="진행 중" items={active} emptyText="진행 중인 작업이 없습니다." />
         {asOrders.pending.length > 0 ? <AsSection title="A/S · 응답 대기" items={asOrders.pending} /> : null}
@@ -211,6 +215,19 @@ const logoutButton: CSSProperties = {
 };
 
 const sectionTitle: CSSProperties = { fontSize: 15, fontWeight: 700, margin: "0 0 10px" };
+const settlementLink: CSSProperties = {
+  display: "block",
+  textAlign: "center",
+  padding: "12px",
+  marginBottom: 20,
+  borderRadius: 10,
+  border: "1px solid #e4e4e7",
+  background: "#fafafa",
+  color: "#18181b",
+  fontSize: 14,
+  fontWeight: 700,
+  textDecoration: "none",
+};
 
 const dateHeader: CSSProperties = {
   fontSize: 13,

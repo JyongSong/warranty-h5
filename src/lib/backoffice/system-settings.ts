@@ -29,6 +29,14 @@ export const SYSTEM_SETTING_KEYS = {
   installationSmsTestPhoneNumber: "installation.sms.testPhoneNumber",
   installationSmsSendWindowStart: "installation.sms.sendWindowStart",
   installationSmsSendWindowEnd: "installation.sms.sendWindowEnd",
+  // P4 정산: global default rates (KRW). Per-installer overrides live in installer_rates.
+  settlementLinkageAppFee: "installation.settlement.linkageAppFee",
+  settlementLinkageHubFee: "installation.settlement.linkageHubFee",
+  settlementTravelFee: "installation.settlement.travelFee",
+  settlementNightSurcharge: "installation.settlement.nightSurcharge",
+  settlementWeekendSurcharge: "installation.settlement.weekendSurcharge",
+  settlementNightStartHour: "installation.settlement.nightStartHour",
+  settlementNightEndHour: "installation.settlement.nightEndHour",
 } as const;
 
 export const ASSIGNMENT_SMS_LIMIT_DEFAULTS = {
@@ -160,6 +168,69 @@ const SYSTEM_SETTING_SPECS = ([
     defaultValue: "",
     validationHint: "전화번호. 여러 번호는 콤마, 세미콜론, 줄바꿈으로 구분",
   },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementLinkageAppFee,
+    description: "정산 기본 연동비 - APP 등급(원). 기사별 재정의 없으면 이 값 사용",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementLinkageHubFee,
+    description: "정산 기본 연동비 - 허브 등급(원, APP 포함). 허브 달성 시 이 값으로 대체",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementTravelFee,
+    description: "정산 기본 출장비(원, 설치 완료 건당 고정)",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementNightSurcharge,
+    description: "정산 야간 할증(원, 설치 종료시각이 야간대일 때 가산)",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementWeekendSurcharge,
+    description: "정산 주말 할증(원, 설치 종료일이 토/일일 때 가산)",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementNightStartHour,
+    description: "야간 시작 시각(KST 0-23시). 설치 종료시각 hour >= 이 값이면 야간",
+    type: "integer" as const,
+    min: 0,
+    max: 23,
+    defaultValue: 20,
+    validationHint: "0-23 사이의 정수(시)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementNightEndHour,
+    description: "야간 종료 시각(KST 0-23시). 설치 종료시각 hour < 이 값이면 야간",
+    type: "integer" as const,
+    min: 0,
+    max: 23,
+    defaultValue: 6,
+    validationHint: "0-23 사이의 정수(시)",
+  },
 ] satisfies SystemSettingSpec[]).sort((left, right) => left.key.localeCompare(right.key));
 
 const systemSettingSpecByKey = new Map(SYSTEM_SETTING_SPECS.map((spec) => [spec.key, spec]));
@@ -211,6 +282,22 @@ export async function getSystemSettingValue(key: string): Promise<string | null>
 
 export function getSystemSettingDescription(key: string) {
   return systemSettingSpecByKey.get(key)?.description ?? "-";
+}
+
+// Reads the effective integer value for an integer-typed setting: the stored
+// value if valid, otherwise the spec default. Throws if the key is not an
+// integer spec (programmer error).
+export async function getEffectiveIntegerSetting(key: string): Promise<number> {
+  const spec = systemSettingSpecByKey.get(key);
+  if (!spec || spec.type !== "integer") {
+    throw new Error(`getEffectiveIntegerSetting: ${key} is not an integer setting`);
+  }
+  const stored = await getSystemSettingValue(key);
+  if (stored !== null) {
+    const normalized = validateSystemSettingValue(key, stored);
+    if (normalized.ok) return Number(normalized.value);
+  }
+  return spec.defaultValue;
 }
 
 export function validateSystemSettingValue(key: string, rawValue: string) {

@@ -48,6 +48,7 @@ export async function submitCompletionAction(input: {
   capability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  longDistanceAmount: number | null;
   installEndAt: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
@@ -75,6 +76,7 @@ export async function submitCompletionAction(input: {
       achievedAqaraAppCapability: input.capability ?? "NONE",
       wallpadLinked: Boolean(input.wallpadLinked),
       wallpadAmount: input.wallpadAmount ?? null,
+      longDistanceAmount: input.longDistanceAmount ?? null,
       installEndAt,
       photoPaths,
     });

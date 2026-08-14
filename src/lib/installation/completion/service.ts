@@ -6,6 +6,7 @@ import {
 import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
+import { createInstallSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
 
 export class InstallationCompletionError extends Error {
   constructor(message: string) {
@@ -23,6 +24,7 @@ export type SubmitCompletionInput = {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  longDistanceAmount: number | null;
   installEndAt: Date;
   photoPaths: string[];
 };
@@ -57,6 +59,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         achievedAqaraAppCapability: input.achievedAqaraAppCapability,
         wallpadLinked: input.wallpadLinked,
         wallpadAmount: input.wallpadAmount,
+        longDistanceAmount: input.longDistanceAmount,
         installEndAt: input.installEndAt,
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
@@ -67,6 +70,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         achievedAqaraAppCapability: input.achievedAqaraAppCapability,
         wallpadLinked: input.wallpadLinked,
         wallpadAmount: input.wallpadAmount,
+        longDistanceAmount: input.longDistanceAmount,
         installEndAt: input.installEndAt,
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
@@ -98,6 +102,9 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
 export async function approveInstallerCompletion(input: {
   adminId: string;
   orderId: string;
+  // Admin may set/adjust the installer-declared long-distance fee at review
+  // time (§6.4 장거리: installer fills → admin confirms). Frozen into snapshot.
+  longDistanceAmount?: number | null;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
@@ -123,7 +130,16 @@ export async function approveInstallerCompletion(input: {
         reviewedByAdminId: input.adminId,
         reviewedAt: new Date(),
         rejectionReason: null,
+        ...(input.longDistanceAmount === undefined
+          ? {}
+          : { longDistanceAmount: input.longDistanceAmount }),
       },
+    });
+
+    // §8.5 M1: freeze the settlement snapshot at approval time.
+    await createInstallSettlementSnapshot(tx, {
+      orderId: input.orderId,
+      adminId: input.adminId,
     });
 
     await transitionInstallationOrderStatus(
@@ -227,6 +243,7 @@ export type InstallationCompletionView = {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  longDistanceAmount: number | null;
   installEndAt: string;
   reviewStatus: string;
   rejectionReason: string | null;
@@ -246,6 +263,7 @@ export async function getInstallationCompletionForOrder(
     achievedAqaraAppCapability: c.achievedAqaraAppCapability,
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
+    longDistanceAmount: c.longDistanceAmount,
     installEndAt: c.installEndAt.toISOString(),
     reviewStatus: c.reviewStatus,
     rejectionReason: c.rejectionReason,

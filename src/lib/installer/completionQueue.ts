@@ -16,6 +16,7 @@ export type QueuedCompletionInput = {
   capability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  longDistanceAmount: number | null;
   installEndAt: string;
   photos: Blob[];
 };
@@ -125,6 +126,7 @@ export async function uploadAndSubmitCompletion(
       capability: entry.capability,
       wallpadLinked: entry.wallpadLinked,
       wallpadAmount: entry.wallpadAmount,
+      longDistanceAmount: entry.longDistanceAmount,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });

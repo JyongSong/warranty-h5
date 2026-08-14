@@ -10,6 +10,7 @@ import {
 import { normalizePhone } from "@/lib/phone";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
 import { listDispatchCandidateInstallers } from "@/lib/installation/installer/source";
+import { createAsSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
 import { sendSms } from "@/lib/sms";
@@ -342,6 +343,9 @@ export async function approveAsCompletion(input: { adminId: string; asOrderId: s
       },
       event: { eventType: "ADMIN_APPROVED_AS_COMPLETION", actorType: "ADMIN", actorId: input.adminId },
     });
+
+    // §8.5 M1: freeze the A/S settlement snapshot (용역비) at approval time.
+    await createAsSettlementSnapshot(tx, { asOrderId: input.asOrderId, adminId: input.adminId });
   });
 }
 

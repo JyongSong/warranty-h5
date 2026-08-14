@@ -47,32 +47,34 @@ model WarrantyRegistration {
 }
 
 model Installer {
-  id                   String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  id                   String                                    @id @default(dbgenerated("(gen_random_uuid())::text"))
   name                 String
-  phone                String   @unique
+  phone                String                                    @unique
   branch               String?
   region               String?
   coverage             String?
   address              String?
   category             String?
   ability              String?
-  installCount         Int?     @map("install_count")
-  happyCallLt          Int?     @map("happy_call_lt")
-  defectCount          Int?     @map("defect_count")
-  dissatisfactionNote  String?  @map("dissatisfaction_note")
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  serviceAreas         String[] @default([]) @map("service_areas")
-  capabilities         String[] @default([]) @map("capabilities")
-  aqaraAppCapability   String   @default("NONE") @map("aqara_app_capability")
-  hasAqaraHubInventory Boolean  @default(false) @map("has_aqara_hub_inventory")
-  monthlyDispatchCount Int      @default(0) @map("monthly_dispatch_count")
-  active               Boolean  @default(true) @map("active")
-  currentOrders        InstallationOrder[] @relation("CurrentInstaller")
-  assignmentAttempts   InstallationInstallerAssignmentAttempt[] @relation("InstallerAssignmentAttempts")
+  installCount         Int?                                      @map("install_count")
+  happyCallLt          Int?                                      @map("happy_call_lt")
+  defectCount          Int?                                      @map("defect_count")
+  dissatisfactionNote  String?                                   @map("dissatisfaction_note")
+  createdAt            DateTime                                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceAreas         String[]                                  @default([]) @map("service_areas")
+  capabilities         String[]                                  @default([]) @map("capabilities")
+  aqaraAppCapability   String                                    @default("NONE") @map("aqara_app_capability")
+  hasAqaraHubInventory Boolean                                   @default(false) @map("has_aqara_hub_inventory")
+  monthlyDispatchCount Int                                       @default(0) @map("monthly_dispatch_count")
+  active               Boolean                                   @default(true) @map("active")
+  currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
+  assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
-  devices              InstallerDevice[]   @relation("InstallerDevices")
-  asOrders             AsOrder[]           @relation("AsCurrentInstaller")
+  devices              InstallerDevice[]                         @relation("InstallerDevices")
+  asOrders             AsOrder[]                                 @relation("AsCurrentInstaller")
+  rateOverride         InstallerRate?                            @relation("InstallerRateOverride")
+  settlementLines      SettlementLine[]                          @relation("InstallerSettlementLines")
 
   @@index([branch])
   @@index([region])
@@ -471,22 +473,23 @@ model InstallationOrder {
 // P2: installer completion registration (photos, install-end time, achieved
 // linkage level) + HQ review/rejection. One row per order, upserted on resubmit.
 model InstallationCompletion {
-  id                        String            @id @default(dbgenerated("(gen_random_uuid())::text"))
-  installationOrderId       String            @unique @map("installation_order_id")
-  installationOrder         InstallationOrder @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
-  submittedInstallerId      String            @map("submitted_installer_id")
-  submittedAt               DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
-  achievedAqaraAppCapability String           @default("NONE") @map("achieved_aqara_app_capability")
-  wallpadLinked             Boolean           @default(false) @map("wallpad_linked")
-  wallpadAmount             Int?              @map("wallpad_amount")
-  installEndAt              DateTime           @map("install_end_at") @db.Timestamptz(6)
-  photoPaths                String[]          @default([]) @map("photo_paths")
-  reviewStatus              String            @default("PENDING") @map("review_status")
-  reviewedByAdminId         String?           @map("reviewed_by_admin_id")
-  reviewedAt                DateTime?         @map("reviewed_at") @db.Timestamptz(6)
-  rejectionReason           String?           @map("rejection_reason")
-  createdAt                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                 DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                         String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId        String            @unique @map("installation_order_id")
+  installationOrder          InstallationOrder @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  submittedInstallerId       String            @map("submitted_installer_id")
+  submittedAt                DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  achievedAqaraAppCapability String            @default("NONE") @map("achieved_aqara_app_capability")
+  wallpadLinked              Boolean           @default(false) @map("wallpad_linked")
+  wallpadAmount              Int?              @map("wallpad_amount")
+  longDistanceAmount         Int?              @map("long_distance_amount")
+  installEndAt               DateTime          @map("install_end_at") @db.Timestamptz(6)
+  photoPaths                 String[]          @default([]) @map("photo_paths")
+  reviewStatus               String            @default("PENDING") @map("review_status")
+  reviewedByAdminId          String?           @map("reviewed_by_admin_id")
+  reviewedAt                 DateTime?         @map("reviewed_at") @db.Timestamptz(6)
+  rejectionReason            String?           @map("rejection_reason")
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([reviewStatus])
   @@map("installation_completions")
@@ -687,42 +690,42 @@ enum AsOrderStatus {
 }
 
 model AsOrder {
-  id                          String        @id @default(dbgenerated("(gen_random_uuid())::text"))
-  status                      AsOrderStatus @default(WAITING_ASSIGNMENT)
+  id                          String               @id @default(dbgenerated("(gen_random_uuid())::text"))
+  status                      AsOrderStatus        @default(WAITING_ASSIGNMENT)
   // customer (PII: encrypted for display, hashed for search)
-  customerNameEncrypted       String?       @map("customer_name_encrypted")
-  customerNameHash            String?       @map("customer_name_hash")
-  customerPhoneEncrypted      String?       @map("customer_phone_encrypted")
-  customerPhoneHash           String?       @map("customer_phone_hash")
-  addressEncrypted            String?       @map("address_encrypted")
+  customerNameEncrypted       String?              @map("customer_name_encrypted")
+  customerNameHash            String?              @map("customer_name_hash")
+  customerPhoneEncrypted      String?              @map("customer_phone_encrypted")
+  customerPhoneHash           String?              @map("customer_phone_hash")
+  addressEncrypted            String?              @map("address_encrypted")
   // symptom
-  symptomCode                 String        @map("symptom_code")
-  symptomDetail               String?       @map("symptom_detail")
+  symptomCode                 String               @map("symptom_code")
+  symptomDetail               String?              @map("symptom_detail")
   // reference to the original install (plain refs; no FK coupling)
-  orderNo                     String?       @map("order_no")
-  originalInstallationOrderId String?       @map("original_installation_order_id")
+  orderNo                     String?              @map("order_no")
+  originalInstallationOrderId String?              @map("original_installation_order_id")
   memo                        String?
   // assignment
-  currentInstallerId          String?       @map("current_installer_id")
-  currentInstaller            Installer?    @relation("AsCurrentInstaller", fields: [currentInstallerId], references: [id], onDelete: SetNull)
-  assignedAt                  DateTime?     @map("assigned_at") @db.Timestamptz(6)
-  respondedAt                 DateTime?     @map("responded_at") @db.Timestamptz(6)
-  installerSmsRemindedAt      DateTime?     @map("installer_sms_reminded_at") @db.Timestamptz(6)
-  installerRejectReason       String?       @map("installer_reject_reason")
+  currentInstallerId          String?              @map("current_installer_id")
+  currentInstaller            Installer?           @relation("AsCurrentInstaller", fields: [currentInstallerId], references: [id], onDelete: SetNull)
+  assignedAt                  DateTime?            @map("assigned_at") @db.Timestamptz(6)
+  respondedAt                 DateTime?            @map("responded_at") @db.Timestamptz(6)
+  installerSmsRemindedAt      DateTime?            @map("installer_sms_reminded_at") @db.Timestamptz(6)
+  installerRejectReason       String?              @map("installer_reject_reason")
   // completion (inline)
-  resolutionDetail            String?       @map("resolution_detail")
-  serviceFee                  Int?          @map("service_fee")
-  completionPhotoPaths        String[]      @default([]) @map("completion_photo_paths")
-  submittedAt                 DateTime?     @map("submitted_at") @db.Timestamptz(6)
-  reviewStatus                String?       @map("review_status")
-  reviewedByAdminId           String?       @map("reviewed_by_admin_id")
-  reviewedAt                  DateTime?     @map("reviewed_at") @db.Timestamptz(6)
-  hqRejectionReason           String?       @map("hq_rejection_reason")
+  resolutionDetail            String?              @map("resolution_detail")
+  serviceFee                  Int?                 @map("service_fee")
+  completionPhotoPaths        String[]             @default([]) @map("completion_photo_paths")
+  submittedAt                 DateTime?            @map("submitted_at") @db.Timestamptz(6)
+  reviewStatus                String?              @map("review_status")
+  reviewedByAdminId           String?              @map("reviewed_by_admin_id")
+  reviewedAt                  DateTime?            @map("reviewed_at") @db.Timestamptz(6)
+  hqRejectionReason           String?              @map("hq_rejection_reason")
   // meta
-  createdByAdminId            String?       @map("created_by_admin_id")
-  statusChangedAt             DateTime      @default(now()) @map("status_changed_at") @db.Timestamptz(6)
-  createdAt                   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByAdminId            String?              @map("created_by_admin_id")
+  statusChangedAt             DateTime             @default(now()) @map("status_changed_at") @db.Timestamptz(6)
+  createdAt                   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   statusEvents                AsOrderStatusEvent[]
 
   @@index([status, createdAt])
@@ -767,4 +770,72 @@ model InstallationIssue {
   @@unique([id, installationOrderId])
   @@index([status, createdAt])
   @@map("installation_issues")
+}
+
+// ── P4 정산 (settlement) ────────────────────────────────────────────────
+// Per-installer rate overrides. Null column = fall back to global default
+// (system_settings installation.settlement.*). Amounts in KRW (won), integer.
+model InstallerRate {
+  id               String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId      String    @unique @map("installer_id")
+  installer        Installer @relation("InstallerRateOverride", fields: [installerId], references: [id], onDelete: Cascade)
+  linkageAppFee    Int?      @map("linkage_app_fee")
+  linkageHubFee    Int?      @map("linkage_hub_fee")
+  travelFee        Int?      @map("travel_fee")
+  nightSurcharge   Int?      @map("night_surcharge")
+  weekendSurcharge Int?      @map("weekend_surcharge")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("installer_rates")
+}
+
+// A custom settlement period. status: OPEN (待결산) | SETTLED (已결산).
+model SettlementPeriod {
+  id               String           @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name             String
+  startDate        DateTime         @map("start_date") @db.Date
+  endDate          DateTime         @map("end_date") @db.Date
+  status           String           @default("OPEN")
+  settledAt        DateTime?        @map("settled_at") @db.Timestamptz(6)
+  settledByAdminId String?          @map("settled_by_admin_id")
+  createdByAdminId String?          @map("created_by_admin_id")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lines            SettlementLine[]
+
+  @@index([status])
+  @@map("settlement_periods")
+}
+
+// One frozen snapshot per approved completion (install) or A/S order.
+// Written inside the approve transaction (§8.5 M1). Read-only afterwards.
+// sourceType: INSTALL | AS. sourceOrderId = InstallationOrder.id | AsOrder.id.
+model SettlementLine {
+  id                String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId       String            @map("installer_id")
+  installer         Installer         @relation("InstallerSettlementLines", fields: [installerId], references: [id])
+  sourceType        String            @map("source_type")
+  sourceOrderId     String            @map("source_order_id")
+  completedAt       DateTime          @map("completed_at") @db.Timestamptz(6)
+  approvedByAdminId String?           @map("approved_by_admin_id")
+  // frozen line items (KRW). Absent items = 0.
+  linkageFee        Int               @default(0) @map("linkage_fee")
+  travelFee         Int               @default(0) @map("travel_fee")
+  longDistanceFee   Int               @default(0) @map("long_distance_fee")
+  nightWeekendFee   Int               @default(0) @map("night_weekend_fee")
+  serviceFee        Int               @default(0) @map("service_fee")
+  wallpadAmount     Int               @default(0) @map("wallpad_amount")
+  totalAmount       Int               @default(0) @map("total_amount")
+  rateSource        Json?             @map("rate_source")
+  breakdown         Json?
+  periodId          String?           @map("period_id")
+  period            SettlementPeriod? @relation(fields: [periodId], references: [id])
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sourceType, sourceOrderId])
+  @@index([installerId])
+  @@index([periodId])
+  @@index([completedAt])
+  @@map("settlement_lines")
 }

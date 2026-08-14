@@ -495,6 +495,7 @@ export async function resolveInstallationIssueAction(
 
 export async function approveInstallationCompletionAction(
   orderId: string,
+  longDistanceAmount?: number | null,
 ): Promise<InstallationActionResult> {
   const auth = await requireInstallationAdmin();
   if (!auth.ok) return auth;
@@ -502,8 +503,23 @@ export async function approveInstallationCompletionAction(
   const normalizedOrderId = orderId.trim();
   if (!normalizedOrderId) return { ok: false, error: "ORDER_ID_REQUIRED" };
 
+  let normalizedLongDistance: number | null | undefined;
+  if (longDistanceAmount === undefined) {
+    normalizedLongDistance = undefined;
+  } else if (longDistanceAmount === null) {
+    normalizedLongDistance = null;
+  } else if (Number.isInteger(longDistanceAmount) && longDistanceAmount >= 0) {
+    normalizedLongDistance = longDistanceAmount;
+  } else {
+    return { ok: false, error: "INVALID_LONG_DISTANCE_AMOUNT" };
+  }
+
   try {
-    await approveInstallerCompletion({ adminId: auth.admin.id, orderId: normalizedOrderId });
+    await approveInstallerCompletion({
+      adminId: auth.admin.id,
+      orderId: normalizedOrderId,
+      longDistanceAmount: normalizedLongDistance,
+    });
     return { ok: true, status: "COMPLETED" };
   } catch (error) {
     if (error instanceof InstallationCompletionError) return { ok: false, error: error.message };

@@ -36,15 +36,20 @@ export default function CompletionReviewPanel({
   const [error, setError] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [longDistance, setLongDistance] = useState(
+    completion.longDistanceAmount != null ? String(completion.longDistanceAmount) : "",
+  );
 
   const canReview = orderStatus === "WAITING_HQ_REVIEW";
   const belowRequirement =
     (CAP_RANK[completion.achievedAqaraAppCapability] ?? 0) < (CAP_RANK[requiredAqaraAppCapability] ?? 0);
 
   async function approve() {
+    const digits = longDistance.replace(/[^\d]/g, "");
+    const amount = digits === "" ? null : Number(digits);
     setBusy(true);
     setError(null);
-    const res = await approveInstallationCompletionAction(orderId);
+    const res = await approveInstallationCompletionAction(orderId, amount);
     setBusy(false);
     if (res.ok) router.refresh();
     else setError(res.error);
@@ -86,6 +91,10 @@ export default function CompletionReviewPanel({
               : "안 함"
           }
         />
+        <Field
+          label="장거리 (기사 신고)"
+          value={completion.longDistanceAmount != null ? `${completion.longDistanceAmount.toLocaleString()}원` : "없음"}
+        />
         <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
       </div>
 
@@ -110,13 +119,25 @@ export default function CompletionReviewPanel({
 
       {canReview ? (
         !rejectOpen ? (
-          <div style={btnRow}>
-            <button style={approveBtn} disabled={busy} onClick={approve}>
-              {busy ? "처리 중…" : "승인 (완료 처리)"}
-            </button>
-            <button style={rejectBtn} disabled={busy} onClick={() => setRejectOpen(true)}>
-              반려
-            </button>
+          <div>
+            <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
+              장거리 비용 (원, 승인 시 확정 · 정산 반영)
+            </label>
+            <input
+              style={longDistanceInput}
+              value={longDistance}
+              onChange={(e) => setLongDistance(e.target.value)}
+              inputMode="numeric"
+              placeholder="0"
+            />
+            <div style={btnRow}>
+              <button style={approveBtn} disabled={busy} onClick={approve}>
+                {busy ? "처리 중…" : "승인 (완료 처리)"}
+              </button>
+              <button style={rejectBtn} disabled={busy} onClick={() => setRejectOpen(true)}>
+                반려
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ marginTop: 12 }}>
@@ -188,6 +209,15 @@ const photoRow: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8 };
 const photo: CSSProperties = { width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #e4e4e7" };
 const rejectNote: CSSProperties = { marginTop: 12, fontSize: 13, color: "#b42318", background: "#fef2f2", padding: 10, borderRadius: 8 };
 const btnRow: CSSProperties = { display: "flex", gap: 8, marginTop: 12 };
+const longDistanceInput: CSSProperties = {
+  width: "100%",
+  borderRadius: 8,
+  border: "1px solid #d4d4d8",
+  padding: 10,
+  fontSize: 14,
+  marginTop: 6,
+  boxSizing: "border-box",
+};
 const reasonBox: CSSProperties = {
   width: "100%",
   borderRadius: 8,
