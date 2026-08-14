@@ -503,3 +503,47 @@ export async function listAsOrders(input?: { status?: string }): Promise<AsOrder
     createdAt: r.createdAt.toISOString(),
   }));
 }
+
+// Cost-saving notification: A/S assignment sends only an FCM push up front; if
+// the installer still hasn't responded after 5h, send ONE SMS reminder (marked
+// so it never repeats). Run from the dispatcher cron, gated by the SMS window.
+const AS_SMS_REMINDER_AFTER_MS = 5 * 60 * 60 * 1000;
+
+export async function remindUnrespondedAsAssignments(input?: {
+  now?: Date;
+  limit?: number;
+}): Promise<{ remindedCount: number }> {
+  const now = input?.now ?? new Date();
+  const threshold = new Date(now.getTime() - AS_SMS_REMINDER_AFTER_MS);
+
+  const orders = await prisma.asOrder.findMany({
+    where: {
+      status: "WAITING_INSTALLER_RESPONSE",
+      installerSmsRemindedAt: null,
+      currentInstallerId: { not: null },
+      assignedAt: { lt: threshold },
+    },
+    orderBy: { assignedAt: "asc" },
+    take: input?.limit ?? 50,
+    select: { id: true, currentInstaller: { select: { phone: true } } },
+  });
+
+  let remindedCount = 0;
+  for (const order of orders) {
+    const phone = order.currentInstaller?.phone ?? null;
+    try {
+      if (phone) {
+        await sendSms(phone, "[Aqara 기사] 새 A/S가 배정되었습니다. 앱에서 확인하고 수락/거절해 주세요.");
+      }
+      // Mark even when there is no phone, so it isn't rescanned every tick.
+      await prisma.asOrder.update({
+        where: { id: order.id },
+        data: { installerSmsRemindedAt: now },
+      });
+      remindedCount += 1;
+    } catch (error) {
+      console.error("[as/sms-reminder]", error);
+    }
+  }
+  return { remindedCount };
+}

@@ -707,6 +707,7 @@ model AsOrder {
   currentInstaller            Installer?    @relation("AsCurrentInstaller", fields: [currentInstallerId], references: [id], onDelete: SetNull)
   assignedAt                  DateTime?     @map("assigned_at") @db.Timestamptz(6)
   respondedAt                 DateTime?     @map("responded_at") @db.Timestamptz(6)
+  installerSmsRemindedAt      DateTime?     @map("installer_sms_reminded_at") @db.Timestamptz(6)
   installerRejectReason       String?       @map("installer_reject_reason")
   // completion (inline)
   resolutionDetail            String?       @map("resolution_detail")

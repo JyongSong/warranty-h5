@@ -27,6 +27,7 @@ import {
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
 import { isInstallationSmsSendWindowOpen } from "@/lib/installation/notifications/sms-send-window";
+import { remindUnrespondedAsAssignments } from "@/lib/installation/as/service";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,14 @@ export async function GET(request: Request) {
           alertDueSoonUnassignedOrders({
             limit: config.limits.alertDueSoonOrders,
           }),
+        ),
+        remindUnrespondedAsAssignments: await runDispatcherStep(
+          "remindUnrespondedAsAssignments",
+          metrics,
+          () =>
+            smsSendWindowOpen
+              ? remindUnrespondedAsAssignments({ now: startedAt ?? undefined, limit: 50 })
+              : Promise.resolve({ remindedCount: 0, skippedQuietHours: true }),
         ),
         sendInstallationNotifications: await runDispatcherStep(
           "sendInstallationNotifications",

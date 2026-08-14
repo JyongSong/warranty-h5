@@ -14,7 +14,10 @@ export default async function InstallerOrdersPage() {
   const installer = await requireInstallerPage("/installer");
   const [orders, asOrders] = await Promise.all([
     getInstallerOrders(installer.id),
-    getInstallerAsOrders(installer.id),
+    // Never let an A/S query failure take down the whole home page.
+    getInstallerAsOrders(installer.id).catch(
+      (): Awaited<ReturnType<typeof getInstallerAsOrders>> => ({ pending: [], active: [], completed: [] }),
+    ),
   ]);
   const { pending, active, completed, history } = orders;
 

@@ -104,7 +104,10 @@ export async function uploadAndSubmitCompletion(
 ): Promise<{ ok: true } | { ok: false; retriable: boolean; error: string }> {
   try {
     const targetsRes = await getCompletionUploadTargetsAction(entry.orderId, entry.photos.length);
-    if (!targetsRes.ok) return { ok: false, retriable: false, error: targetsRes.error };
+    if (!targetsRes.ok) {
+      // A transient auth blip must not discard the queued completion.
+      return { ok: false, retriable: targetsRes.error === "UNAUTHORIZED", error: targetsRes.error };
+    }
 
     const supabase = getSupabaseBrowser();
     const paths: string[] = [];
@@ -125,7 +128,7 @@ export async function uploadAndSubmitCompletion(
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });
-    if (!res.ok) return { ok: false, retriable: false, error: res.error };
+    if (!res.ok) return { ok: false, retriable: res.error === "UNAUTHORIZED", error: res.error };
     return { ok: true };
   } catch {
     // network / upload failure — keep it queued for retry

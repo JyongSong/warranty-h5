@@ -172,7 +172,14 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
           {selected ? (
             <div className="mb-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               지정됨: <b>{selected.name}</b> ({selected.from === "original" ? "원 설치기사" : "주소 추천"})
-              <button type="button" className="ml-2 text-xs text-zinc-500 underline" onClick={() => setSelected(null)}>
+              <button
+                type="button"
+                className="ml-2 text-xs text-zinc-500 underline"
+                onClick={() => {
+                  setSelected(null);
+                  setOriginalInstallationOrderId(null);
+                }}
+              >
                 해제
               </button>
             </div>
@@ -185,7 +192,10 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
                 <button
                   key={c.installerId}
                   type="button"
-                  onClick={() => setSelected({ id: c.installerId, name: c.name, from: "address" })}
+                  onClick={() => {
+                    setSelected({ id: c.installerId, name: c.name, from: "address" });
+                    setOriginalInstallationOrderId(null);
+                  }}
                   className="flex items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 text-left text-sm hover:border-zinc-400"
                 >
                   <span>

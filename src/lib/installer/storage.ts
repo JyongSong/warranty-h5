@@ -65,22 +65,6 @@ export function createAsCompletionUploadTargets(asOrderId: string, count: number
   return createUploadTargets(`as/${asOrderId}/`, count);
 }
 
-export async function uploadCompletionPhoto(
-  orderId: string,
-  file: { arrayBuffer(): Promise<ArrayBuffer>; type: string },
-): Promise<string> {
-  await ensureBucket();
-  const supabase = getServiceClient();
-  const ext = (file.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-  const path = `orders/${orderId}/${crypto.randomUUID()}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, buffer, { contentType: file.type || "image/jpeg", upsert: false });
-  if (error) throw new Error(`PHOTO_UPLOAD_FAILED: ${error.message}`);
-  return path;
-}
-
 export async function getCompletionPhotoSignedUrls(paths: string[]): Promise<string[]> {
   if (paths.length === 0) return [];
   const supabase = getServiceClient();
