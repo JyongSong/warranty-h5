@@ -272,10 +272,14 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
     assignment.installationOrder.customerRequests[0]?.customerPhone ??
     assignment.installationOrder.sourcePhone;
 
+  // 고객/기사 SMS 양쪽에서 쓰므로 한 번만 조회한다.
+  const installer = await getInstallerContact(assignment.installerId, tx as never);
+
   if (customerPhone) {
     const normalizedCustomerPhone = normalizePhone11(customerPhone);
     const smsContent = buildCustomerAssignmentConfirmedSmsContent({
-      productSummary: getOrderProductSummary(assignment.installationOrder),
+      branchName: installer?.branch?.trim() || installer?.name,
+      installerPhone: installer?.phone,
     });
 
     await tx.installationNotification.upsert({
@@ -298,7 +302,6 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
     });
   }
 
-  const installer = await getInstallerContact(assignment.installerId, tx as never);
   if (installer?.phone) {
     const customerRequest = assignment.installationOrder.customerRequests[0] ?? null;
     const normalizedInstallerPhone = normalizePhone11(installer.phone);

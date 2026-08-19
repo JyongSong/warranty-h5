@@ -282,8 +282,9 @@ describe("installation installer response", () => {
     expect(customerNotification.recipientPhoneEncrypted).toMatch(/^enc:v1:/);
     expect(decryptPii(customerNotification.recipientPhoneEncrypted)).toBe("01099990000");
     expect(customerNotification.smsBody).not.toContain("홍길동");
-    expect(customerNotification.smsBody).toContain("설치 기사 배정이 확정되었습니다.");
-    expect(customerNotification.smsBody).toContain("주문 상품: 용역 도어락 설치비(K100) x1 외");
+    expect(customerNotification.smsBody).toContain("아카라라이프 설치 배정완료");
+    expect(customerNotification.smsBody).toContain("배정된 기사님이 곧 연락드릴 예정입니다.");
+    expect(customerNotification.smsBody).not.toContain("주문 상품");
     const installerNotification = upsertNotification.mock.calls.find(
       ([arg]) => arg.create.smsType === "INSTALLER_HAPPYCALL_GUIDE",
     )?.[0].create;

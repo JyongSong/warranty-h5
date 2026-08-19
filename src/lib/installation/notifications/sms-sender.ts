@@ -1,5 +1,15 @@
 import { SolapiMessageService } from "solapi";
-import { SYSTEM_SETTING_KEYS, getSystemSettingValue } from "@/lib/backoffice/system-settings";
+import {
+  SYSTEM_SETTING_KEYS,
+  getSystemSettingValue,
+  isSystemSettingEnabled,
+} from "@/lib/backoffice/system-settings";
+import {
+  AlimtalkTemplateError,
+  buildAlimtalkKakaoOptions,
+  getAlimtalkPfId,
+  type AlimtalkRequest,
+} from "@/lib/notifications/alimtalk";
 
 let _service: SolapiMessageService | null = null;
 
@@ -34,9 +44,27 @@ export type InstallationSmsDeliveryReport = {
   dateReported: string | null;
 };
 
+export type SendInstallationSmsOptions = {
+  /**
+   * 알림톡 템플릿과 변수. 알림톡이 꺼져 있거나 변수 검증에 실패하면 SMS 로만
+   * 발송한다. outbox 재시도/회신 처리 로직은 그대로 쓴다.
+   */
+  alimtalk?: AlimtalkRequest;
+};
+
+/**
+ * 알림톡 발송 가능 여부. 스위치와 pfId 가 모두 있어야 한다.
+ * 여기서는 설정 조회 오류를 삼키지 않는다 (outbox 가 재시도하도록).
+ */
+async function isAlimtalkEnabled(): Promise<boolean> {
+  if (!getAlimtalkPfId()) return false;
+  return isSystemSettingEnabled(SYSTEM_SETTING_KEYS.notificationsAlimtalkEnabled);
+}
+
 export async function sendInstallationSmsOrThrow(
   to: string | null | undefined,
-  text: string
+  text: string,
+  options?: SendInstallationSmsOptions
 ): Promise<{ providerMessageId: string | null }> {
   const deliveryMode = await getSystemSettingValue(SYSTEM_SETTING_KEYS.installationSmsDeliveryMode);
   if (!deliveryMode || deliveryMode === "disabled") {
@@ -63,11 +91,15 @@ export async function sendInstallationSmsOrThrow(
   const service = getSolapiMessageService();
   if (!service) throw new Error("SOLAPI_CREDENTIALS_MISSING");
 
+  const kakaoOptions = options?.alimtalk ? await resolveKakaoOptions(options.alimtalk) : null;
+
   let providerMessageId: string | null = null;
 
   for (const normalized of recipients) {
     const response = await service.send(
-      { to: normalized, from, text },
+      kakaoOptions
+        ? { to: normalized, from, text, kakaoOptions }
+        : { to: normalized, from, text },
       { showMessageList: true }
     ) as {
       groupInfo?: { groupId?: string };
@@ -81,6 +113,23 @@ export async function sendInstallationSmsOrThrow(
   return {
     providerMessageId,
   };
+}
+
+async function resolveKakaoOptions(request: AlimtalkRequest) {
+  if (!(await isAlimtalkEnabled())) return null;
+
+  try {
+    return buildAlimtalkKakaoOptions(request);
+  } catch (e) {
+    if (e instanceof AlimtalkTemplateError) {
+      console.error(
+        `[ALIMTALK] ${request.templateKey} 템플릿 오류(${e.code}), SMS 로 폴백:`,
+        e.message,
+      );
+      return null;
+    }
+    throw e;
+  }
 }
 
 export async function getInstallationSmsDeliveryReport(

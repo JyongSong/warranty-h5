@@ -92,15 +92,18 @@ export function buildInstallerHappycallGuideSmsContent({
 }
 
 export function buildCustomerAssignmentConfirmedSmsContent({
-  productSummary,
+  branchName,
+  installerPhone,
 }: {
-  productSummary?: string | null;
+  branchName?: string | null;
+  installerPhone?: string | null;
 } = {}): InstallationSmsContent {
   const templateKey = "customer_assignment_confirmed";
   return {
     templateKey,
     text: renderCustomerInstallationSmsTemplate(templateKey, {
-      productSummary: formatSmsProductSummary(productSummary),
+      branchName: branchName?.trim() || "담당 지점",
+      installerPhone: formatSmsPhone(installerPhone),
     }),
   };
 }

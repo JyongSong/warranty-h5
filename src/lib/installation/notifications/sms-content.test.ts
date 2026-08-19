@@ -89,19 +89,25 @@ describe("installation SMS content", () => {
 
   it("builds customer assignment confirmed content from the JSON template", () => {
     const content = buildCustomerAssignmentConfirmedSmsContent({
-      productSummary: "Aqara 스마트 도어락 K100 x1 / 용역 출장비 x1",
+      branchName: "강남점",
+      installerPhone: "01099990000",
     });
 
     expect(content.templateKey).toBe("customer_assignment_confirmed");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 기사 배정이 확정되었습니다.\n" +
-        "방문 전 설치 기사가 확인 전화를 드릴 예정입니다.\n" +
+      "*발신전용\n" +
+        "아카라라이프 설치 배정완료\n" +
+        "강남점 010-9999-0000\n" +
+        "배정된 기사님이 곧 연락드릴 예정입니다.\n" +
         "\n" +
-        "주문 상품: Aqara 스마트 도어락 K100 x1 외\n\n" +
-        "※ 발신전용",
+        "※ 월패드 연동을 희망하시는 경우 해피콜 시 기사님께 말씀 부탁드립니다.\n" +
+        "현장에서 기사님이 설치 환경을 확인 후 연동 가능 여부를 안내해드리며, 추가 비용 발생 시 작업 내용 및 금액을 현장에서 안내해드립니다.\n" +
+        "\n" +
+        "※ 월패드 연동이 불가한 경우에도 기사 출장비(3만원)는 발생하며, 해당 사유로 도어락 구매를 취소하실 경우 왕복 택배비가 발생합니다.\n" +
+        "해당 조건에 동의하지 않으시는 경우 기사 방문 전 고객센터로 연락 주시면 취소 및 환불을 도와드리겠습니다.",
     );
+    expect(content.text).not.toContain("주문 상품");
   });
 
   it("builds installer happycall guide content from the JSON template", () => {

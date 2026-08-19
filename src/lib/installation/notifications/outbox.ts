@@ -6,6 +6,7 @@ import {
   getInstallationSmsDeliveryReport as defaultGetDeliveryReport,
   sendInstallationSmsOrThrow as defaultSendSms,
   type InstallationSmsDeliveryReport,
+  type SendInstallationSmsOptions,
 } from "@/lib/installation/notifications/sms-sender";
 
 type SendSmsResult = {
@@ -14,7 +15,8 @@ type SendSmsResult = {
 
 type SendSms = (
   to: string | null | undefined,
-  text: string
+  text: string,
+  options?: SendInstallationSmsOptions
 ) => Promise<SendSmsResult | void>;
 
 type GetDeliveryReport = (messageId: string) => Promise<InstallationSmsDeliveryReport | null>;

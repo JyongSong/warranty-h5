@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBaseUrl } from "@/lib/getBaseUrl";
+import { CONFIRM_TOKEN_TTL_MS } from "@/lib/confirmToken";
 import { sendSms } from "@/lib/sms";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
@@ -35,9 +36,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "INSTALLER_PHONE_MISSING" }, { status: 400 });
     }
 
-    // 2) 生成新 token（72h）
+    // 2) 生成新 token（24h）
     const token = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + 72 * 3600 * 1000);
+    const expiresAt = new Date(Date.now() + CONFIRM_TOKEN_TTL_MS);
 
     // 3) 更新 token
     await prisma.warrantyRegistration.update({
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
     const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
     const installerSubject = "[Aqara]";
     const smsText = `설치 확인이 필요합니다.
-72시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.
+24시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.
 
 ${confirmLink}
 
