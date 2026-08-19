@@ -1,14 +1,6 @@
 import { SolapiMessageService } from "solapi";
-import {
-  AlimtalkTemplateError,
-  buildAlimtalkKakaoOptions,
-  getAlimtalkPfId,
-  type AlimtalkRequest,
-} from "@/lib/notifications/alimtalk";
-import {
-  SYSTEM_SETTING_KEYS,
-  isSystemSettingEnabled,
-} from "@/lib/backoffice/system-settings";
+import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
+import { resolveAlimtalkKakaoOptions } from "@/lib/notifications/alimtalk-options";
 
 let _service: SolapiMessageService | null = null;
 
@@ -38,20 +30,6 @@ export type SendSmsOptions = {
   alimtalk?: AlimtalkRequest;
 };
 
-/**
- * 알림톡 발송 가능 여부. 시스템 설정 스위치와 pfId 환경변수가 모두 있어야 한다.
- * 설정 조회가 실패해도 SMS 발송은 계속되어야 하므로 오류를 삼킨다.
- */
-async function isAlimtalkEnabled(): Promise<boolean> {
-  if (!getAlimtalkPfId()) return false;
-  try {
-    return await isSystemSettingEnabled(SYSTEM_SETTING_KEYS.notificationsAlimtalkEnabled);
-  } catch (e) {
-    console.error("[ALIMTALK] 설정 조회 실패, SMS 로 폴백:", e);
-    return false;
-  }
-}
-
 export async function sendSms(
   to: string | null | undefined,
   text: string,
@@ -68,8 +46,12 @@ export async function sendSms(
   const normalized = normalizeKr(to);
   if (!normalized) return;
 
+  // 설정 조회가 실패해도 SMS 는 나가야 하므로 여기서 오류를 삼킨다.
   const kakaoOptions = options?.alimtalk
-    ? await resolveKakaoOptions(options.alimtalk)
+    ? await resolveAlimtalkKakaoOptions(options.alimtalk).catch((e) => {
+        console.error("[ALIMTALK] 게이트 판정 실패, SMS 로 폴백:", e);
+        return null;
+      })
     : null;
 
   try {
@@ -82,19 +64,5 @@ export async function sendSms(
     );
   } catch (e) {
     console.error("[SMS] 발송 실패:", e);
-  }
-}
-
-async function resolveKakaoOptions(request: AlimtalkRequest) {
-  if (!(await isAlimtalkEnabled())) return null;
-
-  try {
-    return buildAlimtalkKakaoOptions(request);
-  } catch (e) {
-    if (e instanceof AlimtalkTemplateError) {
-      console.error(`[ALIMTALK] ${request.templateKey} 템플릿 오류(${e.code}), SMS 로 폴백:`, e.message);
-      return null;
-    }
-    throw e;
   }
 }

@@ -1,15 +1,7 @@
 import { SolapiMessageService } from "solapi";
-import {
-  SYSTEM_SETTING_KEYS,
-  getSystemSettingValue,
-  isSystemSettingEnabled,
-} from "@/lib/backoffice/system-settings";
-import {
-  AlimtalkTemplateError,
-  buildAlimtalkKakaoOptions,
-  getAlimtalkPfId,
-  type AlimtalkRequest,
-} from "@/lib/notifications/alimtalk";
+import { SYSTEM_SETTING_KEYS, getSystemSettingValue } from "@/lib/backoffice/system-settings";
+import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
+import { resolveAlimtalkKakaoOptions } from "@/lib/notifications/alimtalk-options";
 
 let _service: SolapiMessageService | null = null;
 
@@ -52,15 +44,6 @@ export type SendInstallationSmsOptions = {
   alimtalk?: AlimtalkRequest;
 };
 
-/**
- * 알림톡 발송 가능 여부. 스위치와 pfId 가 모두 있어야 한다.
- * 여기서는 설정 조회 오류를 삼키지 않는다 (outbox 가 재시도하도록).
- */
-async function isAlimtalkEnabled(): Promise<boolean> {
-  if (!getAlimtalkPfId()) return false;
-  return isSystemSettingEnabled(SYSTEM_SETTING_KEYS.notificationsAlimtalkEnabled);
-}
-
 export async function sendInstallationSmsOrThrow(
   to: string | null | undefined,
   text: string,
@@ -91,7 +74,10 @@ export async function sendInstallationSmsOrThrow(
   const service = getSolapiMessageService();
   if (!service) throw new Error("SOLAPI_CREDENTIALS_MISSING");
 
-  const kakaoOptions = options?.alimtalk ? await resolveKakaoOptions(options.alimtalk) : null;
+  // 설정 조회 오류는 삼키지 않는다 (outbox 가 재시도하도록).
+  const kakaoOptions = options?.alimtalk
+    ? await resolveAlimtalkKakaoOptions(options.alimtalk)
+    : null;
 
   let providerMessageId: string | null = null;
 
@@ -113,23 +99,6 @@ export async function sendInstallationSmsOrThrow(
   return {
     providerMessageId,
   };
-}
-
-async function resolveKakaoOptions(request: AlimtalkRequest) {
-  if (!(await isAlimtalkEnabled())) return null;
-
-  try {
-    return buildAlimtalkKakaoOptions(request);
-  } catch (e) {
-    if (e instanceof AlimtalkTemplateError) {
-      console.error(
-        `[ALIMTALK] ${request.templateKey} 템플릿 오류(${e.code}), SMS 로 폴백:`,
-        e.message,
-      );
-      return null;
-    }
-    throw e;
-  }
 }
 
 export async function getInstallationSmsDeliveryReport(
