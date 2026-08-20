@@ -11,6 +11,10 @@ import {
 } from "@/lib/backoffice/sms-dispatch-security";
 import { findInstallerByBranch } from "@/lib/dispatch";
 import {
+  buildAlimtalkKakaoOptionsOrNull,
+  isAlimtalkEnabled,
+} from "@/lib/notifications/alimtalk-options";
+import {
   DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
   SMS_TEMPLATE_KEYS,
   getSmsTemplateBody,
@@ -32,6 +36,8 @@ type Result = {
   branch: string;
   to: string;
   ok: boolean;
+  /** 실제로 어느 채널로 시도했는지. ALIMTALK 이어도 카카오 실패 시 SMS 로 대체발송된다. */
+  channel?: "ALIMTALK" | "SMS";
   error?: string;
 };
 
@@ -41,6 +47,8 @@ type PreparedRow = {
   to: string;
   normalized: string;
   text: string;
+  branchName: string;
+  installerPhone: string;
 };
 
 function normalizeKr(input: string): string {
@@ -161,6 +169,8 @@ export async function POST(request: NextRequest) {
           branch,
           customerPhone: to,
         }),
+        branchName: installer.branchName,
+        installerPhone: installer.phone,
       });
     }
 
@@ -173,17 +183,33 @@ export async function POST(request: NextRequest) {
       maxRecipientsPerDay: limits.maxRecipientsPerDay,
     });
     const service = new SolapiMessageService(apiKey, apiSecret);
+    // 게이트 판정은 수백 건을 도는 루프 밖에서 한 번만 한다.
+    const alimtalkEnabled = await isAlimtalkEnabled();
 
     for (const row of preparedRows) {
+      // 카카오 발송이 실패하면 disableSms:false 로 위의 text 가 SMS 대체발송된다.
+      const kakaoOptions = alimtalkEnabled
+        ? buildAlimtalkKakaoOptionsOrNull({
+            templateKey: "assignment_completed",
+            variables: { branchName: row.branchName, installerPhone: row.installerPhone },
+          })
+        : null;
+      const channel = kakaoOptions ? "ALIMTALK" : "SMS";
+
       try {
-        await service.send({ to: row.normalized, from, text: row.text });
-        results.push({ row: row.row, branch: row.branch, to: row.to, ok: true });
+        await service.send(
+          kakaoOptions
+            ? { to: row.normalized, from, text: row.text, kakaoOptions }
+            : { to: row.normalized, from, text: row.text },
+        );
+        results.push({ row: row.row, branch: row.branch, to: row.to, ok: true, channel });
       } catch (error) {
         results.push({
           row: row.row,
           branch: row.branch,
           to: row.to,
           ok: false,
+          channel,
           error: error instanceof Error ? error.message : String(error),
         });
       }

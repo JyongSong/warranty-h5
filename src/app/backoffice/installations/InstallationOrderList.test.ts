@@ -28,6 +28,7 @@ function createItem(overrides: Partial<InstallationOrderListItem> = {}): Install
     sourceAddress: "경남 진주시 초전북로62번길 32 더하임403호",
     itemName: null,
     productSummary: null,
+    settlementAmount: null,
     sourceItemsJsonText: null,
     sourceOrderDate: "2026-06-21",
     status: "WAITING_CUSTOMER_INPUT",

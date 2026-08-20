@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallationCompletionView } from "@/lib/installation/completion/service";
+import { computeInstallLineItems } from "@/lib/installation/settlement/compute";
+import type { EffectiveRates } from "@/lib/installation/settlement/rates";
 import {
   approveInstallationCompletionAction,
   rejectInstallationCompletionAction,
@@ -25,11 +27,13 @@ export default function CompletionReviewPanel({
   orderStatus,
   requiredAqaraAppCapability,
   completion,
+  rates,
 }: {
   orderId: string;
   orderStatus: string;
   requiredAqaraAppCapability: string;
   completion: InstallationCompletionView;
+  rates: EffectiveRates | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -41,6 +45,20 @@ export default function CompletionReviewPanel({
   );
 
   const canReview = orderStatus === "WAITING_HQ_REVIEW";
+
+  // 승인 버튼을 누르면 확정될 금액. 장거리 입력에 따라 즉시 바뀌므로
+  // 관리자가 얼마를 승인하는지 보면서 결정할 수 있다.
+  // 승인 트랜잭션과 같은 computeInstallLineItems 를 쓴다.
+  const preview =
+    rates && completion.installEndAt
+      ? computeInstallLineItems({
+          achievedAqaraAppCapability: completion.achievedAqaraAppCapability,
+          longDistanceAmount: Number(longDistance.replace(/[^\d]/g, "") || 0),
+          wallpadAmount: completion.wallpadAmount,
+          installEndAt: new Date(completion.installEndAt),
+          rates,
+        })
+      : null;
   const belowRequirement =
     (CAP_RANK[completion.achievedAqaraAppCapability] ?? 0) < (CAP_RANK[requiredAqaraAppCapability] ?? 0);
 
@@ -116,6 +134,38 @@ export default function CompletionReviewPanel({
       ) : null}
 
       {error ? <div style={{ color: "#b42318", fontSize: 13, marginTop: 10 }}>{error}</div> : null}
+
+      {preview ? (
+        <div style={amountBox}>
+          <div style={amountHeader}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#3f3f46" }}>
+              {canReview ? "승인 시 확정 금액" : "정산 금액"}
+            </span>
+            <span style={{ fontSize: 22, fontWeight: 800 }}>
+              {preview.items.totalAmount.toLocaleString()}원
+            </span>
+          </div>
+          <div style={amountLines}>
+            <AmountLine label="연동비" value={preview.items.linkageFee} />
+            <AmountLine label="출장비" value={preview.items.travelFee} />
+            <AmountLine label="장거리" value={preview.items.longDistanceFee} />
+            <AmountLine label="야간/휴일" value={preview.items.nightWeekendFee} />
+          </div>
+          {preview.breakdown.night || preview.breakdown.weekend ? (
+            <div style={amountNote}>
+              {[preview.breakdown.night ? "야간" : null, preview.breakdown.weekend ? "휴일" : null]
+                .filter(Boolean)
+                .join(" · ")}{" "}
+              할증 적용
+            </div>
+          ) : null}
+          {preview.items.wallpadAmount > 0 ? (
+            <div style={amountNote}>
+              월패드 현장 수금 {preview.items.wallpadAmount.toLocaleString()}원은 정산에 포함되지 않습니다.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {canReview ? (
         !rejectOpen ? (
@@ -207,6 +257,43 @@ const title: CSSProperties = { fontSize: 16, fontWeight: 800, margin: 0 };
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
 const photoRow: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8 };
 const photo: CSSProperties = { width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #e4e4e7" };
+function AmountLine({ label, value }: { label: string; value: number }) {
+  if (value <= 0) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+      <span style={{ fontSize: 12, color: "#71717a", fontWeight: 700 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600 }}>{value.toLocaleString()}원</span>
+    </div>
+  );
+}
+
+const amountBox: CSSProperties = {
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  padding: "12px 14px",
+  marginTop: 12,
+  background: "#fafafa",
+};
+
+const amountHeader: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 8,
+};
+
+const amountLines: CSSProperties = {
+  borderTop: "1px solid #e4e4e7",
+  paddingTop: 8,
+};
+
+const amountNote: CSSProperties = {
+  fontSize: 12,
+  color: "#a1a1aa",
+  marginTop: 6,
+  lineHeight: 1.5,
+};
+
 const rejectNote: CSSProperties = { marginTop: 12, fontSize: 13, color: "#b42318", background: "#fef2f2", padding: 10, borderRadius: 8 };
 const btnRow: CSSProperties = { display: "flex", gap: 8, marginTop: 12 };
 const longDistanceInput: CSSProperties = {

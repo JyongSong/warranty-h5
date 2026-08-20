@@ -8,6 +8,8 @@ import {
   uploadAndSubmitCompletion,
   type QueuedCompletionInput,
 } from "@/lib/installer/completionQueue";
+import ConfirmAmountDialog, { type AmountLine } from "../../../ConfirmAmountDialog";
+import { previewInstallSettlementAction, type SettlementPreview } from "./actions";
 import * as ui from "../../../ui";
 
 const CAPABILITIES = [
@@ -70,6 +72,8 @@ export default function CompleteClient({
   const [busy, setBusy] = useState(false);
   const [compressing, setCompressing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [preview, setPreview] = useState<SettlementPreview | null>(null);
 
   const hasLinkage = capability !== "NONE";
   const canSubmit =
@@ -82,6 +86,27 @@ export default function CompleteClient({
     const compressed = await Promise.all(incoming.map(compressImage));
     setPhotos((prev) => [...prev, ...compressed].slice(0, 4));
     setCompressing(false);
+  }
+
+  // 제출 버튼은 곧바로 보내지 않고 금액을 먼저 계산해 보여준다.
+  async function askConfirm() {
+    setError(null);
+    setBusy(true);
+
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+    const result: SettlementPreview = offline
+      ? { ok: false }
+      : await previewInstallSettlementAction({
+          orderId,
+          capability,
+          longDistanceAmount: toNumberOrNull(longDistanceAmount),
+          wallpadAmount: toNumberOrNull(wallpadAmount),
+          installEndAt,
+        });
+
+    setPreview(result);
+    setBusy(false);
+    setConfirming(true);
   }
 
   async function submit() {
@@ -130,6 +155,7 @@ export default function CompleteClient({
       return;
     }
     setBusy(false);
+    setConfirming(false);
     setError(ERR[res.error] ?? ERR.DEFAULT);
   }
 
@@ -238,12 +264,54 @@ export default function CompleteClient({
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
         <div style={{ marginTop: 8 }}>
-          <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={submit}>
+          <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={askConfirm}>
             {busy ? "제출 중…" : "완료 제출"}
           </button>
         </div>
       </div>
+
+      <ConfirmAmountDialog
+        open={confirming}
+        title="이 금액으로 완료 등록합니다"
+        amount={preview?.ok ? preview.totalAmount : null}
+        lines={previewLines(preview)}
+        note={previewNote(preview)}
+        busy={busy}
+        onConfirm={submit}
+        onCancel={() => setConfirming(false)}
+      />
     </main>
+  );
+}
+
+function toNumberOrNull(value: string): number | null {
+  const digits = value.replace(/[^\d]/g, "");
+  return digits ? Number(digits) : null;
+}
+
+function previewLines(preview: SettlementPreview | null): AmountLine[] {
+  if (!preview?.ok) return [];
+  return [
+    { label: "연동비", value: preview.linkageFee },
+    { label: "출장비", value: preview.travelFee },
+    { label: "장거리", value: preview.longDistanceFee },
+    { label: "야간/휴일", value: preview.nightWeekendFee },
+  ];
+}
+
+function previewNote(preview: SettlementPreview | null) {
+  if (!preview?.ok) return null;
+  const tags = [preview.night ? "야간" : null, preview.weekend ? "휴일" : null].filter(Boolean);
+  return (
+    <>
+      {tags.length > 0 ? <div>{tags.join(" · ")} 할증이 적용됐습니다.</div> : null}
+      {preview.wallpadAmount > 0 ? (
+        <div>
+          월패드 현장 수금 {preview.wallpadAmount.toLocaleString()}원은 정산 금액에 포함되지 않습니다.
+        </div>
+      ) : null}
+      <div>본사 승인 후 확정됩니다.</div>
+    </>
   );
 }
 

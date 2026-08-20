@@ -29,6 +29,8 @@ export const SYSTEM_SETTING_KEYS = {
   installationSmsTestPhoneNumber: "installation.sms.testPhoneNumber",
   installationSmsSendWindowStart: "installation.sms.sendWindowStart",
   installationSmsSendWindowEnd: "installation.sms.sendWindowEnd",
+  // 카카오 알림톡 전환 스위치. false 면 기존 SMS 문구 그대로 SMS 로만 발송한다.
+  notificationsAlimtalkEnabled: "notifications.alimtalk.enabled",
   // P4 정산: global default rates (KRW). Per-installer overrides live in installer_rates.
   settlementLinkageAppFee: "installation.settlement.linkageAppFee",
   settlementLinkageHubFee: "installation.settlement.linkageHubFee",
@@ -221,6 +223,13 @@ const SYSTEM_SETTING_SPECS = ([
     max: 23,
     defaultValue: 20,
     validationHint: "0-23 사이의 정수(시)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.notificationsAlimtalkEnabled,
+    description: "카카오 알림톡 발송 사용 여부(false 면 SMS 로만 발송)",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
   },
   {
     key: SYSTEM_SETTING_KEYS.settlementNightEndHour,

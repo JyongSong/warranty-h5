@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { AsInstallerOrderItem } from "@/lib/installer/asOrders";
 import { respondToAsAction } from "../actions";
+import PhoneRow from "../../PhoneRow";
 import * as ui from "../../ui";
 
 const REJECT_REASONS = ["일정이 맞지 않음", "거리가 멀어 방문이 어려움", "해당 작업 역량 없음", "기타"] as const;
@@ -38,7 +39,7 @@ export default function AsDetailClient({ item }: { item: AsInstallerOrderItem })
     setError(null);
     const res = await respondToAsAction({ asOrderId: item.asOrderId, response: "ACCEPT" });
     setBusy(false);
-    if (res.ok) router.push("/installer");
+    if (res.ok) router.push("/installer/as");
     else setError(ERR[res.error] ?? ERR.DEFAULT);
   }
 
@@ -52,7 +53,7 @@ export default function AsDetailClient({ item }: { item: AsInstallerOrderItem })
     setError(null);
     const res = await respondToAsAction({ asOrderId: item.asOrderId, response: "REJECT", rejectReason: finalReason });
     setBusy(false);
-    if (res.ok) router.push("/installer");
+    if (res.ok) router.push("/installer/as");
     else setError(ERR[res.error] ?? ERR.DEFAULT);
   }
 
@@ -61,7 +62,7 @@ export default function AsDetailClient({ item }: { item: AsInstallerOrderItem })
   return (
     <main style={ui.page}>
       <div style={ui.panel}>
-        <button style={backLink} onClick={() => router.push("/installer")}>
+        <button style={backLink} onClick={() => router.push("/installer/as")}>
           ← 목록으로
         </button>
         <h1 style={ui.h1}>A/S 상세</h1>
@@ -82,7 +83,7 @@ export default function AsDetailClient({ item }: { item: AsInstallerOrderItem })
           {item.symptomDetail ? <Row label="상세" value={item.symptomDetail} /> : null}
           <Row label="주소" value={item.address ?? "-"} />
           {item.customerName ? <Row label="고객명" value={item.customerName} /> : null}
-          {item.customerPhone ? <Row label="연락처" value={item.customerPhone} /> : null}
+          {item.customerPhone ? <PhoneRow label="연락처" phone={item.customerPhone} /> : null}
           {item.status === "PENDING" ? (
             <div style={{ fontSize: 12, color: "#92400e", marginTop: 8 }}>
               고객 성함·연락처는 수락 후 표시됩니다.

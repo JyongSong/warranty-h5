@@ -1,4 +1,5 @@
 import { formatKrPhone } from "@/lib/phone";
+import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
 
 type InstallType = "self" | "external" | "installer";
 
@@ -29,8 +30,24 @@ export function buildUserCompletionSms(input: {
 
   lines.push("", "문의: https://o8znz.channel.io", "※ 발신전용");
 
+  // 알림톡 템플릿 "설치정보 등록 완료". 문의 링크는 템플릿 버튼으로 빠져 있어
+  // 변수에 넣지 않는다. 기사 연락처가 없는 자가/외부 설치는 레지스트리의
+  // fallback("해당 없음")이 채운다.
+  const alimtalk: AlimtalkRequest = {
+    templateKey: "user_registration_completed",
+    variables: {
+      installType: INSTALL_TYPE_LABEL[input.installType],
+      freeAsEndDate: input.freeAsEndDate,
+      installerPhone:
+        input.installType === "installer" && input.installerPhone
+          ? formatKrPhone(input.installerPhone)
+          : null,
+    },
+  };
+
   return {
     subject,
     text: lines.join("\n"),
+    alimtalk,
   };
 }

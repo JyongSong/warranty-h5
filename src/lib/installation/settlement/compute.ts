@@ -23,6 +23,8 @@ export function isNight(installEndAt: Date, nightStartHour: number, nightEndHour
   return kstHour >= nightStartHour || kstHour < nightEndHour;
 }
 
+// UI 문안은 "야간/휴일"이지만 여기서 보는 건 토·일요일뿐이다.
+// 법정공휴일(설날·추석처럼 음력에 걸린 날 포함)은 반영되지 않는다.
 export function isWeekend(installEndAt: Date): boolean {
   const kstDay = new Date(installEndAt.getTime() + KST_OFFSET_MS).getUTCDay();
   return kstDay === 0 || kstDay === 6; // Sun | Sat
@@ -97,3 +99,30 @@ export function computeAsLineItems(serviceFee: number | null): SettlementLineIte
 }
 
 export type { RateSource };
+
+/**
+ * `datetime-local` 입력값("2026-08-20T15:23")을 KST 벽시계 시각으로 읽는다.
+ *
+ * 이 문자열에는 타임존이 없어서 `new Date(value)` 는 실행 환경의 로컬 존으로
+ * 해석한다. 서버(Vercel)는 UTC 라 15:23 이 15:23Z = KST 다음날 00:23 로
+ * 저장됐고, 그 결과 야간 할증이 잘못 붙었다. 기사가 입력한 건 언제나 한국
+ * 현지 시각이므로 여기서 KST 로 못박는다.
+ *
+ * 형식이 어긋나면 null 을 돌려준다 (호출부가 입력 오류로 처리한다).
+ */
+export function parseKstDateTimeLocal(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!match) return null;
+
+  const [, y, mo, d, h, mi, sec] = match;
+  const utcMs = Date.UTC(
+    Number(y),
+    Number(mo) - 1,
+    Number(d),
+    Number(h),
+    Number(mi),
+    Number(sec ?? "0"),
+  );
+  const parsed = new Date(utcMs - KST_OFFSET_MS);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}

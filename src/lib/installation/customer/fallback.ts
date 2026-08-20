@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -38,7 +39,7 @@ export type FallbackExpiredInstallationCustomerRequestsResult = {
   skippedCount: number;
 };
 
-const FALLBACK_AFTER_HOURS = 96;
+
 
 export async function fallbackExpiredInstallationCustomerRequests({
   now = new Date(),
@@ -144,7 +145,7 @@ async function applyCustomerRequestFallback(
         event: {
           eventType: "CUSTOMER_FALLBACK_USED",
           actorType: "SYSTEM",
-          reason: "CUSTOMER_NO_INPUT_96H_SOURCE_ORDER_USED",
+          reason: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_SOURCE_ORDER_USED`,
           metadata: {
             customerRequestId: request.id,
             sourceInstallDate: fallbackData.installDate,
@@ -167,7 +168,7 @@ async function moveCustomerRequestToManualRequired(
         type: "CUSTOMER_INPUT_NOT_SUBMITTED",
         title: "고객 정보 확인 필요",
         description:
-          "고객 미입력 96시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.",
+          `고객 미입력 ${FALLBACK_AFTER_HOURS}시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.`,
         metadata: {
           customerRequestId: request.id,
           fallbackUsed: false,
@@ -189,7 +190,7 @@ async function moveCustomerRequestToManualRequired(
         event: {
           eventType: "CUSTOMER_FALLBACK_FAILED",
           actorType: "SYSTEM",
-          reason: "CUSTOMER_NO_INPUT_96H_INSUFFICIENT_SOURCE_ORDER",
+          reason: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_INSUFFICIENT_SOURCE_ORDER`,
           metadata: {
             customerRequestId: request.id,
             issueId: issue.id,

@@ -65,6 +65,7 @@ export default async function AsSearchPage({
               <th className="p-3">고객</th>
               <th className="p-3">주소</th>
               <th className="p-3">기사</th>
+              <th className="p-3 text-right">용역비</th>
               <th className="p-3">등록일</th>
               <th className="p-3"></th>
             </tr>
@@ -72,7 +73,7 @@ export default async function AsSearchPage({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-zinc-400">
+                <td colSpan={8} className="p-6 text-center text-zinc-400">
                   A/S 내역이 없습니다.
                 </td>
               </tr>
@@ -86,6 +87,22 @@ export default async function AsSearchPage({
                   <td className="p-3 whitespace-nowrap">{it.customerName ?? "-"}</td>
                   <td className="p-3">{it.address ?? "-"}</td>
                   <td className="p-3 whitespace-nowrap">{it.installerName ?? "-"}</td>
+                  <td className="p-3 whitespace-nowrap text-right">
+                    {it.serviceFee == null ? (
+                      <span className="text-zinc-300">-</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-900">
+                          {it.serviceFee.toLocaleString()}원
+                        </span>
+                        {it.status !== "COMPLETED" ? (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                            예상
+                          </span>
+                        ) : null}
+                      </span>
+                    )}
+                  </td>
                   <td className="p-3 whitespace-nowrap text-zinc-500">
                     {new Date(it.createdAt).toLocaleDateString("ko-KR")}
                   </td>

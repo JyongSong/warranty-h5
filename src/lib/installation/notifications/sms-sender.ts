@@ -1,5 +1,7 @@
 import { SolapiMessageService } from "solapi";
 import { SYSTEM_SETTING_KEYS, getSystemSettingValue } from "@/lib/backoffice/system-settings";
+import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
+import { resolveAlimtalkKakaoOptions } from "@/lib/notifications/alimtalk-options";
 
 let _service: SolapiMessageService | null = null;
 
@@ -34,9 +36,20 @@ export type InstallationSmsDeliveryReport = {
   dateReported: string | null;
 };
 
+export type SendInstallationSmsOptions = {
+  /** LMS 제목. 없으면 통신사가 본문 첫 줄을 잘라 제목으로 쓴다. */
+  subject?: string | null;
+  /**
+   * 알림톡 템플릿과 변수. 알림톡이 꺼져 있거나 변수 검증에 실패하면 SMS 로만
+   * 발송한다. outbox 재시도/회신 처리 로직은 그대로 쓴다.
+   */
+  alimtalk?: AlimtalkRequest;
+};
+
 export async function sendInstallationSmsOrThrow(
   to: string | null | undefined,
-  text: string
+  text: string,
+  options?: SendInstallationSmsOptions
 ): Promise<{ providerMessageId: string | null }> {
   const deliveryMode = await getSystemSettingValue(SYSTEM_SETTING_KEYS.installationSmsDeliveryMode);
   if (!deliveryMode || deliveryMode === "disabled") {
@@ -63,11 +76,19 @@ export async function sendInstallationSmsOrThrow(
   const service = getSolapiMessageService();
   if (!service) throw new Error("SOLAPI_CREDENTIALS_MISSING");
 
+  // 설정 조회 오류는 삼키지 않는다 (outbox 가 재시도하도록).
+  const kakaoOptions = options?.alimtalk
+    ? await resolveAlimtalkKakaoOptions(options.alimtalk)
+    : null;
+
   let providerMessageId: string | null = null;
 
   for (const normalized of recipients) {
+    const subject = options?.subject?.trim() || undefined;
     const response = await service.send(
-      { to: normalized, from, text },
+      kakaoOptions
+        ? { to: normalized, from, text, subject, kakaoOptions }
+        : { to: normalized, from, text, subject },
       { showMessageList: true }
     ) as {
       groupInfo?: { groupId?: string };

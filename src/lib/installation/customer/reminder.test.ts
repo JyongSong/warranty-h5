@@ -87,7 +87,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
         customerSubmittedAt: null,
         fallbackUsed: false,
         createdAt: {
-          lte: new Date("2026-06-08T12:00:00.000Z"),
+          lte: new Date("2026-06-10T12:00:00.000Z"),
         },
         installationOrder: {
           status: "WAITING_CUSTOMER_INPUT",

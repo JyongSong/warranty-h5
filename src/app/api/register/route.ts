@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { sendSms } from "@/lib/sms";
 import { normalizePhone } from "@/lib/phone";
 import { getBaseUrl } from "@/lib/getBaseUrl";
+import { CONFIRM_TOKEN_TTL_MS } from "@/lib/confirmToken";
+import { buildInstallerConfirmSms } from "@/lib/installerSms";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
 import { buildUserCompletionSms } from "@/lib/userSms";
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
         }
 
         const token = requiresInstallerPhone ? crypto.randomBytes(16).toString("hex") : null;
-        const expiresAt = requiresInstallerPhone ? new Date(Date.now() + 72 * 3600 * 1000) : null;
+        const expiresAt = requiresInstallerPhone ? new Date(Date.now() + CONFIRM_TOKEN_TTL_MS) : null;
         // 본사 공인 기사 시공만 2년 무상 A/S, 자가/외부 기사는 1년
         const freeEnd = addDays(installDate, installType === "installer" ? 730 : 365);
         const status = installType === "self" ? "confirmed" : "submitted";
@@ -130,7 +132,9 @@ export async function POST(req: Request) {
                 freeAsEndDate: freeEnd,
                 installerPhone: null,
             });
-            await sendSms(userPhone, userSmsObj.text, userSmsObj.subject);
+            await sendSms(userPhone, userSmsObj.text, userSmsObj.subject, {
+                alimtalk: userSmsObj.alimtalk,
+            });
             console.log("[SMS SENT][REGISTER→USER]", { to: userPhone, installType });
 
             return NextResponse.json({
@@ -144,14 +148,10 @@ export async function POST(req: Request) {
 
         // 인증 기사: 기사에게 confirm link SMS
         const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token as string)}`;
-        const installerSubject = "[Aqara]";
-        const installerSmsText = `설치 확인이 필요합니다.
-72시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.
-
-${confirmLink}
-
-※ 발신전용`;
-        await sendSms(installerPhone, installerSmsText, installerSubject);
+        const installerSmsObj = buildInstallerConfirmSms({ confirmLink });
+        await sendSms(installerPhone, installerSmsObj.text, installerSmsObj.subject, {
+            alimtalk: installerSmsObj.alimtalk,
+        });
 
         console.log("[SMS SENT][REGISTER→INSTALLER]", { to: installerPhone, link: confirmLink });
 

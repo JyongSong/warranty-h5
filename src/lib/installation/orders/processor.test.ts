@@ -132,7 +132,7 @@ describe("processPendingInstallationOrders", () => {
       customerPhoneSource: "PENDING_CUSTOMER",
       installAddressEncrypted: null,
       customerTokenHash: hashInstallationCustomerToken("raw-token"),
-      customerTokenExpiresAt: new Date("2026-06-14T00:00:00.000Z"),
+      customerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
       status: "PENDING_INPUT",
     });
     expect(requestData.customerNameEncrypted).toMatch(/^enc:v1:/);

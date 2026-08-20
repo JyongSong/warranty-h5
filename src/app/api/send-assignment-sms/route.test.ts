@@ -14,6 +14,7 @@ const {
   queryRawMock,
   sendMock,
   transactionMock,
+  isAlimtalkEnabledMock,
 } = vi.hoisted(() => ({
   settingCreateMock: vi.fn(),
   settingFindManyMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   queryRawMock: vi.fn(),
   sendMock: vi.fn(),
   transactionMock: vi.fn(),
+  isAlimtalkEnabledMock: vi.fn(),
 }));
 
 vi.mock("@/lib/adminAuth", () => ({
@@ -50,6 +52,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
+vi.mock("@/lib/notifications/alimtalk-options", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/notifications/alimtalk-options")
+  >("@/lib/notifications/alimtalk-options");
+  return { ...actual, isAlimtalkEnabled: isAlimtalkEnabledMock };
+});
+
 vi.mock("solapi", () => ({
   SolapiMessageService: class {
     send = sendMock;
@@ -69,7 +78,9 @@ describe("POST /api/send-assignment-sms", () => {
       SOLAPI_API_KEY: "api-key",
       SOLAPI_API_SECRET: "api-secret",
       SOLAPI_SENDER: "0212345678",
+      SOLAPI_KAKAO_PF_ID: "KA01PF260706032300158y6gaHPMaEfL",
     };
+    isAlimtalkEnabledMock.mockResolvedValue(false);
     requireAdminApiMock.mockResolvedValue({
       admin: { id: "admin-1", name: "admin", level: 1 },
       errorResponse: null,
@@ -179,6 +190,67 @@ describe("POST /api/send-assignment-sms", () => {
         completedAt: expect.any(String),
       }),
     );
+  });
+
+  it("sends plain SMS with no kakaoOptions while the alimtalk switch is off", async () => {
+    const response = await POST(requestWithRows([{ 지점명: "강남점", 연락처: "01022223333" }]));
+
+    expect(response.status).toBe(200);
+    expect(sendMock).toHaveBeenCalledWith({
+      to: "01022223333",
+      from: "0212345678",
+      text: "hello",
+    });
+    expect(await response.json()).toMatchObject({
+      results: [expect.objectContaining({ ok: true, channel: "SMS" })],
+    });
+  });
+
+  it("attaches the assignment_completed kakaoOptions once the switch is on", async () => {
+    isAlimtalkEnabledMock.mockResolvedValue(true);
+
+    const response = await POST(requestWithRows([{ 지점명: "강남점", 연락처: "01022223333" }]));
+
+    expect(response.status).toBe(200);
+    expect(sendMock).toHaveBeenCalledWith({
+      to: "01022223333",
+      from: "0212345678",
+      // 카카오 발송이 실패하면 이 text 로 SMS 대체발송된다.
+      text: "hello",
+      kakaoOptions: {
+        pfId: "KA01PF260706032300158y6gaHPMaEfL",
+        templateId: "KA01TP26070707483285849dA5feTIvF",
+        variables: {
+          "#{branchName}": "강남점",
+          "#{installerPhone}": "01011112222",
+        },
+        disableSms: false,
+      },
+    });
+    expect(await response.json()).toMatchObject({
+      results: [expect.objectContaining({ ok: true, channel: "ALIMTALK" })],
+    });
+  });
+
+  it("degrades that row to plain SMS when a template variable is blank", async () => {
+    isAlimtalkEnabledMock.mockResolvedValue(true);
+    // 공백뿐인 연락처는 라우트의 !installer.phone 검사를 통과하지만
+    // 알림톡은 빈 변수를 허용하지 않는다. 이때 배치 전체가 아니라 해당 행만
+    // SMS 로 내려가야 한다.
+    findInstallerByBranchMock.mockReturnValue({ branchName: "강남점", phone: "   " });
+
+    const response = await POST(requestWithRows([{ 지점명: "강남점", 연락처: "01022223333" }]));
+
+    expect(response.status).toBe(200);
+    expect(sendMock).toHaveBeenCalledWith({
+      to: "01022223333",
+      from: "0212345678",
+      text: "hello",
+    });
+    expect(await response.json()).toMatchObject({
+      sent: 1,
+      results: [expect.objectContaining({ ok: true, channel: "SMS" })],
+    });
   });
 });
 

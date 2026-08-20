@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 import {
   buildCustomerAssignmentConfirmedSmsContent,
   buildCustomerReservationLinkSmsContent,
@@ -29,14 +30,19 @@ describe("installation SMS content", () => {
 
     expect(content.templateKey).toBe("customer_reservation_link");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 예약 정보를 입력해 주세요.\n" +
-        "아래 링크에서 설치 희망 정보를 입력해 주세요.\n" +
+      // 카카오 검수가 "수신자의 어떤 액션으로 발송되는지"를 본문에 요구해
+      // 구매/접수 사실을 첫 줄에 둔다.
+      "구매하신 스마트 도어락의 설치 접수가 완료되었습니다.\n" +
+        "설치 일정 확정을 위해 예약 정보를 입력해 주세요.\n" +
         "\n" +
-        "주문 상품:\n" +
-        "Aqara 스마트 도어락 K100 x1 외\n" +
+        "주문 상품: Aqara 스마트 도어락 K100 x1 외\n" +
         "\n" +
-        "https://example.com/i/c/token-1\n\n" +
+        "아래 링크에서 설치 희망일과 주소를 입력해 주세요.\n" +
+        "\n" +
+        "https://example.com/i/c/token-1\n" +
+        "\n" +
+        `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.\n` +
+        "\n" +
         "※ 발신전용",
     );
   });
@@ -47,7 +53,7 @@ describe("installation SMS content", () => {
       reservationUrl: "https://example.com/i/c/token-1",
     });
 
-    expect(content.text).toContain("주문 상품:\nAqara 스마트 도어락 K100 x1 외");
+    expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1 외");
     expect(content.text).not.toContain("용역 출장비 x1");
     expect(content.text).not.toContain("월패드 연동(RF447) x1");
   });
@@ -59,8 +65,14 @@ describe("installation SMS content", () => {
     });
 
     expect(content.templateKey).toBe("customer_reservation_reminder");
-    expect(content.text).toContain("[아카라 라이프]");
-    expect(content.text).toContain("설치 예약 정보 입력이 아직 완료되지 않았습니다.");
+    // 브랜드 표기는 본문이 아니라 LMS 제목에 있다.
+    expect(content.text).not.toContain("[아카라 라이프]");
+    expect(content.subject).toBe("[아카라라이프] 설치 예약 안내");
+    expect(content.text).toContain("접수하신 설치 건의 예약 정보 입력이 아직 완료되지 않았습니다.");
+    // 7번과 같은 기준(설치 접수 시점)으로 안내해야 두 문자가 어긋나지 않는다.
+    expect(content.text).toContain(
+      `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.`,
+    );
     expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1");
     expect(content.text).toContain("https://example.com/i/c/token-2");
   });
@@ -75,33 +87,43 @@ describe("installation SMS content", () => {
     expect(content.templateKey).toBe("installer_assignment_request");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 가능 여부 확인 요청입니다.\n" +
-        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+      "아카라라이프 설치 기사로 등록하신 기사님께 설치 배정 요청드립니다.\n" +
         "\n" +
         "설치 희망일: 2026-06-20\n" +
         "지역: 서울 강남구\n" +
         "\n" +
-        "https://example.com/i/i/token-2\n\n" +
+        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+        "\n" +
+        "https://example.com/i/i/token-2\n" +
+        "\n" +
+        // 마감 시각은 발송 시점에 채워지므로 빌더 단계에서는 자리표시자로 남는다.
+        "※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
+        "\n" +
         "※ 발신전용",
     );
   });
 
   it("builds customer assignment confirmed content from the JSON template", () => {
     const content = buildCustomerAssignmentConfirmedSmsContent({
-      productSummary: "Aqara 스마트 도어락 K100 x1 / 용역 출장비 x1",
+      branchName: "강남점",
+      installerPhone: "01099990000",
     });
 
     expect(content.templateKey).toBe("customer_assignment_confirmed");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 기사 배정이 확정되었습니다.\n" +
-        "방문 전 설치 기사가 확인 전화를 드릴 예정입니다.\n" +
+      "*발신전용\n" +
+        "아카라라이프 설치 배정완료\n" +
+        "강남점 010-9999-0000\n" +
+        "배정된 기사님이 곧 연락드릴 예정입니다.\n" +
         "\n" +
-        "주문 상품: Aqara 스마트 도어락 K100 x1 외\n\n" +
-        "※ 발신전용",
+        "※ 월패드 연동을 희망하시는 경우 해피콜 시 기사님께 말씀 부탁드립니다.\n" +
+        "현장에서 기사님이 설치 환경을 확인 후 연동 가능 여부를 안내해드리며, 추가 비용 발생 시 작업 내용 및 금액을 현장에서 안내해드립니다.\n" +
+        "\n" +
+        "※ 월패드 연동이 불가한 경우에도 기사 출장비(3만원)는 발생하며, 해당 사유로 도어락 구매를 취소하실 경우 왕복 택배비가 발생합니다.\n" +
+        "해당 조건에 동의하지 않으시는 경우 기사 방문 전 고객센터로 연락 주시면 취소 및 환불을 도와드리겠습니다.",
     );
+    expect(content.text).not.toContain("주문 상품");
   });
 
   it("builds installer happycall guide content from the JSON template", () => {
@@ -115,8 +137,7 @@ describe("installation SMS content", () => {
     expect(content.templateKey).toBe("installer_happycall_guide");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 요청 수락이 완료되었습니다.\n" +
+      "설치 요청 수락이 완료되었습니다.\n" +
         "48시간 이내 고객에게 확인 전화를 진행해 주세요.\n" +
         "\n" +
         "주문 상품:\n" +

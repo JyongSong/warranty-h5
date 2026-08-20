@@ -24,7 +24,7 @@ describe("installation SMS template preview", () => {
       label: "고객 설치 예약 링크",
       audience: "고객",
       filePath: "src/lib/installation/notifications/sms-template-customer-reservation-link.json",
-      variables: ["productSummary", "reservationUrl"],
+      variables: ["productSummary", "reservationUrl", "fallbackHours"],
     });
   });
 
@@ -33,17 +33,21 @@ describe("installation SMS template preview", () => {
       addressMain: "서울 강남구",
       installDate: "2026-06-20",
       responseUrl: "https://example.com/i/i/token-1",
+      responseDeadline: "8월 21일(금) 14시",
     });
 
     expect(rendered).toBe(
-      "[아카라 라이프]\n" +
-        "설치 가능 여부 확인 요청입니다.\n" +
-        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+      "아카라라이프 설치 기사로 등록하신 기사님께 설치 배정 요청드립니다.\n" +
         "\n" +
         "설치 희망일: 2026-06-20\n" +
         "지역: 서울 강남구\n" +
         "\n" +
-        "https://example.com/i/i/token-1\n\n" +
+        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+        "\n" +
+        "https://example.com/i/i/token-1\n" +
+        "\n" +
+        "※ 8월 21일(금) 14시까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
+        "\n" +
         "※ 발신전용",
     );
   });
@@ -52,12 +56,12 @@ describe("installation SMS template preview", () => {
     const rendered = renderInstallationSmsTemplatePreview("customer_reservation_link", {
       productSummary: "Aqara 스마트 도어락 K100 x1 외",
       reservationUrl: "https://example.com/i/c/token-1",
+      fallbackHours: "48",
     });
 
     expect(rendered).toContain(
-      "아래 링크에서 설치 희망 정보를 입력해 주세요.\n\n" +
-        "주문 상품:\n" +
-        "Aqara 스마트 도어락 K100 x1 외\n\n" +
+      "주문 상품: Aqara 스마트 도어락 K100 x1 외\n\n" +
+        "아래 링크에서 설치 희망일과 주소를 입력해 주세요.\n\n" +
         "https://example.com/i/c/token-1\n\n",
     );
   });

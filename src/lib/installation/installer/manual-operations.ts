@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getInstallerContact } from "@/lib/installation/installer/source";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
-import { buildInstallerAssignmentRequestSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildInstallerAssignmentRequestSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { inferDispatchRequirementFromMemo } from "@/lib/installation/orders/source/source-items";
 import {
@@ -201,6 +204,7 @@ export async function createManualInstallerAssignment(
         recipientPhoneEncrypted: encryptNullablePii(normalizedInstallerPhone),
         recipientPhoneHash: hmacPii(normalizedInstallerPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",

@@ -1,13 +1,20 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
+  REMINDER_AFTER_HOURS,
+  REMINDER_TOKEN_TTL_HOURS,
+} from "@/lib/installation/customer/timing";
+import {
   decryptNullablePii,
   encryptNullablePii,
   hmacPii,
   normalizePhone11,
 } from "@/lib/piiCrypto";
 import { hashInstallationCustomerToken } from "@/lib/installation/customer/token";
-import { buildCustomerReservationReminderSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildCustomerReservationReminderSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import { INSTALLATION_ORDER_STATUSES } from "@/lib/installation/orders/status";
 import { formatSourceItemsProductSummary } from "@/lib/installation/orders/source/source-items";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
@@ -37,8 +44,7 @@ export type RemindExpiredInstallationCustomerRequestsResult = {
   failedCount: number;
 };
 
-const REMINDER_TOKEN_TTL_HOURS = 24;
-const REMINDER_AFTER_HOURS = 72;
+
 
 export async function remindExpiredInstallationCustomerRequests({
   baseUrl,
@@ -165,6 +171,7 @@ async function createReminder(
         recipientPhoneEncrypted: encryptNullablePii(recipientPhone),
         recipientPhoneHash: hmacPii(recipientPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",

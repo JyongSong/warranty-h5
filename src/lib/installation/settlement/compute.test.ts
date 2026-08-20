@@ -4,6 +4,7 @@ import {
   computeInstallLineItems,
   isNight,
   isWeekend,
+  parseKstDateTimeLocal,
   linkageFeeForCapability,
 } from "./compute";
 import type { EffectiveRates } from "./rates";
@@ -46,11 +47,50 @@ describe("isNight (wrap-around window 20:00→06:00 KST)", () => {
   });
 });
 
+describe("parseKstDateTimeLocal", () => {
+  // 서버(UTC)에서 new Date("2026-08-20T15:23") 로 읽으면 KST 다음날 00:23 이
+  // 되어 야간 할증이 잘못 붙었다. 실제로 운영에서 발생한 건이다.
+  it("reads the wall-clock value as KST, not as server-local time", () => {
+    expect(parseKstDateTimeLocal("2026-08-20T15:23")?.toISOString()).toBe(
+      "2026-08-20T06:23:00.000Z",
+    );
+  });
+
+  it("keeps a daytime install out of the night window", () => {
+    const parsed = parseKstDateTimeLocal("2026-08-20T15:23")!;
+    expect(isNight(parsed, 20, 6)).toBe(false);
+  });
+
+  it("does not roll a Friday evening into Saturday", () => {
+    // 금요일 22:00 KST. UTC 로 잘못 읽으면 토요일 07:00 KST 가 되어
+    // 휴일 할증까지 붙는다.
+    const parsed = parseKstDateTimeLocal("2026-08-21T22:00")!;
+    expect(isNight(parsed, 20, 6)).toBe(true);
+    expect(isWeekend(parsed)).toBe(false);
+  });
+
+  it("accepts seconds and rejects junk", () => {
+    expect(parseKstDateTimeLocal("2026-08-20T15:23:45")?.toISOString()).toBe(
+      "2026-08-20T06:23:45.000Z",
+    );
+    expect(parseKstDateTimeLocal("")).toBeNull();
+    expect(parseKstDateTimeLocal("2026-08-20")).toBeNull();
+  });
+});
+
 describe("isWeekend (KST)", () => {
   it("Sat/Sun are weekend, Wed is not", () => {
     expect(isWeekend(kst("2026-08-15", 12))).toBe(true); // Sat
     expect(isWeekend(kst("2026-08-16", 12))).toBe(true); // Sun
     expect(isWeekend(kst("2026-08-12", 12))).toBe(false); // Wed
+  });
+
+  // UI 문안은 "야간/휴일"이지만 실제로 보는 건 토·일요일뿐이다.
+  // 평일에 걸린 법정공휴일에는 할증이 붙지 않는다.
+  it("does not treat a weekday public holiday as 휴일", () => {
+    expect(isWeekend(kst("2026-05-05", 12))).toBe(false); // 어린이날 (화)
+    expect(isWeekend(kst("2026-10-09", 12))).toBe(false); // 한글날 (금)
+    expect(isWeekend(kst("2026-12-25", 12))).toBe(false); // 성탄절 (금)
   });
 });
 

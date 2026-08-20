@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { CUSTOMER_REQUEST_TOKEN_TTL_HOURS } from "@/lib/installation/customer/timing";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -9,7 +10,10 @@ import {
 } from "@/lib/piiCrypto";
 import { hashInstallationCustomerToken } from "@/lib/installation/customer/token";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
-import { buildCustomerReservationLinkSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildCustomerReservationLinkSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import {
   INSTALLATION_ORDER_STATUSES,
   transitionInstallationOrderStatus,
@@ -46,7 +50,7 @@ export type CreateCustomerInputRequestsForInstallationOrdersResult = ProcessPend
   skippedInvalidStateCount: number;
 };
 
-const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = 72;
+
 
 export async function processPendingInstallationOrders({
   limit = 25,
@@ -246,6 +250,7 @@ async function processPendingInstallationOrder(
         recipientPhoneEncrypted: encryptNullablePii(customerPhone),
         recipientPhoneHash: customerPhone ? hmacPii(customerPhone) : null,
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",

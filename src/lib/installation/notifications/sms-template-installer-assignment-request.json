@@ -1,3 +1,3 @@
 {
-  "content": "[아카라 라이프]\n설치 가능 여부 확인 요청입니다.\n아래 링크에서 설치 가능 여부를 선택해 주세요.\n\n설치 희망일: {installDate}\n지역: {addressMain}\n\n{responseUrl}\n\n※ 발신전용"
+  "content": "아카라라이프 설치 기사로 등록하신 기사님께 설치 배정 요청드립니다.\n\n설치 희망일: {installDate}\n지역: {addressMain}\n\n아래 링크에서 설치 가능 여부를 선택해 주세요.\n\n{responseUrl}\n\n※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n\n※ 발신전용"
 }

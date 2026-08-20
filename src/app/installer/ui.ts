@@ -10,7 +10,8 @@ export const page: CSSProperties = {
   minHeight: "100vh",
   background: "#f4f4f5",
   color: TEXT,
-  padding: "24px 16px 48px",
+  // 하단 여백은 고정 탭(56px) + 안전영역에 가리지 않을 만큼 둔다.
+  padding: "24px 16px calc(88px + env(safe-area-inset-bottom))",
 };
 
 export const panel: CSSProperties = { width: "100%", maxWidth: 460, margin: "0 auto" };

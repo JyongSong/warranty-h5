@@ -636,6 +636,10 @@ model InstallationNotification {
   recipientPhoneHash      String?                                 @map("recipient_phone_hash")
   smsTemplateKey          String?                                 @map("sms_template_key")
   smsBody                 String                                  @map("sms_body")
+  // 알림톡 발송에 필요한 템플릿/변수. 본문(sms_body)은 대체발송용으로 남는다.
+  // 값이 없으면 SMS 로만 발송한다.
+  alimtalkTemplateKey     String?                                 @map("alimtalk_template_key")
+  alimtalkVariables       Json?                                   @map("alimtalk_variables")
   provider                String                                  @default("solapi")
   providerMessageId       String?                                 @map("provider_message_id")
   providerStatus          String?                                 @map("provider_status")
@@ -650,6 +654,8 @@ model InstallationNotification {
   retryCount              Int                                     @default(0) @map("retry_count")
   deliveryCheckCount      Int                                     @default(0) @map("delivery_check_count")
   sentAt                  DateTime?                               @map("sent_at")
+  // 앱 푸시를 먼저 보낸 시각. 이 시각 기준으로 폴백 문자 발송 여부를 판단한다.
+  pushSentAt              DateTime?                               @map("push_sent_at")
   createdAt               DateTime                                @default(now()) @map("created_at")
   updatedAt               DateTime                                @updatedAt @map("updated_at")
 
