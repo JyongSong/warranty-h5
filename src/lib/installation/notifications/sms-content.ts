@@ -74,6 +74,8 @@ export function buildCustomerReservationReminderSmsContent({
     text: renderCustomerInstallationSmsTemplate(templateKey, {
       productSummary: formatSmsProductSummary(productSummary),
       reservationUrl,
+      // 7번과 같은 기준(설치 접수 시점)으로 안내해야 두 문자가 어긋나지 않는다.
+      fallbackHours: String(FALLBACK_AFTER_HOURS),
     }),
   };
 }

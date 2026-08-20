@@ -74,6 +74,7 @@ function createTemplateDefinitions(baseUrl: string): InstallationSmsTemplatePrev
       sampleVars: {
         productSummary: "Aqara 스마트 도어락 K100 x1",
         reservationUrl: `${baseUrl}/i/c/reminder-token`,
+        fallbackHours: String(FALLBACK_AFTER_HOURS),
       },
     },
     {

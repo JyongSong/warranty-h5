@@ -30,7 +30,10 @@ describe("installation SMS content", () => {
 
     expect(content.templateKey).toBe("customer_reservation_link");
     expect(content.text).toBe(
-      "설치 예약 정보를 입력해 주세요.\n" +
+      // 카카오 검수가 "수신자의 어떤 액션으로 발송되는지"를 본문에 요구해
+      // 구매/접수 사실을 첫 줄에 둔다.
+      "구매하신 스마트 도어락의 설치 접수가 완료되었습니다.\n" +
+        "설치 일정 확정을 위해 예약 정보를 입력해 주세요.\n" +
         "\n" +
         "주문 상품: Aqara 스마트 도어락 K100 x1 외\n" +
         "\n" +
@@ -38,7 +41,7 @@ describe("installation SMS content", () => {
         "\n" +
         "https://example.com/i/c/token-1\n" +
         "\n" +
-        `※ ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.\n` +
+        `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.\n` +
         "\n" +
         "※ 발신전용",
     );
@@ -65,7 +68,11 @@ describe("installation SMS content", () => {
     // 브랜드 표기는 본문이 아니라 LMS 제목에 있다.
     expect(content.text).not.toContain("[아카라 라이프]");
     expect(content.subject).toBe("[아카라라이프] 설치 예약 안내");
-    expect(content.text).toContain("설치 예약 정보 입력이 아직 완료되지 않았습니다.");
+    expect(content.text).toContain("접수하신 설치 건의 예약 정보 입력이 아직 완료되지 않았습니다.");
+    // 7번과 같은 기준(설치 접수 시점)으로 안내해야 두 문자가 어긋나지 않는다.
+    expect(content.text).toContain(
+      `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.`,
+    );
     expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1");
     expect(content.text).toContain("https://example.com/i/c/token-2");
   });
