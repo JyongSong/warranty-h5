@@ -9,6 +9,7 @@ import {
   INSTALL_DATE_MAX_DAYS_AHEAD,
   INSTALL_DATE_MIN_DAYS_AHEAD,
 } from "@/lib/installation/customer/timing";
+import { splitInstallationSourceAddress } from "@/lib/installation/customer/address-parser";
 import { submitCustomerRequestAction } from "./actions";
 import {
   CUSTOMER_REQUEST_UNAVAILABLE_STATUS,
@@ -152,11 +153,15 @@ export default function CustomerRequestClient({
 
   function copyOrderInfo() {
     if (orderPhone) setPhone(formatKrPhone(orderPhone));
-    if (orderAddress) {
-      setZonecode("");
-      setAddress(orderAddress);
-      setAddressDetail("");
-    }
+    if (!orderAddress) return;
+
+    // 주문 주소는 "경기도 화성시 …로1길 74 1911동 1103호" 처럼 한 줄로 온다.
+    // 통째로 기본 주소에 넣으면 상세 주소가 비어 제출 자체가 막힌다(필수).
+    const split = splitInstallationSourceAddress(orderAddress);
+    // 우편번호는 주문 데이터에 없다. 필수는 아니고, 필요하면 고객이 검색한다.
+    setZonecode("");
+    setAddress(split?.addressMain ?? orderAddress);
+    setAddressDetail(split?.addressDetail ?? "");
   }
   const fullAddress = [zonecode, address, addressDetail.trim()].filter(Boolean).join(" ");
   const canSubmit =
