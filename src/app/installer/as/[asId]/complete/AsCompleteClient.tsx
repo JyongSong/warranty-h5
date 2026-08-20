@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { getAsUploadTargetsAction, submitAsCompletionAction } from "./actions";
 import ConfirmAmountDialog from "../../../ConfirmAmountDialog";
+import PhotoPicker from "../../../PhotoPicker";
 import * as ui from "../../../ui";
 
 let supabaseBrowser: ReturnType<typeof createClient> | null = null;
@@ -148,37 +149,13 @@ export default function AsCompleteClient({
           />
         </div>
 
-        <div style={ui.card}>
-          <div style={ui.label}>사진 (선택, 최대 4장)</div>
-          <label style={fileBtn}>
-            {compressing ? "처리 중…" : "사진 촬영/선택"}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              multiple
-              disabled={compressing || photos.length >= 4}
-              style={{ display: "none" }}
-              onChange={(e) => {
-                void addPhotos(e.target.files);
-                e.target.value = "";
-              }}
-            />
-          </label>
-          {photos.length > 0 ? (
-            <div style={thumbRow}>
-              {photos.map((p, i) => (
-                <div key={i} style={thumbWrap}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={URL.createObjectURL(p)} alt="" style={thumb} />
-                  <button style={removeBtn} onClick={() => setPhotos(photos.filter((_, j) => j !== i))}>
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <PhotoPicker
+          label="사진 (선택, 최대 4장)"
+          photos={photos}
+          busy={compressing}
+          onAdd={(files) => void addPhotos(files)}
+          onRemove={(index) => setPhotos(photos.filter((_, i) => i !== index))}
+        />
 
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
@@ -221,35 +198,5 @@ const backLink: CSSProperties = {
   fontWeight: 600,
   padding: "4px 0",
   marginBottom: 8,
-  cursor: "pointer",
-};
-const fileBtn: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "100%",
-  minHeight: 50,
-  borderRadius: 10,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
-  fontSize: 15,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-const thumbRow: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 };
-const thumbWrap: CSSProperties = { position: "relative", width: 72, height: 72 };
-const thumb: CSSProperties = { width: 72, height: 72, objectFit: "cover", borderRadius: 8 };
-const removeBtn: CSSProperties = {
-  position: "absolute",
-  top: -6,
-  right: -6,
-  width: 22,
-  height: 22,
-  borderRadius: "50%",
-  border: "none",
-  background: "#18181b",
-  color: "#fff",
-  fontSize: 12,
   cursor: "pointer",
 };
