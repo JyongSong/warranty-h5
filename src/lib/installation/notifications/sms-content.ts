@@ -5,6 +5,7 @@ import {
 import { formatKrPhone } from "@/lib/phone";
 import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 export type InstallationSmsTemplateKey =
   | "customer_reservation_link"
@@ -97,6 +98,8 @@ export function buildInstallerAssignmentRequestSmsContent({
       addressMain: addressMain?.trim() || "미확인",
       installDate: installDate?.trim() || "미확인",
       responseUrl,
+      // 문안의 기한과 실제 타임아웃이 어긋나지 않도록 상수에서 렌더한다.
+      responseTimeoutHours: String(INSTALLER_RESPONSE_TIMEOUT_HOURS),
     }),
   };
 }

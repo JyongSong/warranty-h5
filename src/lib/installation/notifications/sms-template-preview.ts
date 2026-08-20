@@ -5,6 +5,7 @@ import installerAssignmentRequestTemplate from "@/lib/installation/notifications
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 export type InstallationSmsTemplatePreviewKey =
   | "customer_reservation_link"
@@ -104,6 +105,7 @@ function createTemplateDefinitions(baseUrl: string): InstallationSmsTemplatePrev
         installDate: "2026-06-20",
         addressMain: "서울 강남구",
         responseUrl: `${baseUrl}/i/i/installer-token`,
+        responseTimeoutHours: String(INSTALLER_RESPONSE_TIMEOUT_HOURS),
       },
     },
     {

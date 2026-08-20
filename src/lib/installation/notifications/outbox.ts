@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 import { getInstallationSmsSubject } from "@/lib/installation/notifications/sms-content";
 import {
   ALIMTALK_TEMPLATES,
@@ -832,7 +833,6 @@ async function runPostSendNotificationEffects(
   }
 }
 
-const INSTALLER_RESPONSE_TIMEOUT_HOURS = 24;
 const MAX_SMS_SEND_ATTEMPTS = 2;
 const MAX_SMS_DELIVERY_ATTEMPTS = 2;
 

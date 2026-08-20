@@ -3,6 +3,7 @@ import {
   getInstallationSmsTemplatePreviews,
   renderInstallationSmsTemplatePreview,
 } from "@/lib/installation/notifications/sms-template-preview";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 describe("installation SMS template preview", () => {
   beforeEach(() => {
@@ -33,16 +34,21 @@ describe("installation SMS template preview", () => {
       addressMain: "서울 강남구",
       installDate: "2026-06-20",
       responseUrl: "https://example.com/i/i/token-1",
+      responseTimeoutHours: String(INSTALLER_RESPONSE_TIMEOUT_HOURS),
     });
 
     expect(rendered).toBe(
-      "설치 가능 여부 확인 요청입니다.\n" +
-        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+      "아카라라이프 설치 기사로 등록하신 기사님께 설치 배정 요청드립니다.\n" +
         "\n" +
         "설치 희망일: 2026-06-20\n" +
         "지역: 서울 강남구\n" +
         "\n" +
-        "https://example.com/i/i/token-1\n\n" +
+        "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
+        "\n" +
+        "https://example.com/i/i/token-1\n" +
+        "\n" +
+        `※ ${INSTALLER_RESPONSE_TIMEOUT_HOURS}시간 이내 미응답 시 다른 기사님께 자동으로 배정됩니다.\n` +
+        "\n" +
         "※ 발신전용",
     );
   });
