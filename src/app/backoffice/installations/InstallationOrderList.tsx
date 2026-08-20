@@ -46,6 +46,8 @@ export type InstallationOrderListItem = {
   hasOpenIssue: boolean;
   issueCodes: string[];
   statusChangedAt: string;
+  /** 검수 대기면 예상값, 승인 완료면 정산에 얼어붙은 확정값 */
+  settlementAmount: { totalAmount: number; status: "CONFIRMED" | "ESTIMATED" } | null;
   request: {
     id: string;
     installAddress: string | null;
@@ -526,6 +528,31 @@ export default function InstallationOrderList({
               {statusLabels[row.original.status] ?? row.original.status}
             </span>
           ),
+          sortingFn: "alphanumeric",
+        },
+        {
+          id: "settlementAmount",
+          // 정렬은 숫자로, 표시는 확정/예상 구분해서.
+          accessorFn: (row) => row.settlementAmount?.totalAmount ?? -1,
+          header: "운영-정산 금액",
+          size: 150,
+          minSize: 120,
+          cell: ({ row }) => {
+            const amount = row.original.settlementAmount;
+            if (!amount) return <span className="text-zinc-300">-</span>;
+            return (
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <span className="font-semibold text-zinc-900">
+                  {amount.totalAmount.toLocaleString()}원
+                </span>
+                {amount.status === "ESTIMATED" ? (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                    예상
+                  </span>
+                ) : null}
+              </span>
+            );
+          },
           sortingFn: "alphanumeric",
         },
       ];

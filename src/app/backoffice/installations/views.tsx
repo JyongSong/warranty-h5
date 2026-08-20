@@ -12,6 +12,7 @@ import {
   normalizeBackofficeTableParams,
 } from "@/lib/backoffice/table-controls";
 import { listActiveInstallerRequestAssignments } from "@/lib/installation/installer/review";
+import { getInstallOrderAmounts } from "@/lib/installation/settlement/order-amounts";
 import {
   countInstallationOrderStatuses,
   listInstallationOrderStatuses,
@@ -99,6 +100,14 @@ export async function InstallationOrderListView({
       })
     : [];
 
+  // 목록에서 "이 건이 얼마짜리인가"가 바로 보이도록 한 번에 조회한다.
+  const settlementAmounts = await getInstallOrderAmounts(orders.map((order) => order.id)).catch(
+    (error): Awaited<ReturnType<typeof getInstallOrderAmounts>> => {
+      console.error("[backoffice/installations/amounts]", error);
+      return new Map();
+    },
+  );
+
   const items: InstallationOrderListItem[] = orders.map((order) => {
     const request = order.customerRequests[0] ?? null;
     const assignment = order.assignmentAttempts[0] ?? null;
@@ -119,6 +128,7 @@ export async function InstallationOrderListView({
       hasOpenIssue: order.hasOpenIssue,
       issueCodes: order.issues.map((issue) => issue.type),
       statusChangedAt: order.statusChangedAt.toISOString(),
+      settlementAmount: settlementAmounts.get(order.id) ?? null,
       request: request
         ? {
             id: request.id,

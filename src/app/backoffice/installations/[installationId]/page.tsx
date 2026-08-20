@@ -18,6 +18,7 @@ import { getInstallationOrderStatusDetail } from "@/lib/installation/orders/view
 import { getInstallationCompletionForOrder } from "@/lib/installation/completion/service";
 import InstallationOrderDetail, { type InstallationOrderDetailItem } from "./InstallationOrderDetail";
 import CompletionReviewPanel from "./CompletionReviewPanel";
+import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,18 @@ export async function renderInstallationOrderDetailPage({
     }),
   };
 
+  // 승인 시 확정될 금액을 검수 화면에서 미리 보여주기 위한 요율.
+  // 조회에 실패해도 검수 자체는 가능해야 하므로 null 로 떨어뜨린다.
+  const settlementRates =
+    completion && order.currentInstallerId
+      ? await resolveInstallerRates(order.currentInstallerId)
+          .then((resolved) => resolved.rates)
+          .catch((error) => {
+            console.error("[backoffice/completion-review/rates]", error);
+            return null;
+          })
+      : null;
+
   return (
     <>
       {completion ? (
@@ -186,6 +199,7 @@ export async function renderInstallationOrderDetailPage({
           orderStatus={order.status}
           requiredAqaraAppCapability={requiredAqaraAppCapability}
           completion={completion}
+          rates={settlementRates}
         />
       ) : null}
       <InstallationOrderDetail

@@ -62,6 +62,37 @@ export async function getGlobalDefaults(): Promise<EffectiveRates> {
   };
 }
 
+// Same resolution as resolveInstallerRates, but for many installers at once.
+// A list screen that shows an amount per row would otherwise fire one settings
+// read + one override read per row.
+export async function resolveInstallerRatesBatch(
+  installerIds: string[],
+  db: Db = prisma,
+): Promise<Map<string, EffectiveRates>> {
+  const result = new Map<string, EffectiveRates>();
+  const ids = [...new Set(installerIds)];
+  if (ids.length === 0) return result;
+
+  const defaults = await getGlobalDefaults();
+  const overrides = await db.installerRate.findMany({ where: { installerId: { in: ids } } });
+  const overrideById = new Map(overrides.map((row) => [row.installerId, row]));
+
+  for (const id of ids) {
+    const override = overrideById.get(id);
+    result.set(id, {
+      linkageAppFee: override?.linkageAppFee ?? defaults.linkageAppFee,
+      linkageHubFee: override?.linkageHubFee ?? defaults.linkageHubFee,
+      travelFee: override?.travelFee ?? defaults.travelFee,
+      nightSurcharge: override?.nightSurcharge ?? defaults.nightSurcharge,
+      weekendSurcharge: override?.weekendSurcharge ?? defaults.weekendSurcharge,
+      nightStartHour: defaults.nightStartHour,
+      nightEndHour: defaults.nightEndHour,
+    });
+  }
+
+  return result;
+}
+
 // Resolve the effective rates for one installer: global defaults, with any
 // non-null column on the installer's installer_rates row overriding.
 export async function resolveInstallerRates(

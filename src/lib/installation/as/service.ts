@@ -478,6 +478,8 @@ export type AsOrderListItem = {
   customerName: string | null;
   address: string | null;
   installerName: string | null;
+  /** 기사가 등록한 용역비. A/S 정산액은 이 금액 그대로다. */
+  serviceFee: number | null;
   createdAt: string;
 };
 
@@ -492,6 +494,7 @@ export async function listAsOrders(input?: { status?: string }): Promise<AsOrder
       symptomCode: true,
       customerNameEncrypted: true,
       addressEncrypted: true,
+      serviceFee: true,
       createdAt: true,
       currentInstaller: { select: { name: true } },
     },
@@ -504,6 +507,7 @@ export async function listAsOrders(input?: { status?: string }): Promise<AsOrder
     customerName: decryptNullablePii(r.customerNameEncrypted),
     address: decryptNullablePii(r.addressEncrypted),
     installerName: r.currentInstaller?.name ?? null,
+    serviceFee: r.serviceFee,
     createdAt: r.createdAt.toISOString(),
   }));
 }
