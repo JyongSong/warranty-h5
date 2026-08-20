@@ -52,6 +52,14 @@ describe("isWeekend (KST)", () => {
     expect(isWeekend(kst("2026-08-16", 12))).toBe(true); // Sun
     expect(isWeekend(kst("2026-08-12", 12))).toBe(false); // Wed
   });
+
+  // UI 문안은 "야간/휴일"이지만 실제로 보는 건 토·일요일뿐이다.
+  // 평일에 걸린 법정공휴일에는 할증이 붙지 않는다.
+  it("does not treat a weekday public holiday as 휴일", () => {
+    expect(isWeekend(kst("2026-05-05", 12))).toBe(false); // 어린이날 (화)
+    expect(isWeekend(kst("2026-10-09", 12))).toBe(false); // 한글날 (금)
+    expect(isWeekend(kst("2026-12-25", 12))).toBe(false); // 성탄절 (금)
+  });
 });
 
 describe("computeInstallLineItems", () => {

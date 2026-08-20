@@ -2,6 +2,8 @@
 
 import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
+import { computeInstallLineItems } from "@/lib/installation/settlement/compute";
+import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
 import {
   COMPLETION_PHOTO_BUCKET,
   createCompletionUploadTargets,
@@ -85,5 +87,71 @@ export async function submitCompletionAction(input: {
     if (error instanceof InstallationCompletionError) return { ok: false, error: error.message };
     console.error("[installer/completion/submit]", error);
     return { ok: false, error: "SUBMIT_FAILED" };
+  }
+}
+
+export type SettlementPreview =
+  | {
+      ok: true;
+      linkageFee: number;
+      travelFee: number;
+      longDistanceFee: number;
+      nightWeekendFee: number;
+      wallpadAmount: number;
+      totalAmount: number;
+      night: boolean;
+      weekend: boolean;
+    }
+  | { ok: false };
+
+/**
+ * 제출 전에 보여줄 정산 예상 금액.
+ *
+ * 실제 스냅샷은 본사 승인 시점에 같은 computeInstallLineItems 로 다시 계산된다.
+ * 여기서 미리 보여주는 이유는 기사가 "얼마짜리 건을 올리는지" 모르고 제출하지
+ * 않게 하려는 것이고, 그래서 계산식을 복제하지 않고 같은 함수를 부른다.
+ *
+ * 확인용이므로 실패해도 제출을 막지 않는다 (ok:false → 금액 없이 확인만 받는다).
+ */
+export async function previewInstallSettlementAction(input: {
+  orderId: string;
+  capability: string;
+  longDistanceAmount: number | null;
+  wallpadAmount: number | null;
+  installEndAt: string;
+}): Promise<SettlementPreview> {
+  try {
+    const installer = await getCurrentInstaller();
+    if (!installer) return { ok: false };
+
+    const view = await getInstallerOrderView(installer.id, input.orderId?.trim() ?? "");
+    if (!view || view.status !== "ACCEPTED") return { ok: false };
+
+    const installEndAt = input.installEndAt ? new Date(input.installEndAt) : new Date(NaN);
+    if (Number.isNaN(installEndAt.getTime())) return { ok: false };
+
+    const { rates } = await resolveInstallerRates(installer.id);
+    const { items, breakdown } = computeInstallLineItems({
+      achievedAqaraAppCapability: input.capability,
+      longDistanceAmount: input.longDistanceAmount,
+      wallpadAmount: input.wallpadAmount,
+      installEndAt,
+      rates,
+    });
+
+    return {
+      ok: true,
+      linkageFee: items.linkageFee,
+      travelFee: items.travelFee,
+      longDistanceFee: items.longDistanceFee,
+      nightWeekendFee: items.nightWeekendFee,
+      wallpadAmount: items.wallpadAmount,
+      totalAmount: items.totalAmount,
+      night: breakdown.night,
+      weekend: breakdown.weekend,
+    };
+  } catch (error) {
+    console.error("[installer/completion/preview]", error);
+    return { ok: false };
   }
 }

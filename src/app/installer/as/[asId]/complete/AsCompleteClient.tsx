@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { getAsUploadTargetsAction, submitAsCompletionAction } from "./actions";
+import ConfirmAmountDialog from "../../../ConfirmAmountDialog";
 import * as ui from "../../../ui";
 
 let supabaseBrowser: ReturnType<typeof createClient> | null = null;
@@ -63,6 +64,10 @@ export default function AsCompleteClient({
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = resolutionDetail.trim().length > 0 && !busy && !compressing;
+  const [confirming, setConfirming] = useState(false);
+  // A/S 정산은 기사가 입력한 용역비 그대로다. 서버에 물어볼 필요가 없어
+  // 오프라인에서도 금액을 보여줄 수 있다.
+  const feeAmount = Number(serviceFee.replace(/[^\d]/g, "") || 0);
 
   async function addPhotos(list: FileList | null) {
     if (!list) return;
@@ -101,8 +106,12 @@ export default function AsCompleteClient({
         photoPaths,
       });
       if (res.ok) router.push("/installer/as");
-      else setError(ERR[res.error] ?? ERR.DEFAULT);
+      else {
+        setConfirming(false);
+        setError(ERR[res.error] ?? ERR.DEFAULT);
+      }
     } catch {
+      setConfirming(false);
       setError("사진 업로드에 실패했습니다. 네트워크 확인 후 다시 시도해 주세요.");
     } finally {
       setBusy(false);
@@ -174,11 +183,32 @@ export default function AsCompleteClient({
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
         <div style={{ marginTop: 8 }}>
-          <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={submit}>
+          <button
+            style={ui.primaryButton(!canSubmit)}
+            disabled={!canSubmit}
+            onClick={() => {
+              setError(null);
+              setConfirming(true);
+            }}
+          >
             {busy ? "제출 중…" : "완료 제출"}
           </button>
         </div>
       </div>
+
+      <ConfirmAmountDialog
+        open={confirming}
+        title="이 금액으로 A/S 완료 등록합니다"
+        amount={feeAmount}
+        note={
+          feeAmount === 0
+            ? "용역비를 0원으로 제출합니다. 금액이 있다면 취소하고 입력해 주세요."
+            : "본사 승인 후 확정됩니다."
+        }
+        busy={busy}
+        onConfirm={submit}
+        onCancel={() => setConfirming(false)}
+      />
     </main>
   );
 }

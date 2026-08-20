@@ -290,7 +290,7 @@ function SettlementTab({
                         <th className="text-right">연동비</th>
                         <th className="text-right">출장비</th>
                         <th className="text-right">장거리</th>
-                        <th className="text-right">야간/주말</th>
+                        <th className="text-right">야간/휴일</th>
                         <th className="text-right">용역비</th>
                         <th className="text-right">합계</th>
                       </tr>
@@ -383,7 +383,7 @@ function RatesTab({
           <Stat label="연동비 · 허브" value={won(rateDefaults.linkageHubFee)} />
           <Stat label="출장비" value={won(rateDefaults.travelFee)} />
           <Stat label="야간 할증" value={won(rateDefaults.nightSurcharge)} />
-          <Stat label="주말 할증" value={won(rateDefaults.weekendSurcharge)} />
+          <Stat label="휴일 할증" value={won(rateDefaults.weekendSurcharge)} />
           <Stat label="야간 시간대" value={`${rateDefaults.nightStartHour}시~${rateDefaults.nightEndHour}시`} />
         </div>
       </section>
@@ -459,7 +459,7 @@ function RateOverrideRow({ row }: { row: InstallerRateOverrideView }) {
       {field("linkageHubFee", "허브")}
       {field("travelFee", "출장")}
       {field("nightSurcharge", "야간")}
-      {field("weekendSurcharge", "주말")}
+      {field("weekendSurcharge", "휴일")}
       <button className={primaryBtn} disabled={pending} onClick={save}>
         저장
       </button>

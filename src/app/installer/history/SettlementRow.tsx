@@ -16,7 +16,7 @@ export default function SettlementRow({ row }: { row: MonthlySettlementRow }) {
     { label: "연동비", value: row.linkageFee },
     { label: "출장비", value: row.travelFee },
     { label: "장거리", value: row.longDistanceFee },
-    { label: "야간/주말", value: row.nightWeekendFee },
+    { label: "야간/휴일", value: row.nightWeekendFee },
     { label: "용역비", value: row.serviceFee },
   ].filter((item) => item.value > 0);
 

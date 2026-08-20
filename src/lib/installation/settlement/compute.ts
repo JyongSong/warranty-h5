@@ -23,6 +23,8 @@ export function isNight(installEndAt: Date, nightStartHour: number, nightEndHour
   return kstHour >= nightStartHour || kstHour < nightEndHour;
 }
 
+// UI 문안은 "야간/휴일"이지만 여기서 보는 건 토·일요일뿐이다.
+// 법정공휴일(설날·추석처럼 음력에 걸린 날 포함)은 반영되지 않는다.
 export function isWeekend(installEndAt: Date): boolean {
   const kstDay = new Date(installEndAt.getTime() + KST_OFFSET_MS).getUTCDay();
   return kstDay === 0 || kstDay === 6; // Sun | Sat
