@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 
-export type InstallerOrderStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "TIMED_OUT" | "COMPLETED";
+// REVIEW = 완료 등록 후 본사 승인 대기. A/S 쪽과 같은 취급이다.
+export type InstallerOrderStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "REVIEW"
+  | "REJECTED"
+  | "TIMED_OUT"
+  | "COMPLETED";
 
 export type InstallerOrderItem = {
   orderId: string;
@@ -123,7 +130,12 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
       select: { id: true, installationOrder: { select: orderContentSelect } },
     }),
     prisma.installationOrder.findMany({
-      where: { currentInstallerId: installerId, status: "INSTALLER_ASSIGNED" },
+      // WAITING_HQ_REVIEW 를 빼면 완료 등록 직후 그 건이 기사 화면에서
+      // 사라진다(승인 전까지 어느 목록에도 안 잡힌다).
+      where: {
+        currentInstallerId: installerId,
+        status: { in: ["INSTALLER_ASSIGNED", "WAITING_HQ_REVIEW"] },
+      },
       orderBy: { updatedAt: "desc" },
       select: orderContentSelect,
     }),
@@ -150,7 +162,11 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
     .map((a) => shapeOrder(a.installationOrder, { attemptId: a.id, status: "PENDING", piiVisible: false }));
 
   const active: InstallerOrderItem[] = (activeOrders as OrderContent[]).map((o) =>
-    shapeOrder(o, { attemptId: null, status: "ACCEPTED", piiVisible: true }),
+    shapeOrder(o, {
+      attemptId: null,
+      status: o.status === "WAITING_HQ_REVIEW" ? "REVIEW" : "ACCEPTED",
+      piiVisible: true,
+    }),
   );
 
   const completed: InstallerOrderItem[] = (
@@ -193,6 +209,11 @@ export async function getInstallerOrderView(
   // Accepted / in-progress job for this installer.
   if (order.currentInstallerId === installerId && order.status === "INSTALLER_ASSIGNED") {
     return shapeOrder(order, { attemptId: null, status: "ACCEPTED", piiVisible: true });
+  }
+
+  // Completion submitted, waiting for HQ review.
+  if (order.currentInstallerId === installerId && order.status === "WAITING_HQ_REVIEW") {
+    return shapeOrder(order, { attemptId: null, status: "REVIEW", piiVisible: true });
   }
 
   // Completed job for this installer.

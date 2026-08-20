@@ -29,33 +29,6 @@ export function Section({
   );
 }
 
-export function CompletedByDateSection({ items }: { items: InstallerOrderItem[] }) {
-  // items arrive sorted newest-first; group consecutive same-date runs.
-  const groups: Array<{ date: string; items: InstallerOrderItem[] }> = [];
-  for (const item of items) {
-    const date = item.completedDate ?? "-";
-    const last = groups[groups.length - 1];
-    if (last && last.date === date) last.items.push(item);
-    else groups.push({ date, items: [item] });
-  }
-
-  return (
-    <section style={{ marginBottom: 20 }}>
-      <h2 style={sectionTitle}>
-        완료 <span style={{ color: "#a1a1aa" }}>{items.length}</span>
-      </h2>
-      {groups.map((g) => (
-        <div key={g.date} style={{ marginBottom: 10 }}>
-          <div style={dateHeader}>{g.date}</div>
-          {g.items.map((item) => (
-            <OrderCard key={item.orderId} item={item} />
-          ))}
-        </div>
-      ))}
-    </section>
-  );
-}
-
 export function OrderCard({ item }: { item: InstallerOrderItem }) {
   return (
     <Link href={`/installer/orders/${item.orderId}`} style={cardLink}>
@@ -73,7 +46,7 @@ export function OrderCard({ item }: { item: InstallerOrderItem }) {
         {item.productSummary ? <div style={{ ...ui.rowValue, marginBottom: 8 }}>{item.productSummary}</div> : null}
         <Row label="희망 일정" value={[item.installDate, item.installTimeSlot].filter(Boolean).join(" ") || "-"} />
         <Row label="주소" value={item.address ?? "-"} />
-        {(item.status === "ACCEPTED" || item.status === "COMPLETED") && item.customerName ? (
+        {item.status !== "PENDING" && item.customerName ? (
           <Row label="고객" value={item.customerName} />
         ) : null}
         {item.status === "PENDING" ? (
@@ -134,6 +107,7 @@ export function StatusBadge({ status }: { status: InstallerOrderItem["status"] }
   const map: Record<InstallerOrderItem["status"], { text: string; bg: string; color: string }> = {
     PENDING: { text: "응답 대기", bg: "#fef3c7", color: "#92400e" },
     ACCEPTED: { text: "진행 중", bg: "#dcfce7", color: "#166534" },
+    REVIEW: { text: "검수 대기", bg: "#dbeafe", color: "#1e40af" },
     COMPLETED: { text: "완료", bg: "#dbeafe", color: "#1e40af" },
     REJECTED: { text: "거절", bg: "#f4f4f5", color: "#71717a" },
     TIMED_OUT: { text: "시간 초과", bg: "#f4f4f5", color: "#71717a" },
@@ -157,7 +131,7 @@ export function EmptyCard({ text }: { text: string }) {
   return <div style={{ ...ui.card, textAlign: "center", color: "#a1a1aa", fontSize: 14 }}>{text}</div>;
 }
 
-export const sectionTitle: CSSProperties = {
+const sectionTitle: CSSProperties = {
   fontSize: 14,
   fontWeight: 800,
   margin: "0 0 8px",
@@ -182,13 +156,6 @@ const rejectBanner: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
   marginBottom: 10,
-};
-
-const dateHeader: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  color: "#71717a",
-  padding: "2px 0 6px",
 };
 
 const emptyStyle: CSSProperties = { fontSize: 13, color: "#a1a1aa", margin: "0 0 8px" };

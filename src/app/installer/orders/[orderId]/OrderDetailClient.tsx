@@ -96,6 +96,12 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
 
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
+        {item.status === "REVIEW" ? (
+          <div style={reviewNote}>
+            완료 등록이 접수되었습니다. 본사 검수 후 정산에 반영됩니다.
+          </div>
+        ) : null}
+
         {item.status === "ACCEPTED" ? (
           <div style={{ marginTop: 16 }}>
             <button
@@ -172,6 +178,7 @@ function StatusBadge({ status }: { status: InstallerOrderItem["status"] }) {
   const map: Record<InstallerOrderItem["status"], { text: string; bg: string; color: string }> = {
     PENDING: { text: "응답 대기", bg: "#fef3c7", color: "#92400e" },
     ACCEPTED: { text: "진행 중", bg: "#dcfce7", color: "#166534" },
+    REVIEW: { text: "검수 대기", bg: "#dbeafe", color: "#1e40af" },
     COMPLETED: { text: "완료", bg: "#dbeafe", color: "#1e40af" },
     REJECTED: { text: "거절", bg: "#f4f4f5", color: "#71717a" },
     TIMED_OUT: { text: "시간 초과", bg: "#f4f4f5", color: "#71717a" },
@@ -197,6 +204,17 @@ const reasonRow: CSSProperties = {
   gap: 10,
   padding: "8px 0",
   fontSize: 15,
+};
+
+const reviewNote: CSSProperties = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e40af",
+  borderRadius: 10,
+  padding: "12px 14px",
+  fontSize: 13,
+  lineHeight: 1.5,
+  marginTop: 16,
 };
 
 const rejectAlert: CSSProperties = {
