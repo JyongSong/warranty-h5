@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { CUSTOMER_REQUEST_TOKEN_TTL_HOURS } from "@/lib/installation/customer/timing";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -46,7 +47,7 @@ export type CreateCustomerInputRequestsForInstallationOrdersResult = ProcessPend
   skippedInvalidStateCount: number;
 };
 
-const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = 72;
+
 
 export async function processPendingInstallationOrders({
   limit = 25,

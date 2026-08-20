@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
+  REMINDER_AFTER_HOURS,
+  REMINDER_TOKEN_TTL_HOURS,
+} from "@/lib/installation/customer/timing";
+import {
   decryptNullablePii,
   encryptNullablePii,
   hmacPii,
@@ -37,8 +41,7 @@ export type RemindExpiredInstallationCustomerRequestsResult = {
   failedCount: number;
 };
 
-const REMINDER_TOKEN_TTL_HOURS = 24;
-const REMINDER_AFTER_HOURS = 72;
+
 
 export async function remindExpiredInstallationCustomerRequests({
   baseUrl,

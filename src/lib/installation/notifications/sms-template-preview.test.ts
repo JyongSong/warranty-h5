@@ -24,7 +24,7 @@ describe("installation SMS template preview", () => {
       label: "고객 설치 예약 링크",
       audience: "고객",
       filePath: "src/lib/installation/notifications/sms-template-customer-reservation-link.json",
-      variables: ["productSummary", "reservationUrl"],
+      variables: ["productSummary", "reservationUrl", "fallbackHours"],
     });
   });
 
@@ -52,12 +52,12 @@ describe("installation SMS template preview", () => {
     const rendered = renderInstallationSmsTemplatePreview("customer_reservation_link", {
       productSummary: "Aqara 스마트 도어락 K100 x1 외",
       reservationUrl: "https://example.com/i/c/token-1",
+      fallbackHours: "48",
     });
 
     expect(rendered).toContain(
-      "아래 링크에서 설치 희망 정보를 입력해 주세요.\n\n" +
-        "주문 상품:\n" +
-        "Aqara 스마트 도어락 K100 x1 외\n\n" +
+      "주문 상품: Aqara 스마트 도어락 K100 x1 외\n\n" +
+        "아래 링크에서 설치 희망일과 주소를 입력해 주세요.\n\n" +
         "https://example.com/i/c/token-1\n\n",
     );
   });

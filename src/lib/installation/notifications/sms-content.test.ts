@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 import {
   buildCustomerAssignmentConfirmedSmsContent,
   buildCustomerReservationLinkSmsContent,
@@ -31,12 +32,15 @@ describe("installation SMS content", () => {
     expect(content.text).toBe(
       "[아카라 라이프]\n" +
         "설치 예약 정보를 입력해 주세요.\n" +
-        "아래 링크에서 설치 희망 정보를 입력해 주세요.\n" +
         "\n" +
-        "주문 상품:\n" +
-        "Aqara 스마트 도어락 K100 x1 외\n" +
+        "주문 상품: Aqara 스마트 도어락 K100 x1 외\n" +
         "\n" +
-        "https://example.com/i/c/token-1\n\n" +
+        "아래 링크에서 설치 희망일과 주소를 입력해 주세요.\n" +
+        "\n" +
+        "https://example.com/i/c/token-1\n" +
+        "\n" +
+        `※ ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.\n` +
+        "\n" +
         "※ 발신전용",
     );
   });
@@ -47,7 +51,7 @@ describe("installation SMS content", () => {
       reservationUrl: "https://example.com/i/c/token-1",
     });
 
-    expect(content.text).toContain("주문 상품:\nAqara 스마트 도어락 K100 x1 외");
+    expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1 외");
     expect(content.text).not.toContain("용역 출장비 x1");
     expect(content.text).not.toContain("월패드 연동(RF447) x1");
   });

@@ -4,6 +4,7 @@ import customerReservationReminderTemplate from "@/lib/installation/notification
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
+import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 
 export type InstallationSmsTemplatePreviewKey =
   | "customer_reservation_link"
@@ -58,6 +59,7 @@ function createTemplateDefinitions(baseUrl: string): InstallationSmsTemplatePrev
       sampleVars: {
         productSummary: "Aqara 스마트 도어락 K100 x1 / 용역 출장비 x1",
         reservationUrl: `${baseUrl}/i/c/customer-token`,
+        fallbackHours: String(FALLBACK_AFTER_HOURS),
       },
     },
     {

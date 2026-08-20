@@ -3,6 +3,7 @@ import {
   renderInstallerInstallationSmsTemplate,
 } from "@/lib/installation/notifications/sms-template";
 import { formatKrPhone } from "@/lib/phone";
+import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 
 export type InstallationSmsContent = {
   templateKey:
@@ -27,6 +28,8 @@ export function buildCustomerReservationLinkSmsContent({
     text: renderCustomerInstallationSmsTemplate(templateKey, {
       productSummary: formatSmsProductSummary(productSummary),
       reservationUrl,
+      // 문안의 시간과 실제 폴백 시점이 어긋나지 않도록 상수에서 렌더한다.
+      fallbackHours: String(FALLBACK_AFTER_HOURS),
     }),
   };
 }
