@@ -76,7 +76,9 @@ export async function POST(req: Request) {
         freeAsEndDate: rec.freeAsEndDate,
         installerPhone: rec.installerPhone,
       });
-      await sendSms(rec.userPhone, userSmsObj.text, userSmsObj.subject);
+      await sendSms(rec.userPhone, userSmsObj.text, userSmsObj.subject, {
+        alimtalk: userSmsObj.alimtalk,
+      });
       console.log("[SMS SENT][CONFIRM→USER]", { to: rec.userPhone });
     }
 

@@ -142,7 +142,9 @@ export async function POST(req: Request) {
             freeAsEndDate: freeEnd,
             installerPhone: finalInstallType === "installer" ? installerPhoneValue : null,
         });
-        await sendSms(userPhone, userSmsObj.text, userSmsObj.subject);
+        await sendSms(userPhone, userSmsObj.text, userSmsObj.subject, {
+            alimtalk: userSmsObj.alimtalk,
+        });
         console.log("[SMS SENT][ADMIN_REGISTER→USER]", { to: userPhone, installType: finalInstallType });
 
         return NextResponse.json({

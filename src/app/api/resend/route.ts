@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { CONFIRM_TOKEN_TTL_MS } from "@/lib/confirmToken";
+import { buildInstallerConfirmSms } from "@/lib/installerSms";
 import { sendSms } from "@/lib/sms";
 import { getErrorMessage } from "@/lib/error";
 import { prisma } from "@/lib/prisma";
@@ -50,15 +51,11 @@ export async function POST(req: Request) {
     });
 
     const confirmLink = `${getBaseUrl()}/confirm?t=${encodeURIComponent(token)}`;
-    const installerSubject = "[Aqara]";
-    const smsText = `설치 확인이 필요합니다.
-24시간 이내에 아래 링크에서 설치 정보를 확인 후 보증기간이 적용됩니다.
+    const installerSmsObj = buildInstallerConfirmSms({ confirmLink });
 
-${confirmLink}
-
-※ 발신전용`;
-
-    await sendSms(rec.installerPhone, smsText, installerSubject);
+    await sendSms(rec.installerPhone, installerSmsObj.text, installerSmsObj.subject, {
+      alimtalk: installerSmsObj.alimtalk,
+    });
 
     console.log("[SMS SENT][RESEND] to:", rec.installerPhone, "link:", confirmLink);
 
