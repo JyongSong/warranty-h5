@@ -157,7 +157,7 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     timeoutExpiredInstallerAssignmentsMock.mockResolvedValue({ timedOutCount: 6, failedCount: 0 });
     alertOrphanedInstallationOrdersMock.mockResolvedValue({ issueCount: 0 });
     alertDueSoonUnassignedOrdersMock.mockResolvedValue({ issueCount: 7 });
-    sendPendingInstallationNotificationsMock.mockResolvedValue({ sentCount: 8, failedCount: 0 });
+    sendPendingInstallationNotificationsMock.mockResolvedValue({ sentCount: 8, failedCount: 0, pushedCount: 0 });
     syncInstallationSmsDeliveryReportsMock.mockResolvedValue({
       checkedCount: 9,
       updatedCount: 9,

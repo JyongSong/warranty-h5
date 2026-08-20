@@ -5,7 +5,6 @@ import {
 import { formatKrPhone } from "@/lib/phone";
 import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
-import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 export type InstallationSmsTemplateKey =
   | "customer_reservation_link"
@@ -98,8 +97,9 @@ export function buildInstallerAssignmentRequestSmsContent({
       addressMain: addressMain?.trim() || "미확인",
       installDate: installDate?.trim() || "미확인",
       responseUrl,
-      // 문안의 기한과 실제 타임아웃이 어긋나지 않도록 상수에서 렌더한다.
-      responseTimeoutHours: String(INSTALLER_RESPONSE_TIMEOUT_HOURS),
+      // responseDeadline 은 여기서 채우지 않는다. 마감 시각은 알림이 실제로
+      // 나가는 시점에 정해지고(발송 창 때문에 생성 시점과 몇 시간 차이날 수
+      // 있다), outbox 가 applyInstallerResponseDeadline 으로 채운다.
     }),
   };
 }
@@ -186,4 +186,11 @@ export function toInstallationNotificationAlimtalkFields(content: InstallationSm
       Object.entries(content.alimtalk.variables).map(([name, value]) => [name, value ?? ""]),
     ),
   };
+}
+
+/** 저장된 본문의 `{responseDeadline}` 자리에 실제 마감 시각을 채운다. */
+export const RESPONSE_DEADLINE_PLACEHOLDER = "{responseDeadline}";
+
+export function applyInstallerResponseDeadline(body: string, deadlineText: string) {
+  return body.split(RESPONSE_DEADLINE_PLACEHOLDER).join(deadlineText);
 }

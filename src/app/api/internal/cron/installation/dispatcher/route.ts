@@ -146,6 +146,7 @@ export async function GET(request: Request) {
               : Promise.resolve({
                   sentCount: 0,
                   failedCount: 0,
+                  pushedCount: 0,
                   skippedQuietHours: true,
                 }),
         ),

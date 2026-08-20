@@ -20,6 +20,8 @@ const {
   updateOrder,
   createStatusEvent,
   createInstallationIssue,
+  listInstallerDeviceTokens,
+  sendAssignmentPushToInstaller,
 } = vi.hoisted(() => ({
   findMany: vi.fn(),
   findUnique: vi.fn(),
@@ -34,6 +36,13 @@ const {
   updateOrder: vi.fn(),
   createStatusEvent: vi.fn(),
   createInstallationIssue: vi.fn(),
+  listInstallerDeviceTokens: vi.fn(),
+  sendAssignmentPushToInstaller: vi.fn(),
+}));
+
+vi.mock("@/lib/installer/devices", () => ({
+  listInstallerDeviceTokens,
+  sendAssignmentPushToInstaller,
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -82,10 +91,16 @@ describe("sendPendingInstallationNotifications", () => {
     updateManyIssues.mockResolvedValue({ count: 0 });
     countIssues.mockReset();
     findUniqueCustomerRequest.mockReset();
+    listInstallerDeviceTokens.mockReset();
+    // 대부분의 기사는 아직 앱 미설치 상태라 기본은 문자 즉시 발송이다.
+    listInstallerDeviceTokens.mockResolvedValue([]);
+    sendAssignmentPushToInstaller.mockReset();
     findUniqueAssignment.mockReset();
     findUniqueAssignment.mockResolvedValue({
       id: "assignment-1",
       status: "WAITING_INSTALLER_RESPONSE",
+      installerId: "installer-1",
+      installerTokenExpiresAt: null,
       installationOrder: {
         status: "WAITING_INSTALLER_RESPONSE",
         activeAssignmentId: "assignment-1",
@@ -117,11 +132,88 @@ describe("sendPendingInstallationNotifications", () => {
       sendSms,
     });
 
-    expect(result).toEqual({ sentCount: 1, failedCount: 0 });
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
     expect(sendSms).toHaveBeenCalledWith("010-1234-5678", "hello", {
       subject: null,
       alimtalk: undefined,
     });
+  });
+
+  it("pushes instead of texting when the installer has a registered device", async () => {
+    const sendSms = vi.fn();
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["fcm-token-1"]);
+    findMany.mockResolvedValue([assignmentRequestNotification()]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 0, failedCount: 0, pushedCount: 1 });
+    expect(sendAssignmentPushToInstaller).toHaveBeenCalledWith("installer-1", {
+      title: "새 작업이 배정되었습니다",
+      body: "앱에서 확인하고 수락/거절해 주세요.",
+    });
+    // 문자는 아직 나가지 않고, 행은 폴백을 기다리며 PENDING 으로 남는다.
+    expect(sendSms).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: { pushSentAt: now },
+    });
+    // 마감 시각은 첫 알림인 푸시 시점부터 24시간.
+    expect(updateAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          installerNotifiedAt: now,
+          installerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
+        }),
+      }),
+    );
+  });
+
+  it("texts immediately when the installer has no registered device", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue([]);
+    findMany.mockResolvedValue([assignmentRequestNotification()]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    expect(sendSms).toHaveBeenCalledOnce();
+    expect(sendAssignmentPushToInstaller).not.toHaveBeenCalledWith(
+      "installer-1",
+      expect.anything(),
+    );
+  });
+
+  it("does not extend the deadline when the fallback text follows a push", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T05:00:00.000Z");
+    const deadline = new Date("2026-06-12T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["fcm-token-1"]);
+    findUniqueAssignment.mockResolvedValue({
+      id: "assignment-1",
+      status: "WAITING_INSTALLER_RESPONSE",
+      installerId: "installer-1",
+      installerTokenExpiresAt: deadline,
+      installationOrder: {
+        status: "WAITING_INSTALLER_RESPONSE",
+        activeAssignmentId: "assignment-1",
+      },
+    });
+    findMany.mockResolvedValue([
+      assignmentRequestNotification({ pushSentAt: new Date("2026-06-11T00:00:00.000Z") }),
+    ]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    // 푸시 시점에 정해진 마감을 그대로 두어야 총 24시간이 유지된다.
+    const assignmentData = updateAssignment.mock.calls[0]?.[0].data;
+    expect(assignmentData).not.toHaveProperty("installerTokenExpiresAt");
+    expect(assignmentData).not.toHaveProperty("installerNotifiedAt");
+    // 본문의 자리표시자가 실제 마감 시각으로 채워진다.
+    expect(sendSms.mock.calls[0][1]).toContain("6월 12일(금) 9시까지");
+    expect(sendSms.mock.calls[0][1]).not.toContain("{responseDeadline}");
   });
 
   it("restores the stored alimtalk template and the LMS subject at send time", async () => {
@@ -216,7 +308,7 @@ describe("sendPendingInstallationNotifications", () => {
 
     await expect(
       sendPendingInstallationNotifications({ now, sendSms }),
-    ).resolves.toEqual({ sentCount: 0, failedCount: 1 });
+    ).resolves.toEqual({ sentCount: 0, failedCount: 1, pushedCount: 0 });
     expect(sendSms).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenLastCalledWith({
       where: { id: "notification-1" },
@@ -317,7 +409,7 @@ describe("sendPendingInstallationNotifications", () => {
       sendSms,
     });
 
-    expect(result).toEqual({ sentCount: 1, failedCount: 0 });
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
       data: {
@@ -415,7 +507,7 @@ describe("sendPendingInstallationNotifications", () => {
 
     const result = await sendPendingInstallationNotifications({ sendSms });
 
-    expect(result).toEqual({ sentCount: 0, failedCount: 1 });
+    expect(result).toEqual({ sentCount: 0, failedCount: 1, pushedCount: 0 });
     expect(sendSms).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
@@ -453,7 +545,7 @@ describe("sendPendingInstallationNotifications", () => {
 
     const result = await sendPendingInstallationNotifications({ sendSms });
 
-    expect(result).toEqual({ sentCount: 0, failedCount: 1 });
+    expect(result).toEqual({ sentCount: 0, failedCount: 1, pushedCount: 0 });
     expect(sendSms).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
@@ -487,7 +579,7 @@ describe("sendPendingInstallationNotifications", () => {
       sendSms,
     });
 
-    expect(result).toEqual({ sentCount: 0, failedCount: 1 });
+    expect(result).toEqual({ sentCount: 0, failedCount: 1, pushedCount: 0 });
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
       data: expect.objectContaining({
@@ -521,7 +613,7 @@ describe("sendPendingInstallationNotifications", () => {
       sendSms,
     });
 
-    expect(result).toEqual({ sentCount: 0, failedCount: 1 });
+    expect(result).toEqual({ sentCount: 0, failedCount: 1, pushedCount: 0 });
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
       data: expect.objectContaining({
@@ -1258,3 +1350,20 @@ describe("sendPendingInstallationNotifications", () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+function assignmentRequestNotification(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: "notification-1",
+    installationOrderId: "order-1",
+    assignmentAttemptId: "assignment-1",
+    smsType: "INSTALLER_ASSIGNMENT_REQUEST",
+    smsTemplateKey: "installer_assignment_request",
+    recipientPhoneEncrypted: encryptPii("010-1234-5678"),
+    smsBody: "※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.",
+    retryCount: 0,
+    pushSentAt: null,
+    ...overrides,
+  };
+}

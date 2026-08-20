@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
-import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 import {
   buildCustomerAssignmentConfirmedSmsContent,
   buildCustomerReservationLinkSmsContent,
@@ -97,7 +96,8 @@ describe("installation SMS content", () => {
         "\n" +
         "https://example.com/i/i/token-2\n" +
         "\n" +
-        `※ ${INSTALLER_RESPONSE_TIMEOUT_HOURS}시간 이내 미응답 시 다른 기사님께 자동으로 배정됩니다.\n` +
+        // 마감 시각은 발송 시점에 채워지므로 빌더 단계에서는 자리표시자로 남는다.
+        "※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
         "\n" +
         "※ 발신전용",
     );

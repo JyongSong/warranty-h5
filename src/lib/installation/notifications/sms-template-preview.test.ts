@@ -3,7 +3,6 @@ import {
   getInstallationSmsTemplatePreviews,
   renderInstallationSmsTemplatePreview,
 } from "@/lib/installation/notifications/sms-template-preview";
-import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 describe("installation SMS template preview", () => {
   beforeEach(() => {
@@ -34,7 +33,7 @@ describe("installation SMS template preview", () => {
       addressMain: "서울 강남구",
       installDate: "2026-06-20",
       responseUrl: "https://example.com/i/i/token-1",
-      responseTimeoutHours: String(INSTALLER_RESPONSE_TIMEOUT_HOURS),
+      responseDeadline: "8월 21일(금) 14시",
     });
 
     expect(rendered).toBe(
@@ -47,7 +46,7 @@ describe("installation SMS template preview", () => {
         "\n" +
         "https://example.com/i/i/token-1\n" +
         "\n" +
-        `※ ${INSTALLER_RESPONSE_TIMEOUT_HOURS}시간 이내 미응답 시 다른 기사님께 자동으로 배정됩니다.\n` +
+        "※ 8월 21일(금) 14시까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
         "\n" +
         "※ 발신전용",
     );

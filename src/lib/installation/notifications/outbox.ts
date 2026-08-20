@@ -1,9 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
-import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
+import {
+  listInstallerDeviceTokens,
+  sendAssignmentPushToInstaller,
+} from "@/lib/installer/devices";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
-import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
-import { getInstallationSmsSubject } from "@/lib/installation/notifications/sms-content";
+import {
+  formatInstallerResponseDeadline,
+  getInstallerPushSmsFallbackCutoff,
+  getInstallerResponseExpiresAt,
+} from "@/lib/installation/installer/timing";
+import {
+  applyInstallerResponseDeadline,
+  getInstallationSmsSubject,
+} from "@/lib/installation/notifications/sms-content";
 import {
   ALIMTALK_TEMPLATES,
   type AlimtalkRequest,
@@ -37,6 +47,8 @@ type SendPendingInstallationNotificationsOptions = {
 export type SendPendingInstallationNotificationsResult = {
   sentCount: number;
   failedCount: number;
+  /** 문자 대신 앱 푸시만 보내고 폴백을 기다리는 건수 */
+  pushedCount: number;
 };
 
 export type SyncInstallationSmsDeliveryReportsResult = {
@@ -55,6 +67,10 @@ type InstallationNotificationForSend = {
   recipientPhoneEncrypted: string | null;
   smsBody: string;
   retryCount: number;
+  pushSentAt?: Date | null;
+  smsTemplateKey?: string | null;
+  alimtalkTemplateKey?: string | null;
+  alimtalkVariables?: unknown;
 };
 
 type InstallationNotificationForDeliveryReport = {
@@ -81,10 +97,13 @@ type InstallationNotificationForFailure = {
  * outbox 는 발송 시점에 돌기 때문에 생성 시점의 변수 값을 그대로 써야 한다.
  * 컬럼이 비어 있거나 레지스트리에 없는 키면 SMS 로만 나간다.
  */
-function toAlimtalkRequest(notification: {
-  alimtalkTemplateKey: string | null;
-  alimtalkVariables: unknown;
-}): AlimtalkRequest | undefined {
+function toAlimtalkRequest(
+  notification: {
+    alimtalkTemplateKey?: string | null;
+    alimtalkVariables?: unknown;
+  },
+  deadlineText?: string,
+): AlimtalkRequest | undefined {
   const templateKey = notification.alimtalkTemplateKey;
   if (!templateKey || !(templateKey in ALIMTALK_TEMPLATES)) return undefined;
 
@@ -96,6 +115,11 @@ function toAlimtalkRequest(notification: {
     variables[name] = typeof value === "string" ? value : null;
   }
 
+  // 마감 시각은 저장 시점에 알 수 없어 발송 시점에 채운다.
+  if (deadlineText && variables.responseDeadline === "") {
+    variables.responseDeadline = deadlineText;
+  }
+
   return { templateKey: templateKey as AlimtalkTemplateKey, variables };
 }
 
@@ -105,13 +129,21 @@ export async function sendPendingInstallationNotifications({
   sendSms = defaultSendSms,
 }: SendPendingInstallationNotificationsOptions = {}): Promise<SendPendingInstallationNotificationsResult> {
   const notifications = await prisma.installationNotification.findMany({
-    where: { status: "PENDING" },
+    where: {
+      status: "PENDING",
+      // 푸시를 보낸 건은 폴백 시간이 지나기 전까지 다시 집지 않는다.
+      OR: [
+        { pushSentAt: null },
+        { pushSentAt: { lte: getInstallerPushSmsFallbackCutoff(now) } },
+      ],
+    },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
 
   let sentCount = 0;
   let failedCount = 0;
+  let pushedCount = 0;
 
   for (const notification of notifications) {
     let providerAccepted = false;
@@ -120,12 +152,18 @@ export async function sendPendingInstallationNotifications({
         failedCount += 1;
         continue;
       }
+      if (await tryPushInsteadOfSms(notification, now)) {
+        pushedCount += 1;
+        continue;
+      }
+
+      const deadlineText = await resolveResponseDeadlineText(notification, now);
       const sendResult = await sendSms(
         decryptNullablePii(notification.recipientPhoneEncrypted),
-        notification.smsBody,
+        applyInstallerResponseDeadline(notification.smsBody, deadlineText),
         {
           subject: getInstallationSmsSubject(notification.smsTemplateKey),
-          alimtalk: toAlimtalkRequest(notification),
+          alimtalk: toAlimtalkRequest(notification, deadlineText),
         },
       );
       providerAccepted = true;
@@ -182,7 +220,7 @@ export async function sendPendingInstallationNotifications({
     }
   }
 
-  return { sentCount, failedCount };
+  return { sentCount, failedCount, pushedCount };
 }
 
 export async function syncInstallationSmsDeliveryReports({
@@ -607,6 +645,86 @@ function getErrorMessage(error: unknown) {
   return "Unknown SMS send failure";
 }
 
+/**
+ * 등록 기기가 있는 기사에게는 문자 대신 앱 푸시를 먼저 보낸다.
+ * 푸시를 보냈으면 true 를 돌려주고 알림 행은 PENDING 으로 남겨, 폴백 시간이
+ * 지난 뒤 같은 행이 문자로 나가게 한다. 그 사이 기사가 응답하면 다음 회차의
+ * skipStaleNotification 이 걸러낸다.
+ *
+ * 기기가 없거나(대부분의 기사가 아직 앱 미설치) 푸시가 실패하면 false 를
+ * 돌려 즉시 문자로 폴백한다. 기다리게 하면 배정만 늦어진다.
+ */
+async function tryPushInsteadOfSms(
+  notification: InstallationNotificationForSend,
+  now: Date,
+): Promise<boolean> {
+  if (notification.smsType !== "INSTALLER_ASSIGNMENT_REQUEST") return false;
+  if (!notification.assignmentAttemptId) return false;
+  // 이미 푸시를 보낸 건이면 이번이 폴백 문자 차례다.
+  if (notification.pushSentAt) return false;
+
+  const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({
+    where: { id: notification.assignmentAttemptId },
+    select: { installerId: true },
+  });
+  if (!attempt) return false;
+
+  try {
+    const tokens = await listInstallerDeviceTokens(attempt.installerId);
+    if (tokens.length === 0) return false;
+
+    await sendAssignmentPushToInstaller(attempt.installerId, {
+      title: "새 작업이 배정되었습니다",
+      body: "앱에서 확인하고 수락/거절해 주세요.",
+    });
+  } catch (error) {
+    console.error("[installation/notification/push-first]", error);
+    return false;
+  }
+
+  // 마감 시각은 첫 알림(=푸시) 시점부터 센다. 폴백 문자가 나가도 늘어나지 않는다.
+  await prisma.installationInstallerAssignmentAttempt.update({
+    where: { id: notification.assignmentAttemptId },
+    data: {
+      installerNotifiedAt: now,
+      installerTokenExpiresAt: getInstallerResponseExpiresAt(now),
+      status: "WAITING_INSTALLER_RESPONSE",
+    },
+  });
+  await prisma.installationNotification.update({
+    where: { id: notification.id },
+    data: { pushSentAt: now },
+  });
+
+  return true;
+}
+
+/**
+ * 문안에 넣을 마감 시각. 푸시가 먼저 나갔으면 그때 정해진 마감을 쓰고,
+ * 문자가 첫 알림이면 지금부터 센다.
+ */
+async function resolveResponseDeadlineText(
+  notification: InstallationNotificationForSend,
+  now: Date,
+): Promise<string> {
+  if (notification.smsType !== "INSTALLER_ASSIGNMENT_REQUEST") {
+    return "";
+  }
+
+  let deadline = getInstallerResponseExpiresAt(now);
+  if (notification.assignmentAttemptId) {
+    const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({
+      where: { id: notification.assignmentAttemptId },
+      select: { installerTokenExpiresAt: true },
+    });
+    if (attempt?.installerTokenExpiresAt) {
+      deadline = attempt.installerTokenExpiresAt;
+    }
+  }
+
+  return formatInstallerResponseDeadline(deadline);
+}
+
 async function skipStaleNotification(notification: InstallationNotificationForSend) {
   const staleReason = await getStaleNotificationReason(notification);
   if (!staleReason) return false;
@@ -792,26 +910,34 @@ async function runPostSendNotificationEffects(
       notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
       notification.assignmentAttemptId
     ) {
+      // 푸시가 먼저 나간 건이면 마감 시각은 그때 이미 정해졌다. 여기서 다시
+      // 세팅하면 폴백 문자가 마감을 늘려버린다.
+      const pushAlreadySent = Boolean(notification.pushSentAt);
       const attempt = await prisma.installationInstallerAssignmentAttempt.update({
         where: { id: notification.assignmentAttemptId },
         data: {
-          installerNotifiedAt: now,
-          installerTokenExpiresAt: getInstallerResponseExpiresAt(now),
           status: "WAITING_INSTALLER_RESPONSE",
+          ...(pushAlreadySent
+            ? {}
+            : {
+                installerNotifiedAt: now,
+                installerTokenExpiresAt: getInstallerResponseExpiresAt(now),
+              }),
         },
         select: { installerId: true },
       });
 
-      // Best-effort native FCM push (validated to wake Android from Doze). The
-      // SMS just sent is the reliable fallback, so push failures only log and
-      // must not create an automation issue.
-      try {
-        await sendAssignmentPushToInstaller(attempt.installerId, {
-          title: "새 작업이 배정되었습니다",
-          body: "앱에서 확인하고 수락/거절해 주세요.",
-        });
-      } catch (pushError) {
-        console.error("[installation/notification/installer-push]", pushError);
+      // 문자가 첫 알림이었던 경우에만 푸시를 덧붙인다(기기가 늦게 등록됐을 수
+      // 있다). 문자가 이미 나갔으므로 푸시 실패는 로그만 남긴다.
+      if (!pushAlreadySent) {
+        try {
+          await sendAssignmentPushToInstaller(attempt.installerId, {
+            title: "새 작업이 배정되었습니다",
+            body: "앱에서 확인하고 수락/거절해 주세요.",
+          });
+        } catch (pushError) {
+          console.error("[installation/notification/installer-push]", pushError);
+        }
       }
     }
   } catch (error) {
@@ -835,10 +961,6 @@ async function runPostSendNotificationEffects(
 
 const MAX_SMS_SEND_ATTEMPTS = 2;
 const MAX_SMS_DELIVERY_ATTEMPTS = 2;
-
-function getInstallerResponseExpiresAt(now: Date) {
-  return new Date(now.getTime() + INSTALLER_RESPONSE_TIMEOUT_HOURS * 60 * 60 * 1000);
-}
 
 async function handleAssignmentRequestSmsFailure(
   notification: InstallationNotificationForFailure,
