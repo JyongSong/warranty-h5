@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallerOrderItem } from "@/lib/installer/orders";
 import { respondToAssignmentAction } from "../../actions";
+import PhoneRow from "../../PhoneRow";
 import * as ui from "../../ui";
 
 const REJECT_REASONS = [
@@ -85,7 +86,7 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           <Row label="희망 일정" value={[item.installDate, item.installTimeSlot].filter(Boolean).join(" ") || "-"} />
           <Row label="주소" value={item.address ?? "-"} />
           {item.customerName ? <Row label="고객명" value={item.customerName} /> : null}
-          {item.customerPhone ? <Row label="연락처" value={item.customerPhone} /> : null}
+          {item.customerPhone ? <PhoneRow label="연락처" phone={item.customerPhone} /> : null}
           {item.status === "PENDING" ? (
             <div style={{ fontSize: 12, color: "#92400e", marginTop: 8 }}>
               고객 성함·연락처는 수락 후 표시됩니다.

@@ -22,8 +22,8 @@ export default async function InstallerSettlementPage() {
       <div style={ui.panel}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <h1 style={{ ...ui.h1, marginBottom: 0 }}>내 정산</h1>
-          <Link href="/installer" style={{ fontSize: 13, color: "#71717a", textDecoration: "none" }}>
-            ← 내 작업
+          <Link href="/installer/history" style={{ fontSize: 13, color: "#71717a", textDecoration: "none" }}>
+            ← 이력 · 정산
           </Link>
         </div>
         <p style={ui.sub}>{installer.name} 기사님 · 승인 완료된 건의 정산 금액입니다.</p>

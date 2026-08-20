@@ -100,7 +100,7 @@ export default function AsCompleteClient({
         serviceFee: fee ? Number(fee) : null,
         photoPaths,
       });
-      if (res.ok) router.push("/installer");
+      if (res.ok) router.push("/installer/as");
       else setError(ERR[res.error] ?? ERR.DEFAULT);
     } catch {
       setError("사진 업로드에 실패했습니다. 네트워크 확인 후 다시 시도해 주세요.");
