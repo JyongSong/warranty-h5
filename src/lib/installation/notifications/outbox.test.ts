@@ -22,6 +22,7 @@ const {
   createInstallationIssue,
   listInstallerDeviceTokens,
   sendAssignmentPushToInstaller,
+  isFcmConfiguredValue,
 } = vi.hoisted(() => ({
   findMany: vi.fn(),
   findUnique: vi.fn(),
@@ -38,11 +39,16 @@ const {
   createInstallationIssue: vi.fn(),
   listInstallerDeviceTokens: vi.fn(),
   sendAssignmentPushToInstaller: vi.fn(),
+  isFcmConfiguredValue: { current: true },
 }));
 
 vi.mock("@/lib/installer/devices", () => ({
   listInstallerDeviceTokens,
   sendAssignmentPushToInstaller,
+}));
+
+vi.mock("@/lib/installer/firebase", () => ({
+  isFcmConfigured: () => isFcmConfiguredValue.current,
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -91,6 +97,7 @@ describe("sendPendingInstallationNotifications", () => {
     updateManyIssues.mockResolvedValue({ count: 0 });
     countIssues.mockReset();
     findUniqueCustomerRequest.mockReset();
+    isFcmConfiguredValue.current = true;
     listInstallerDeviceTokens.mockReset();
     // 대부분의 기사는 아직 앱 미설치 상태라 기본은 문자 즉시 발송이다.
     listInstallerDeviceTokens.mockResolvedValue([]);
@@ -166,6 +173,25 @@ describe("sendPendingInstallationNotifications", () => {
           installerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
         }),
       }),
+    );
+  });
+
+  it("texts immediately when FCM is not configured, even with a registered device", async () => {
+    // 자격증명이 없으면 푸시는 조용히 no-op 한다. 보낸 것으로 치면 기사는
+    // 폴백 시간 내내 아무 알림도 못 받는다.
+    isFcmConfiguredValue.current = false;
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["fcm-token-1"]);
+    findMany.mockResolvedValue([assignmentRequestNotification()]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    expect(sendSms).toHaveBeenCalledOnce();
+    expect(sendAssignmentPushToInstaller).not.toHaveBeenCalledWith(
+      "installer-1",
+      expect.anything(),
     );
   });
 
