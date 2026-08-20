@@ -2,7 +2,10 @@
 
 import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
-import { computeInstallLineItems } from "@/lib/installation/settlement/compute";
+import {
+  computeInstallLineItems,
+  parseKstDateTimeLocal,
+} from "@/lib/installation/settlement/compute";
 import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
 import {
   COMPLETION_PHOTO_BUCKET,
@@ -61,8 +64,9 @@ export async function submitCompletionAction(input: {
   const view = await getInstallerOrderView(installer.id, orderId);
   if (!view || view.status !== "ACCEPTED") return { ok: false, error: "ORDER_NOT_SUBMITTABLE" };
 
-  const installEndAt = input.installEndAt ? new Date(input.installEndAt) : new Date(NaN);
-  if (Number.isNaN(installEndAt.getTime())) return { ok: false, error: "INSTALL_END_REQUIRED" };
+  // 기사가 고른 시각은 한국 현지 시각이다. 서버 TZ(UTC)로 해석하면 9시간 밀린다.
+  const installEndAt = parseKstDateTimeLocal(input.installEndAt ?? "");
+  if (!installEndAt) return { ok: false, error: "INSTALL_END_REQUIRED" };
 
   const photoPaths = Array.isArray(input.photoPaths) ? input.photoPaths : [];
   if (photoPaths.length < 1 || photoPaths.length > 4) return { ok: false, error: "PHOTO_COUNT_INVALID" };
@@ -127,8 +131,8 @@ export async function previewInstallSettlementAction(input: {
     const view = await getInstallerOrderView(installer.id, input.orderId?.trim() ?? "");
     if (!view || view.status !== "ACCEPTED") return { ok: false };
 
-    const installEndAt = input.installEndAt ? new Date(input.installEndAt) : new Date(NaN);
-    if (Number.isNaN(installEndAt.getTime())) return { ok: false };
+    const installEndAt = parseKstDateTimeLocal(input.installEndAt ?? "");
+    if (!installEndAt) return { ok: false };
 
     const { rates } = await resolveInstallerRates(installer.id);
     const { items, breakdown } = computeInstallLineItems({

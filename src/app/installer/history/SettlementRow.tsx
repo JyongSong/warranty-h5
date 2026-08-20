@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import type { MonthlySettlementRow } from "@/lib/installer/monthlySettlement";
@@ -63,8 +64,18 @@ export default function SettlementRow({ row }: { row: MonthlySettlementRow }) {
           ) : null}
         </div>
       ) : null}
+
+      <Link href={detailHref(row)} style={detailLink}>
+        작업 상세 보기 ›
+      </Link>
     </div>
   );
+}
+
+function detailHref(row: MonthlySettlementRow): string {
+  return row.sourceType === "AS"
+    ? `/installer/as/${row.sourceOrderId}`
+    : `/installer/orders/${row.sourceOrderId}`;
 }
 
 function typeBadge(type: "INSTALL" | "AS"): [string, string] {
@@ -119,6 +130,20 @@ const detailRow: CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   padding: "3px 0",
+};
+
+const detailLink: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  // 손가락 터치 타깃 확보.
+  minHeight: 44,
+  marginTop: 10,
+  borderTop: "1px solid #f4f4f5",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#3f3f46",
+  textDecoration: "none",
 };
 
 const wallpadNote: CSSProperties = {
