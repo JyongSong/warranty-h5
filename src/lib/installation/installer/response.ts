@@ -30,6 +30,7 @@ import {
   buildInstallerAssignmentRequestSmsContent,
   buildCustomerAssignmentConfirmedSmsContent,
   buildInstallerHappycallGuideSmsContent,
+  toInstallationNotificationAlimtalkFields,
 } from "@/lib/installation/notifications/sms-content";
 
 export type InstallerAssignmentTokenStatus =
@@ -293,6 +294,7 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
         recipientPhoneEncrypted: encryptNullablePii(normalizedCustomerPhone),
         recipientPhoneHash: hmacPii(normalizedCustomerPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",
@@ -326,6 +328,7 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
         recipientPhoneEncrypted: encryptNullablePii(normalizedInstallerPhone),
         recipientPhoneHash: hmacPii(normalizedInstallerPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",
@@ -551,6 +554,7 @@ async function rejectAssignment(
       recipientPhoneEncrypted: encryptNullablePii(normalizedNextCandidatePhone),
       recipientPhoneHash: hmacPii(normalizedNextCandidatePhone),
       smsTemplateKey: smsContent.templateKey,
+      ...toInstallationNotificationAlimtalkFields(smsContent),
       smsBody: smsContent.text,
       provider: "solapi",
       status: "PENDING",

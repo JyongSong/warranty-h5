@@ -10,7 +10,10 @@ import {
 } from "@/lib/piiCrypto";
 import { hashInstallationCustomerToken } from "@/lib/installation/customer/token";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
-import { buildCustomerReservationLinkSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildCustomerReservationLinkSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import {
   INSTALLATION_ORDER_STATUSES,
   transitionInstallationOrderStatus,
@@ -247,6 +250,7 @@ async function processPendingInstallationOrder(
         recipientPhoneEncrypted: encryptNullablePii(customerPhone),
         recipientPhoneHash: customerPhone ? hmacPii(customerPhone) : null,
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",

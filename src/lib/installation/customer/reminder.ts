@@ -11,7 +11,10 @@ import {
   normalizePhone11,
 } from "@/lib/piiCrypto";
 import { hashInstallationCustomerToken } from "@/lib/installation/customer/token";
-import { buildCustomerReservationReminderSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildCustomerReservationReminderSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import { INSTALLATION_ORDER_STATUSES } from "@/lib/installation/orders/status";
 import { formatSourceItemsProductSummary } from "@/lib/installation/orders/source/source-items";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
@@ -168,6 +171,7 @@ async function createReminder(
         recipientPhoneEncrypted: encryptNullablePii(recipientPhone),
         recipientPhoneHash: hmacPii(recipientPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",

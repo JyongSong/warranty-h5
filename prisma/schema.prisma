@@ -636,6 +636,10 @@ model InstallationNotification {
   recipientPhoneHash      String?                                 @map("recipient_phone_hash")
   smsTemplateKey          String?                                 @map("sms_template_key")
   smsBody                 String                                  @map("sms_body")
+  // 알림톡 발송에 필요한 템플릿/변수. 본문(sms_body)은 대체발송용으로 남는다.
+  // 값이 없으면 SMS 로만 발송한다.
+  alimtalkTemplateKey     String?                                 @map("alimtalk_template_key")
+  alimtalkVariables       Json?                                   @map("alimtalk_variables")
   provider                String                                  @default("solapi")
   providerMessageId       String?                                 @map("provider_message_id")
   providerStatus          String?                                 @map("provider_status")

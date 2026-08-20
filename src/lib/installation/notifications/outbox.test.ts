@@ -118,7 +118,64 @@ describe("sendPendingInstallationNotifications", () => {
     });
 
     expect(result).toEqual({ sentCount: 1, failedCount: 0 });
-    expect(sendSms).toHaveBeenCalledWith("010-1234-5678", "hello");
+    expect(sendSms).toHaveBeenCalledWith("010-1234-5678", "hello", {
+      subject: null,
+      alimtalk: undefined,
+    });
+  });
+
+  it("restores the stored alimtalk template and the LMS subject at send time", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    updateManyIssues.mockResolvedValue({ count: 0 });
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        recipientPhoneEncrypted: encryptPii("010-1234-5678"),
+        smsTemplateKey: "customer_assignment_confirmed",
+        smsBody: "hello",
+        alimtalkTemplateKey: "assignment_completed",
+        alimtalkVariables: { branchName: "강남점", installerPhone: "01011112222" },
+        retryCount: 0,
+      },
+    ]);
+
+    await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(sendSms).toHaveBeenCalledWith("010-1234-5678", "hello", {
+      subject: "[아카라라이프] 설치 배정 완료",
+      alimtalk: {
+        templateKey: "assignment_completed",
+        variables: { branchName: "강남점", installerPhone: "01011112222" },
+      },
+    });
+  });
+
+  it("falls back to SMS when the stored alimtalk template is not in the registry", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    updateManyIssues.mockResolvedValue({ count: 0 });
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        recipientPhoneEncrypted: encryptPii("010-1234-5678"),
+        smsTemplateKey: "customer_reservation_link",
+        smsBody: "hello",
+        // 아직 승인되지 않았거나 레지스트리에서 제거된 템플릿
+        alimtalkTemplateKey: "not_registered_yet",
+        alimtalkVariables: { productSummary: "K100" },
+        retryCount: 0,
+      },
+    ]);
+
+    await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(sendSms).toHaveBeenCalledWith("010-1234-5678", "hello", {
+      subject: "[아카라라이프] 설치 예약 안내",
+      alimtalk: undefined,
+    });
     expect(update).toHaveBeenCalledWith({
       where: { id: "notification-1" },
       data: {

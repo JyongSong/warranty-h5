@@ -37,6 +37,8 @@ export type InstallationSmsDeliveryReport = {
 };
 
 export type SendInstallationSmsOptions = {
+  /** LMS 제목. 없으면 통신사가 본문 첫 줄을 잘라 제목으로 쓴다. */
+  subject?: string | null;
   /**
    * 알림톡 템플릿과 변수. 알림톡이 꺼져 있거나 변수 검증에 실패하면 SMS 로만
    * 발송한다. outbox 재시도/회신 처리 로직은 그대로 쓴다.
@@ -82,10 +84,11 @@ export async function sendInstallationSmsOrThrow(
   let providerMessageId: string | null = null;
 
   for (const normalized of recipients) {
+    const subject = options?.subject?.trim() || undefined;
     const response = await service.send(
       kakaoOptions
-        ? { to: normalized, from, text, kakaoOptions }
-        : { to: normalized, from, text },
+        ? { to: normalized, from, text, subject, kakaoOptions }
+        : { to: normalized, from, text, subject },
       { showMessageList: true }
     ) as {
       groupInfo?: { groupId?: string };

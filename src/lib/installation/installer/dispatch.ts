@@ -14,7 +14,10 @@ import {
   transitionInstallationOrderStatus,
 } from "@/lib/installation/orders/status";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
-import { buildInstallerAssignmentRequestSmsContent } from "@/lib/installation/notifications/sms-content";
+import {
+  buildInstallerAssignmentRequestSmsContent,
+  toInstallationNotificationAlimtalkFields,
+} from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import {
   decryptNullablePii,
@@ -520,6 +523,7 @@ export async function approveInstallationAssignmentByAdmin(
         recipientPhoneEncrypted: encryptNullablePii(normalizedInstallerPhone),
         recipientPhoneHash: hmacPii(normalizedInstallerPhone),
         smsTemplateKey: smsContent.templateKey,
+        ...toInstallationNotificationAlimtalkFields(smsContent),
         smsBody: smsContent.text,
         provider: "solapi",
         status: "PENDING",
@@ -880,6 +884,7 @@ async function createWaitingInstallerResponseAssignment(
           recipientPhoneEncrypted: encryptNullablePii(normalizedCandidatePhone),
           recipientPhoneHash: hmacPii(normalizedCandidatePhone),
           smsTemplateKey: smsContent.templateKey,
+          ...toInstallationNotificationAlimtalkFields(smsContent),
           smsBody: smsContent.text,
           provider: "solapi",
           status: "PENDING",

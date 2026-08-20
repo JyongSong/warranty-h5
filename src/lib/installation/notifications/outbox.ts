@@ -2,6 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
+import { getInstallationSmsSubject } from "@/lib/installation/notifications/sms-content";
+import {
+  ALIMTALK_TEMPLATES,
+  type AlimtalkRequest,
+  type AlimtalkTemplateKey,
+} from "@/lib/notifications/alimtalk";
 import {
   getInstallationSmsDeliveryReport as defaultGetDeliveryReport,
   sendInstallationSmsOrThrow as defaultSendSms,
@@ -69,6 +75,29 @@ type InstallationNotificationForFailure = {
   recipientPhoneEncrypted: string | null;
 };
 
+/**
+ * 알림 행에 저장해 둔 템플릿/변수를 알림톡 요청으로 되살린다.
+ * outbox 는 발송 시점에 돌기 때문에 생성 시점의 변수 값을 그대로 써야 한다.
+ * 컬럼이 비어 있거나 레지스트리에 없는 키면 SMS 로만 나간다.
+ */
+function toAlimtalkRequest(notification: {
+  alimtalkTemplateKey: string | null;
+  alimtalkVariables: unknown;
+}): AlimtalkRequest | undefined {
+  const templateKey = notification.alimtalkTemplateKey;
+  if (!templateKey || !(templateKey in ALIMTALK_TEMPLATES)) return undefined;
+
+  const stored = notification.alimtalkVariables;
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return undefined;
+
+  const variables: Record<string, string | null> = {};
+  for (const [name, value] of Object.entries(stored as Record<string, unknown>)) {
+    variables[name] = typeof value === "string" ? value : null;
+  }
+
+  return { templateKey: templateKey as AlimtalkTemplateKey, variables };
+}
+
 export async function sendPendingInstallationNotifications({
   limit = 25,
   now = new Date(),
@@ -93,6 +122,10 @@ export async function sendPendingInstallationNotifications({
       const sendResult = await sendSms(
         decryptNullablePii(notification.recipientPhoneEncrypted),
         notification.smsBody,
+        {
+          subject: getInstallationSmsSubject(notification.smsTemplateKey),
+          alimtalk: toAlimtalkRequest(notification),
+        },
       );
       providerAccepted = true;
       await prisma.installationNotification.update({

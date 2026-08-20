@@ -36,8 +36,7 @@ describe("installation SMS template preview", () => {
     });
 
     expect(rendered).toBe(
-      "[아카라 라이프]\n" +
-        "설치 가능 여부 확인 요청입니다.\n" +
+      "설치 가능 여부 확인 요청입니다.\n" +
         "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
         "\n" +
         "설치 희망일: 2026-06-20\n" +

@@ -30,8 +30,7 @@ describe("installation SMS content", () => {
 
     expect(content.templateKey).toBe("customer_reservation_link");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 예약 정보를 입력해 주세요.\n" +
+      "설치 예약 정보를 입력해 주세요.\n" +
         "\n" +
         "주문 상품: Aqara 스마트 도어락 K100 x1 외\n" +
         "\n" +
@@ -63,7 +62,9 @@ describe("installation SMS content", () => {
     });
 
     expect(content.templateKey).toBe("customer_reservation_reminder");
-    expect(content.text).toContain("[아카라 라이프]");
+    // 브랜드 표기는 본문이 아니라 LMS 제목에 있다.
+    expect(content.text).not.toContain("[아카라 라이프]");
+    expect(content.subject).toBe("[아카라라이프] 설치 예약 안내");
     expect(content.text).toContain("설치 예약 정보 입력이 아직 완료되지 않았습니다.");
     expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1");
     expect(content.text).toContain("https://example.com/i/c/token-2");
@@ -79,8 +80,7 @@ describe("installation SMS content", () => {
     expect(content.templateKey).toBe("installer_assignment_request");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 가능 여부 확인 요청입니다.\n" +
+      "설치 가능 여부 확인 요청입니다.\n" +
         "아래 링크에서 설치 가능 여부를 선택해 주세요.\n" +
         "\n" +
         "설치 희망일: 2026-06-20\n" +
@@ -125,8 +125,7 @@ describe("installation SMS content", () => {
     expect(content.templateKey).toBe("installer_happycall_guide");
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
-      "[아카라 라이프]\n" +
-        "설치 요청 수락이 완료되었습니다.\n" +
+      "설치 요청 수락이 완료되었습니다.\n" +
         "48시간 이내 고객에게 확인 전화를 진행해 주세요.\n" +
         "\n" +
         "주문 상품:\n" +
