@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import {
+  INSTALL_DATE_MAX_DAYS_AHEAD,
+  INSTALL_DATE_MIN_DAYS_AHEAD,
+} from "@/lib/installation/customer/timing";
+import {
   decryptNullablePii,
   encryptNullablePii,
   hmacPii,
@@ -313,8 +317,8 @@ function validateInstallDateRange(installDate: string, now: Date) {
   }
 
   const todayKst = getKstYmd(now);
-  const minDay = addDaysToUtcDay(parseYmdToUtcDay(todayKst) as number, 2);
-  const maxDay = addDaysToUtcDay(parseYmdToUtcDay(todayKst) as number, 30);
+  const minDay = addDaysToUtcDay(parseYmdToUtcDay(todayKst) as number, INSTALL_DATE_MIN_DAYS_AHEAD);
+  const maxDay = addDaysToUtcDay(parseYmdToUtcDay(todayKst) as number, INSTALL_DATE_MAX_DAYS_AHEAD);
 
   if (targetDay < minDay || targetDay > maxDay) {
     throw new InstallationCustomerRequestError("INSTALL_DATE_OUT_OF_RANGE");

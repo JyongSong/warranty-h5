@@ -13,3 +13,11 @@ export const REMINDER_AFTER_HOURS = 24;
 export const FALLBACK_AFTER_HOURS = 48;
 export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = REMINDER_AFTER_HOURS;
 export const REMINDER_TOKEN_TTL_HOURS = FALLBACK_AFTER_HOURS - REMINDER_AFTER_HOURS;
+
+/**
+ * 고객이 고를 수 있는 설치 희망일 범위 (KST 오늘 기준).
+ * 폼(client)과 서버 검증이 같은 값을 봐야 해서 여기 둔다. 이 파일은 prisma 를
+ * 끌어오지 않으므로 클라이언트 번들에 들어가도 안전하다.
+ */
+export const INSTALL_DATE_MIN_DAYS_AHEAD = 2;
+export const INSTALL_DATE_MAX_DAYS_AHEAD = 90;

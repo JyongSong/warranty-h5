@@ -502,16 +502,30 @@ describe("installation customer request", () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it("rejects install dates later than KST today plus thirty days", async () => {
+  // KST 오늘 = 2026-06-11 → 허용 범위는 06-13 ~ 09-09 (모레 ~ 90일).
+  it("rejects install dates later than KST today plus ninety days", async () => {
     await expect(
       submitInstallationCustomerRequest("raw-token", {
         installAddress: "서울 강남구 봉은사로 10",
-        installDate: "2026-07-12",
+        installDate: "2026-09-10",
         customerPhone: "010-9999-0000",
         now: new Date("2026-06-10T15:00:00.000Z"),
       }),
     ).rejects.toThrow("INSTALL_DATE_OUT_OF_RANGE");
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("lets the ninetieth day past date validation", async () => {
+    // 날짜 검증은 토큰 조회보다 먼저 돈다. 범위 오류가 아니라 토큰 오류로
+    // 떨어진다는 것은 90일째가 범위 안으로 받아들여졌다는 뜻이다.
+    await expect(
+      submitInstallationCustomerRequest("raw-token", {
+        installAddress: "서울 강남구 봉은사로 10",
+        installDate: "2026-09-09",
+        customerPhone: "010-9999-0000",
+        now: new Date("2026-06-10T15:00:00.000Z"),
+      }),
+    ).rejects.toThrow("TOKEN_NOT_FOUND");
   });
 
   it("rejects non-calendar install dates", async () => {
