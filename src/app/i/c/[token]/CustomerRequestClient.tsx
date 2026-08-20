@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Script from "next/script";
 import { getErrorMessage } from "@/lib/error";
-import { normalizePhone } from "@/lib/phone";
+import { formatKrPhone, normalizePhone } from "@/lib/phone";
+import {
+  INSTALL_DATE_MAX_DAYS_AHEAD,
+  INSTALL_DATE_MIN_DAYS_AHEAD,
+} from "@/lib/installation/customer/timing";
 import { submitCustomerRequestAction } from "./actions";
 import {
   CUSTOMER_REQUEST_UNAVAILABLE_STATUS,
@@ -23,6 +27,10 @@ declare global {
     };
   }
 }
+
+// 폼과 확인 모달이 같은 문구를 쓴다. 접수 시점에 확정이 아니라는 것을
+// 두 번 알려야 나중에 "말이 다르다"는 문의를 줄일 수 있다.
+const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
 
 const TIME_SLOTS = [
   "오전 09:00 - 12:00",
@@ -103,8 +111,14 @@ export default function CustomerRequestClient({
   privacyPolicy,
 }: Props) {
   const request = initialInfo?.request ?? null;
-  const minDate = useMemo(() => addDays(initialToday, 2), [initialToday]);
-  const maxDate = useMemo(() => addDays(initialToday, 30), [initialToday]);
+  const minDate = useMemo(
+    () => addDays(initialToday, INSTALL_DATE_MIN_DAYS_AHEAD),
+    [initialToday],
+  );
+  const maxDate = useMemo(
+    () => addDays(initialToday, INSTALL_DATE_MAX_DAYS_AHEAD),
+    [initialToday],
+  );
   const [info, setInfo] = useState<ApiInfo | null>(initialInfo);
   const initialInputValues = getInitialCustomerInputValues(request, initialInfo?.status ?? null);
   const [zonecode, setZonecode] = useState("");
@@ -115,7 +129,9 @@ export default function CustomerRequestClient({
     "",
   );
   const [phone, setPhone] = useState(initialInputValues.phone);
-  const [customerNote, setCustomerNote] = useState(request?.customerNote ?? "");
+  // 요청사항 입력란은 당분간 감춘다. 다만 이전에 저장된 값이 있으면 그대로
+  // 실어 보내야 재제출 때 지워지지 않는다.
+  const customerNote = request?.customerNote ?? "";
   const [consent, setConsent] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -124,6 +140,24 @@ export default function CustomerRequestClient({
   const [error, setError] = useState<string | null>(initialError);
 
   const normalizedPhone = normalizePhone(phone);
+  const orderPhone = request?.installationOrder.sourcePhone ?? null;
+  const orderAddress = request?.installationOrder.sourceAddress ?? null;
+  const canCopyOrderInfo = Boolean(orderPhone || orderAddress);
+  // 오타는 "의도치 않은 차이"로 나타난다. 주문자 번호와 다르면 그 사실을
+  // 눈에 보이게 해서 실수인지 일부러인지 고객이 스스로 판단하게 한다.
+  const phoneDiffersFromOrder =
+    Boolean(orderPhone) &&
+    normalizedPhone.length >= 9 &&
+    normalizePhone(orderPhone ?? "") !== normalizedPhone;
+
+  function copyOrderInfo() {
+    if (orderPhone) setPhone(formatKrPhone(orderPhone));
+    if (orderAddress) {
+      setZonecode("");
+      setAddress(orderAddress);
+      setAddressDetail("");
+    }
+  }
   const fullAddress = [zonecode, address, addressDetail.trim()].filter(Boolean).join(" ");
   const canSubmit =
     info?.status === "VALID" &&
@@ -230,6 +264,31 @@ export default function CustomerRequestClient({
         {request ? <OrderInfoSection request={request} /> : null}
 
         <div style={formGridStyle}>
+          <label style={fieldGapStyle}>
+            <span style={labelStyle}>
+              고객 연락처 <span style={requiredStyle}>(필수)</span>
+            </span>
+            <input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              inputMode="tel"
+              placeholder="010-1234-5678"
+              style={inputStyle}
+            />
+            <span style={helperTextStyle}>설치 기사님이 이 번호로 연락드립니다.</span>
+            {phoneDiffersFromOrder ? (
+              <span style={phoneDiffStyle}>
+                주문자 연락처({formatKrPhone(orderPhone ?? "")})와 다릅니다. 맞는지 확인해 주세요.
+              </span>
+            ) : null}
+          </label>
+
+          {canCopyOrderInfo ? (
+            <button type="button" onClick={copyOrderInfo} style={copyOrderButtonStyle}>
+              주문정보와 동일
+            </button>
+          ) : null}
+
           <AddressField
             zonecode={zonecode}
             address={address}
@@ -251,7 +310,7 @@ export default function CustomerRequestClient({
               style={inputStyle}
             />
             <span style={helperTextStyle}>
-              모레부터 30일 이내 날짜를 선택해 주세요.
+              모레부터 {INSTALL_DATE_MAX_DAYS_AHEAD}일 이내 날짜를 선택해 주세요.
             </span>
           </label>
 
@@ -273,30 +332,7 @@ export default function CustomerRequestClient({
                 </option>
               ))}
             </select>
-          </label>
-
-          <label style={fieldGapStyle}>
-            <span style={labelStyle}>
-              고객 연락처 <span style={requiredStyle}>(필수)</span>
-            </span>
-            <input
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              inputMode="tel"
-              placeholder="010-1234-5678"
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={fieldGapStyle}>
-            <span style={labelStyle}>요청사항</span>
-            <textarea
-              value={customerNote}
-              onChange={(event) => setCustomerNote(event.target.value)}
-              rows={4}
-              placeholder="방문 가능 시간, 공동현관 안내 등"
-              style={textareaStyle}
-            />
+            <span style={helperTextStyle}>{SCHEDULE_ADJUST_NOTICE}</span>
           </label>
 
           <label style={consentStyle}>
@@ -460,6 +496,13 @@ function ConfirmReservationModal({
         </h2>
         <p style={modalDescriptionStyle}>접수 후 담당자가 확인하여 안내드립니다.</p>
         <SummaryList summary={summary} />
+        <div style={modalNoticeStyle}>
+          <div>※ {SCHEDULE_ADJUST_NOTICE}</div>
+          <div style={{ marginTop: 6 }}>
+            ※ 설치 기사님이 <strong>{formatKrPhone(summary.normalizedPhone)}</strong> 로
+            연락드립니다. 번호가 맞는지 확인해 주세요.
+          </div>
+        </div>
         <div style={modalButtonRowStyle}>
           <button type="button" onClick={onEdit} disabled={submitting} style={secondaryButtonStyle}>
             수정하기
@@ -539,7 +582,7 @@ function SummaryList({ summary }: { summary: Summary }) {
       <SummaryRow label="희망 날짜" value={summary.installDate} />
       <SummaryRow label="희망 시간" value={summary.timeSlot} />
       <SummaryRow label="연락처" value={summary.normalizedPhone} />
-      {summary.customerNote ? <SummaryRow label="요청사항" value={summary.customerNote} /> : null}
+
     </div>
   );
 }
@@ -606,6 +649,37 @@ const requiredStyle: CSSProperties = {
   fontWeight: 700,
 };
 
+const copyOrderButtonStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  borderRadius: CONTROL_RADIUS,
+  border: `1px solid ${PRIMARY_COLOR}`,
+  background: "#fff",
+  color: PRIMARY_COLOR,
+  fontSize: FONT_SIZE.control,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const phoneDiffStyle: CSSProperties = {
+  display: "block",
+  fontSize: FONT_SIZE.helper,
+  color: "#92400e",
+  marginTop: 6,
+  lineHeight: 1.5,
+};
+
+const modalNoticeStyle: CSSProperties = {
+  marginTop: 16,
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  color: "#92400e",
+  fontSize: FONT_SIZE.helper,
+  lineHeight: 1.6,
+};
+
 const helperTextStyle: CSSProperties = {
   display: "block",
   fontSize: FONT_SIZE.helper,
@@ -627,11 +701,6 @@ const inputStyle: CSSProperties = {
   outline: "none",
 };
 
-const textareaStyle: CSSProperties = {
-  ...inputStyle,
-  minHeight: 108,
-  resize: "vertical",
-};
 
 const postcodeRowStyle: CSSProperties = {
   display: "flex",
