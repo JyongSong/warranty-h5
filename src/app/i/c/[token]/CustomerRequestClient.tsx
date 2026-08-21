@@ -4,7 +4,16 @@ import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Script from "next/script";
 import { getErrorMessage } from "@/lib/error";
-import { formatKrPhone, normalizePhone } from "@/lib/phone";
+import {
+  formatKrPhone,
+  isKoreanMobileNumber,
+  isSafeVirtualNumber,
+  normalizePhone,
+} from "@/lib/phone";
+import {
+  NOT_MOBILE_MESSAGE,
+  SAFE_NUMBER_MESSAGE,
+} from "@/lib/installation/customer/error-message";
 import {
   INSTALL_DATE_MAX_DAYS_AHEAD,
   INSTALL_DATE_MIN_DAYS_AHEAD,
@@ -142,17 +151,28 @@ export default function CustomerRequestClient({
 
   const normalizedPhone = normalizePhone(phone);
   const orderPhone = request?.installationOrder.sourcePhone ?? null;
+  // 주문 연락처가 안심번호면 그대로 복사해봐야 며칠 뒤 못 쓴다. 주소만 채우고
+  // 번호는 직접 입력하게 한다.
+  const orderPhoneIsSafeNumber = Boolean(orderPhone) && isSafeVirtualNumber(orderPhone ?? "");
+  const phoneError =
+    normalizedPhone.length === 0
+      ? null
+      : isSafeVirtualNumber(normalizedPhone)
+        ? SAFE_NUMBER_MESSAGE
+        : isKoreanMobileNumber(normalizedPhone)
+          ? null
+          : NOT_MOBILE_MESSAGE;
   const orderAddress = request?.installationOrder.sourceAddress ?? null;
   const canCopyOrderInfo = Boolean(orderPhone || orderAddress);
   // 오타는 "의도치 않은 차이"로 나타난다. 주문자 번호와 다르면 그 사실을
   // 눈에 보이게 해서 실수인지 일부러인지 고객이 스스로 판단하게 한다.
   const phoneDiffersFromOrder =
     Boolean(orderPhone) &&
-    normalizedPhone.length >= 9 &&
+    isKoreanMobileNumber(normalizedPhone) &&
     normalizePhone(orderPhone ?? "") !== normalizedPhone;
 
   function copyOrderInfo() {
-    if (orderPhone) setPhone(formatKrPhone(orderPhone));
+    if (orderPhone && !orderPhoneIsSafeNumber) setPhone(formatKrPhone(orderPhone));
     if (!orderAddress) return;
 
     // 주문 주소는 "경기도 화성시 …로1길 74 1911동 1103호" 처럼 한 줄로 온다.
@@ -281,7 +301,9 @@ export default function CustomerRequestClient({
               style={inputStyle}
             />
             <span style={helperTextStyle}>설치 기사님이 이 번호로 연락드립니다.</span>
-            {phoneDiffersFromOrder ? (
+            {phoneError ? (
+              <span style={phoneErrorStyle}>{phoneError}</span>
+            ) : phoneDiffersFromOrder ? (
               <span style={phoneDiffStyle}>
                 주문자 연락처({formatKrPhone(orderPhone ?? "")})와 다릅니다. 맞는지 확인해 주세요.
               </span>
@@ -289,9 +311,16 @@ export default function CustomerRequestClient({
           </label>
 
           {canCopyOrderInfo ? (
-            <button type="button" onClick={copyOrderInfo} style={copyOrderButtonStyle}>
-              주문정보와 동일
-            </button>
+            <div>
+              <button type="button" onClick={copyOrderInfo} style={copyOrderButtonStyle}>
+                {orderPhoneIsSafeNumber ? "주문 주소와 동일" : "주문정보와 동일"}
+              </button>
+              {orderPhoneIsSafeNumber ? (
+                <span style={helperTextStyle}>
+                  주문 연락처가 안심번호(050)라 주소만 채웁니다. 연락처는 직접 입력해 주세요.
+                </span>
+              ) : null}
+            </div>
           ) : null}
 
           <AddressField
@@ -664,6 +693,14 @@ const copyOrderButtonStyle: CSSProperties = {
   fontSize: FONT_SIZE.control,
   fontWeight: 700,
   cursor: "pointer",
+};
+
+const phoneErrorStyle: CSSProperties = {
+  display: "block",
+  fontSize: FONT_SIZE.helper,
+  color: "#b42318",
+  marginTop: 6,
+  lineHeight: 1.5,
 };
 
 const phoneDiffStyle: CSSProperties = {
