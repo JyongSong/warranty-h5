@@ -1,7 +1,10 @@
 /**
  * 고객 설치 예약 정보 입력 타임라인.
  *
- * 발송(7번) → REMINDER_AFTER_HOURS 리마인더(9번) → FALLBACK_AFTER_HOURS 폴백
+ * 발송(7번) → FALLBACK_AFTER_HOURS 폴백
+ *
+ * 리마인더는 두지 않는다. 안내 한 통으로 끝내고, 기한이 지나면 주문 정보로
+ * 자동 확정한다.
  *
  * FALLBACK_AFTER_HOURS 는 카카오 알림톡 "설치 예약 정보 입력 안내" 템플릿
  * 본문에 시간이 명시돼 있다. 바꾸려면 카카오 템플릿도 함께 재심사해야 한다.
@@ -9,10 +12,47 @@
  * 링크 유효시간은 이 타임라인을 이어받도록 맞춘다. 최초 토큰은 리마인더
  * 시점까지, 리마인더가 새로 발급하는 토큰은 폴백 시점까지 살아 있다.
  */
-export const REMINDER_AFTER_HOURS = 24;
-export const FALLBACK_AFTER_HOURS = 48;
-export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = REMINDER_AFTER_HOURS;
-export const REMINDER_TOKEN_TTL_HOURS = FALLBACK_AFTER_HOURS - REMINDER_AFTER_HOURS;
+export const FALLBACK_AFTER_HOURS = 24;
+
+/**
+ * 폴백 시점이 주말이면 다음 영업일로 민다. 문안은 "24시간"이라고만 안내하므로,
+ * 미루는 방향(고객에게 유리)으로만 어긋나게 한다 — 안내보다 일찍 자동 확정되는
+ * 일은 없어야 한다.
+ *
+ * 금요일 발송이 최대 밀림폭이다(토·일 건너뛰어 월요일 = +48시간).
+ */
+const MAX_FALLBACK_DEFERRAL_HOURS = 48;
+
+/**
+ * 고객 링크 유효시간. 폴백이 밀릴 수 있는 최대치까지 살려 둔다.
+ * 리마인더가 없어 토큰을 갱신할 기회도 없으므로, 최초 발급분이 폴백 시점까지
+ * 버텨야 한다.
+ */
+export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS =
+  FALLBACK_AFTER_HOURS + MAX_FALLBACK_DEFERRAL_HOURS;
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isKstWeekend(instant: Date) {
+  const kstDay = new Date(instant.getTime() + KST_OFFSET_MS).getUTCDay();
+  return kstDay === 0 || kstDay === 6; // Sun | Sat
+}
+
+/**
+ * 이 요청이 실제로 폴백되어야 하는 시각.
+ *
+ * 주말만 건너뛴다. 평일에 걸린 법정공휴일은 반영하지 않는다 — 음력에 걸린
+ * 날(설날·추석)까지 다루려면 공휴일 데이터 소스가 필요하다.
+ */
+export function getCustomerFallbackDueAt(createdAt: Date): Date {
+  let due = new Date(createdAt.getTime() + FALLBACK_AFTER_HOURS * 60 * 60 * 1000);
+  // 토·일 연속 최대 2일.
+  for (let i = 0; i < 2 && isKstWeekend(due); i += 1) {
+    due = new Date(due.getTime() + DAY_MS);
+  }
+  return due;
+}
 
 /**
  * 고객이 고를 수 있는 설치 희망일 범위 (KST 오늘 기준).

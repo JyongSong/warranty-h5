@@ -13,7 +13,6 @@ import {
   recordCronJobSkipped,
 } from "@/lib/cron/status";
 import { fallbackExpiredInstallationCustomerRequests } from "@/lib/installation/customer/fallback";
-import { remindExpiredInstallationCustomerRequests } from "@/lib/installation/customer/reminder";
 import { dispatchReadyInstallationOrders } from "@/lib/installation/installer/dispatch";
 import {
   alertOrphanedInstallationOrders,
@@ -97,12 +96,6 @@ export async function GET(request: Request) {
                     limit: config.limits.processInstallationOrders,
                   }),
               ),
-        remindCustomerRequests: await runDispatcherStep("remindCustomerRequests", metrics, () =>
-          remindExpiredInstallationCustomerRequests({
-            baseUrl,
-            limit: config.limits.remindCustomerRequests,
-          }),
-        ),
         fallbackCustomerRequests: await runDispatcherStep("fallbackCustomerRequests", metrics, () =>
           fallbackExpiredInstallationCustomerRequests({
             limit: config.limits.fallbackCustomerRequests,
@@ -175,7 +168,6 @@ export async function GET(request: Request) {
       });
       const degraded =
         results.processInstallationOrders.failedCount > 0 ||
-        results.remindCustomerRequests.failedCount > 0 ||
         results.dispatchReadyOrders.failedCount > 0 ||
         results.timeoutInstallerAssignments.failedCount > 0 ||
         results.sendInstallationNotifications.failedCount > 0 ||

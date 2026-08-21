@@ -3,20 +3,17 @@ import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 import {
   buildCustomerAssignmentConfirmedSmsContent,
   buildCustomerReservationLinkSmsContent,
-  buildCustomerReservationReminderSmsContent,
   buildInstallerAssignmentRequestSmsContent,
   buildInstallerHappycallGuideSmsContent,
 } from "@/lib/installation/notifications/sms-content";
 import customerAssignmentConfirmedTemplate from "@/lib/installation/notifications/sms-template-customer-assignment-confirmed.json";
 import customerReservationLinkTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-link.json";
-import customerReservationReminderTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-reminder.json";
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
 
 describe("installation SMS content", () => {
   it("keeps one SMS content per JSON template file", () => {
     expect(Object.keys(customerReservationLinkTemplate)).toEqual(["content"]);
-    expect(Object.keys(customerReservationReminderTemplate)).toEqual(["content"]);
     expect(Object.keys(customerAssignmentConfirmedTemplate)).toEqual(["content"]);
     expect(Object.keys(installerAssignmentRequestTemplate)).toEqual(["content"]);
     expect(Object.keys(installerHappycallGuideTemplate)).toEqual(["content"]);
@@ -56,25 +53,6 @@ describe("installation SMS content", () => {
     expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1 외");
     expect(content.text).not.toContain("용역 출장비 x1");
     expect(content.text).not.toContain("월패드 연동(RF447) x1");
-  });
-
-  it("builds customer reservation reminder content from the JSON template", () => {
-    const content = buildCustomerReservationReminderSmsContent({
-      productSummary: "Aqara 스마트 도어락 K100 x1",
-      reservationUrl: "https://example.com/i/c/token-2",
-    });
-
-    expect(content.templateKey).toBe("customer_reservation_reminder");
-    // 브랜드 표기는 본문이 아니라 LMS 제목에 있다.
-    expect(content.text).not.toContain("[아카라 라이프]");
-    expect(content.subject).toBe("[아카라라이프] 설치 예약 안내");
-    expect(content.text).toContain("접수하신 설치 건의 예약 정보 입력이 아직 완료되지 않았습니다.");
-    // 7번과 같은 기준(설치 접수 시점)으로 안내해야 두 문자가 어긋나지 않는다.
-    expect(content.text).toContain(
-      `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.`,
-    );
-    expect(content.text).toContain("주문 상품: Aqara 스마트 도어락 K100 x1");
-    expect(content.text).toContain("https://example.com/i/c/token-2");
   });
 
   it("builds installer assignment request content from the JSON template", () => {

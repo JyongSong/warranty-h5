@@ -12,8 +12,6 @@ export const SYSTEM_SETTING_KEYS = {
   installationDispatcherLockTtlMs: "installation.dispatcher.lockTtlMs",
   installationDispatcherLimitProcessInstallationOrders:
     "installation.dispatcher.limit.processInstallationOrders",
-  installationDispatcherLimitRemindCustomerRequests:
-    "installation.dispatcher.limit.remindCustomerRequests",
   installationDispatcherLimitFallbackCustomerRequests:
     "installation.dispatcher.limit.fallbackCustomerRequests",
   installationDispatcherLimitDispatchReadyOrders:

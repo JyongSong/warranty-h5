@@ -70,12 +70,14 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
     transaction.mockImplementation(async (callback) => callback(createTx()));
   });
 
-  it("uses source address, phone, and valid source install date for requests still unsubmitted after 48 hours", async () => {
+  it("uses source address, phone, and valid source install date for requests still unsubmitted after 24 hours", async () => {
     const now = new Date("2026-06-11T12:00:00.000Z");
     findMany.mockResolvedValue([
       {
         id: "request-1",
         installationOrderId: "order-1",
+        // KST 2026-06-10(수) 21:00 → 만기 06-11(목) 21:00 = now. 주말이 아니다.
+        createdAt: new Date("2026-06-10T12:00:00.000Z"),
         installationOrder: {
           source: {
             phoneEncrypted: "010-1234-5678",
@@ -102,7 +104,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
         customerSubmittedAt: null,
         fallbackUsed: false,
         createdAt: {
-          lte: new Date("2026-06-09T12:00:00.000Z"),
+          lte: new Date("2026-06-10T12:00:00.000Z"),
         },
         installationOrder: {
           status: "WAITING_CUSTOMER_INPUT",
@@ -124,6 +126,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       select: {
         id: true,
         installationOrderId: true,
+        createdAt: true,
         installationOrder: {
           select: {
             source: {
@@ -174,7 +177,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
         eventType: "CUSTOMER_FALLBACK_USED",
         actorType: "SYSTEM",
         actorId: null,
-        reason: "CUSTOMER_NO_INPUT_48H_SOURCE_ORDER_USED",
+        reason: "CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED",
         metadata: {
           customerRequestId: "request-1",
           sourceInstallDate: "2026-06-15",
@@ -190,6 +193,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       {
         id: "request-1",
         installationOrderId: "order-1",
+        createdAt: new Date("2026-06-10T12:00:00.000Z"),
         installationOrder: {
           source: {
             phoneEncrypted: "010-1234-5678",
@@ -217,7 +221,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
         type: "CUSTOMER_INPUT_NOT_SUBMITTED",
         title: "고객 정보 확인 필요",
         description:
-          "고객 미입력 48시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.",
+          "고객 미입력 24시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.",
         metadata: {
           customerRequestId: "request-1",
           fallbackUsed: false,

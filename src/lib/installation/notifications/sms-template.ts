@@ -1,12 +1,10 @@
 import customerAssignmentConfirmedTemplate from "@/lib/installation/notifications/sms-template-customer-assignment-confirmed.json";
 import customerReservationLinkTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-link.json";
-import customerReservationReminderTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-reminder.json";
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
 
 type CustomerTemplateKey =
   | "customer_reservation_link"
-  | "customer_reservation_reminder"
   | "customer_assignment_confirmed";
 type InstallerTemplateKey = "installer_assignment_request" | "installer_happycall_guide";
 
@@ -28,8 +26,6 @@ function getCustomerTemplateContent(key: CustomerTemplateKey) {
   switch (key) {
     case "customer_reservation_link":
       return customerReservationLinkTemplate.content;
-    case "customer_reservation_reminder":
-      return customerReservationReminderTemplate.content;
     case "customer_assignment_confirmed":
       return customerAssignmentConfirmedTemplate.content;
   }

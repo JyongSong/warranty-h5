@@ -502,6 +502,20 @@ describe("installation customer request", () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
+  it("rejects a 050 안심번호 as the customer contact", async () => {
+    // 주문 데이터에는 안심번호가 그대로 들어오지만(normalizePhone11 은 허용),
+    // 고객이 직접 입력하는 이 번호는 며칠 뒤 기사가 전화를 거는 용도라 막는다.
+    await expect(
+      submitInstallationCustomerRequest("raw-token", {
+        installAddress: "서울 강남구 봉은사로 10",
+        installDate: "2026-06-20",
+        customerPhone: "0503-6318-9916",
+        now: new Date("2026-06-11T01:00:00.000Z"),
+      }),
+    ).rejects.toThrow("CUSTOMER_PHONE_IS_SAFE_NUMBER");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   // KST 오늘 = 2026-06-11 → 허용 범위는 06-13 ~ 09-09 (모레 ~ 90일).
   it("rejects install dates later than KST today plus ninety days", async () => {
     await expect(

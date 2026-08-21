@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isKoreanMobileNumber, isSafeVirtualNumber } from "@/lib/phone";
 import {
   INSTALL_DATE_MAX_DAYS_AHEAD,
   INSTALL_DATE_MIN_DAYS_AHEAD,
@@ -296,6 +297,15 @@ function normalizeCustomerRequestSubmitInput(input: SubmitInput, now: Date) {
   validateInstallDateRange(installDate, now);
   if (!customerPhone) {
     throw new InstallationCustomerRequestError("CUSTOMER_PHONE_REQUIRED");
+  }
+  // 주문 데이터에는 안심번호가 그대로 들어오므로 normalizePhone11 은 050 을
+  // 허용한다(가져오기·폴백이 막히면 안 된다). 다만 고객이 직접 입력하는 이
+  // 번호는 며칠 뒤 기사가 전화를 거는 용도라, 만료되는 번호를 받으면 안 된다.
+  if (isSafeVirtualNumber(customerPhone)) {
+    throw new InstallationCustomerRequestError("CUSTOMER_PHONE_IS_SAFE_NUMBER");
+  }
+  if (!isKoreanMobileNumber(customerPhone)) {
+    throw new InstallationCustomerRequestError("CUSTOMER_PHONE_NOT_MOBILE");
   }
 
   return {

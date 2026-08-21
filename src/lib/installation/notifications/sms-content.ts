@@ -8,7 +8,6 @@ import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 
 export type InstallationSmsTemplateKey =
   | "customer_reservation_link"
-  | "customer_reservation_reminder"
   | "installer_assignment_request"
   | "installer_happycall_guide"
   | "customer_assignment_confirmed";
@@ -28,7 +27,6 @@ export type InstallationSmsContent = {
  */
 const SUBJECT_BY_TEMPLATE_KEY: Record<InstallationSmsTemplateKey, string> = {
   customer_reservation_link: "[아카라라이프] 설치 예약 안내",
-  customer_reservation_reminder: "[아카라라이프] 설치 예약 안내",
   customer_assignment_confirmed: "[아카라라이프] 설치 배정 완료",
   installer_assignment_request: "[아카라라이프] 설치 배정 요청",
   installer_happycall_guide: "[아카라라이프] 해피콜 안내",
@@ -55,26 +53,6 @@ export function buildCustomerReservationLinkSmsContent({
       productSummary: formatSmsProductSummary(productSummary),
       reservationUrl,
       // 문안의 시간과 실제 폴백 시점이 어긋나지 않도록 상수에서 렌더한다.
-      fallbackHours: String(FALLBACK_AFTER_HOURS),
-    }),
-  };
-}
-
-export function buildCustomerReservationReminderSmsContent({
-  productSummary,
-  reservationUrl,
-}: {
-  productSummary?: string | null;
-  reservationUrl: string;
-}): InstallationSmsContent {
-  const templateKey = "customer_reservation_reminder";
-  return {
-    templateKey,
-    subject: SUBJECT_BY_TEMPLATE_KEY[templateKey],
-    text: renderCustomerInstallationSmsTemplate(templateKey, {
-      productSummary: formatSmsProductSummary(productSummary),
-      reservationUrl,
-      // 7번과 같은 기준(설치 접수 시점)으로 안내해야 두 문자가 어긋나지 않는다.
       fallbackHours: String(FALLBACK_AFTER_HOURS),
     }),
   };
