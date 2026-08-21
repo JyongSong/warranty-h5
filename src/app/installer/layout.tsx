@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerTabCounts } from "@/lib/installer/tabCounts";
+import FirstVisitGuide from "./FirstVisitGuide";
 import InstallerNav from "./InstallerNav";
 import PushRegister from "./PushRegister";
 
@@ -18,6 +19,7 @@ export default async function InstallerLayout({ children }: { children: ReactNod
   return (
     <>
       <PushRegister />
+      <FirstVisitGuide />
       {children}
       <InstallerNav counts={counts} />
     </>
