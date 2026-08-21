@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties } from "react";
 import { requireInstallerPage } from "@/lib/installer/session";
 import { getInstallerContact } from "@/lib/installation/installer/source";
@@ -28,6 +29,10 @@ export default async function InstallerMePage() {
           <Row label="지역" value={profile?.region?.trim() || "-"} />
         </div>
 
+        <Link href="/installer/guide" style={guideLink}>
+          앱 사용 안내 다시 보기
+        </Link>
+
         <form action={logoutInstallerAction} style={{ marginTop: 8 }}>
           <button type="submit" style={ui.secondaryButton}>
             로그아웃
@@ -41,6 +46,15 @@ export default async function InstallerMePage() {
     </main>
   );
 }
+
+const guideLink: CSSProperties = {
+  ...ui.secondaryButton,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  marginTop: 8,
+};
 
 const footNote: CSSProperties = {
   fontSize: 12,
