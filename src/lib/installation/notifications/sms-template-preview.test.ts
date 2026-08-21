@@ -15,7 +15,6 @@ describe("installation SMS template preview", () => {
 
     expect(templates.map((template) => template.key)).toEqual([
       "customer_reservation_link",
-      "customer_reservation_reminder",
       "customer_assignment_confirmed",
       "installer_assignment_request",
       "installer_happycall_guide",
@@ -73,9 +72,6 @@ describe("installation SMS template preview", () => {
 
     expect(templates.find((template) => template.key === "customer_reservation_link")?.sampleVars).toMatchObject({
       reservationUrl: "https://h5.example.com/i/c/customer-token",
-    });
-    expect(templates.find((template) => template.key === "customer_reservation_reminder")?.sampleVars).toMatchObject({
-      reservationUrl: "https://h5.example.com/i/c/reminder-token",
     });
     expect(templates.find((template) => template.key === "installer_assignment_request")?.sampleVars).toMatchObject({
       responseUrl: "https://h5.example.com/i/i/installer-token",

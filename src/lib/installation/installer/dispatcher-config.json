@@ -35,13 +35,6 @@
       "min": 1,
       "max": 100
     },
-    "remindCustomerRequests": {
-      "key": "installation.dispatcher.limit.remindCustomerRequests",
-      "description": "고객 입력 리마인드 생성 최대 처리 건수",
-      "default": 25,
-      "min": 1,
-      "max": 100
-    },
     "fallbackCustomerRequests": {
       "key": "installation.dispatcher.limit.fallbackCustomerRequests",
       "description": "고객 미입력 폴백 최대 처리 건수",

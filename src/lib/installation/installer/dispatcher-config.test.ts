@@ -42,7 +42,6 @@ describe("loadInstallationDispatcherConfig", () => {
     expect(config.customerInputRequestMode).toBe("manual");
     expect(config.lockTtlMs).toBe(180000);
     expect(config.limits.processInstallationOrders).toBe(7);
-    expect(config.limits.remindCustomerRequests).toBe(25);
     expect(config.limits.sendInstallationNotifications).toBe(9);
     expect(config.smsSendWindow).toEqual({ start: "09:30", end: "19:45" });
   });
@@ -108,7 +107,6 @@ describe("getInstallationDispatcherConfigRows", () => {
       lockTtlMs: 180000,
       limits: {
         processInstallationOrders: 7,
-        remindCustomerRequests: 25,
         fallbackCustomerRequests: 25,
         dispatchReadyOrders: 25,
         timeoutInstallerAssignments: 25,

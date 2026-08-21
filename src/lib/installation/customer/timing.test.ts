@@ -3,8 +3,6 @@ import {
   CUSTOMER_REQUEST_TOKEN_TTL_HOURS,
   FALLBACK_AFTER_HOURS,
   getCustomerFallbackDueAt,
-  REMINDER_AFTER_HOURS,
-  REMINDER_TOKEN_TTL_HOURS,
 } from "@/lib/installation/customer/timing";
 
 describe("customer input timeline", () => {
@@ -15,16 +13,12 @@ describe("customer input timeline", () => {
     expect(FALLBACK_AFTER_HOURS).toBe(24);
   });
 
-  it("reminds before the fallback fires", () => {
-    expect(REMINDER_AFTER_HOURS).toBeLessThan(FALLBACK_AFTER_HOURS);
-  });
-
   it("keeps the link alive past the latest possible fallback", () => {
     // 폴백이 주말로 밀리는데 링크만 먼저 만료되면, 고객은 아직 자동 확정도
     // 안 된 상태에서 만료 화면만 보게 된다.
     const worstCase = FALLBACK_AFTER_HOURS + 48;
+    // 리마인더가 없어 토큰을 갱신할 기회도 없다. 최초 발급분이 버텨야 한다.
     expect(CUSTOMER_REQUEST_TOKEN_TTL_HOURS).toBeGreaterThanOrEqual(worstCase);
-    expect(REMINDER_AFTER_HOURS + REMINDER_TOKEN_TTL_HOURS).toBeGreaterThanOrEqual(worstCase);
   });
 });
 

@@ -1,7 +1,10 @@
 /**
  * 고객 설치 예약 정보 입력 타임라인.
  *
- * 발송(7번) → REMINDER_AFTER_HOURS 리마인더(9번) → FALLBACK_AFTER_HOURS 폴백
+ * 발송(7번) → FALLBACK_AFTER_HOURS 폴백
+ *
+ * 리마인더는 두지 않는다. 안내 한 통으로 끝내고, 기한이 지나면 주문 정보로
+ * 자동 확정한다.
  *
  * FALLBACK_AFTER_HOURS 는 카카오 알림톡 "설치 예약 정보 입력 안내" 템플릿
  * 본문에 시간이 명시돼 있다. 바꾸려면 카카오 템플릿도 함께 재심사해야 한다.
@@ -9,7 +12,6 @@
  * 링크 유효시간은 이 타임라인을 이어받도록 맞춘다. 최초 토큰은 리마인더
  * 시점까지, 리마인더가 새로 발급하는 토큰은 폴백 시점까지 살아 있다.
  */
-export const REMINDER_AFTER_HOURS = 12;
 export const FALLBACK_AFTER_HOURS = 24;
 
 /**
@@ -23,12 +25,11 @@ const MAX_FALLBACK_DEFERRAL_HOURS = 48;
 
 /**
  * 고객 링크 유효시간. 폴백이 밀릴 수 있는 최대치까지 살려 둔다.
- * 시스템이 아직 폴백하지 않았는데 고객 링크만 먼저 만료되면, 눌러도 만료
- * 화면만 보게 된다.
+ * 리마인더가 없어 토큰을 갱신할 기회도 없으므로, 최초 발급분이 폴백 시점까지
+ * 버텨야 한다.
  */
 export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS =
   FALLBACK_AFTER_HOURS + MAX_FALLBACK_DEFERRAL_HOURS;
-export const REMINDER_TOKEN_TTL_HOURS = CUSTOMER_REQUEST_TOKEN_TTL_HOURS;
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;

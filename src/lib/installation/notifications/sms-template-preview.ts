@@ -1,6 +1,5 @@
 import customerAssignmentConfirmedTemplate from "@/lib/installation/notifications/sms-template-customer-assignment-confirmed.json";
 import customerReservationLinkTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-link.json";
-import customerReservationReminderTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-reminder.json";
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
@@ -8,7 +7,6 @@ import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 
 export type InstallationSmsTemplatePreviewKey =
   | "customer_reservation_link"
-  | "customer_reservation_reminder"
   | "customer_assignment_confirmed"
   | "installer_assignment_request"
   | "installer_happycall_guide";
@@ -59,21 +57,6 @@ function createTemplateDefinitions(baseUrl: string): InstallationSmsTemplatePrev
       sampleVars: {
         productSummary: "Aqara 스마트 도어락 K100 x1 / 용역 출장비 x1",
         reservationUrl: `${baseUrl}/i/c/customer-token`,
-        fallbackHours: String(FALLBACK_AFTER_HOURS),
-      },
-    },
-    {
-      key: "customer_reservation_reminder",
-      label: "고객 예약 입력 리마인드",
-      audience: "고객",
-      description: "설치 희망 정보 입력이 완료되지 않은 고객에게 다시 안내합니다.",
-      fileName: "sms-template-customer-reservation-reminder.json",
-      filePath: `${smsTemplatePath}sms-template-customer-reservation-reminder.json`,
-      content: customerReservationReminderTemplate.content,
-      variables: extractTemplateVariables(customerReservationReminderTemplate.content),
-      sampleVars: {
-        productSummary: "Aqara 스마트 도어락 K100 x1",
-        reservationUrl: `${baseUrl}/i/c/reminder-token`,
         fallbackHours: String(FALLBACK_AFTER_HOURS),
       },
     },

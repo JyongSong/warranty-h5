@@ -2,7 +2,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import vercelConfig from "../../../../../../../vercel.json";
 import { GET } from "@/app/api/internal/cron/installation/dispatcher/route";
 import { fallbackExpiredInstallationCustomerRequests } from "@/lib/installation/customer/fallback";
-import { remindExpiredInstallationCustomerRequests } from "@/lib/installation/customer/reminder";
 import { dispatchReadyInstallationOrders } from "@/lib/installation/installer/dispatch";
 import {
   alertOrphanedInstallationOrders,
@@ -46,10 +45,6 @@ vi.mock("@/lib/installation/customer/fallback", () => ({
   fallbackExpiredInstallationCustomerRequests: vi.fn(),
 }));
 
-vi.mock("@/lib/installation/customer/reminder", () => ({
-  remindExpiredInstallationCustomerRequests: vi.fn(),
-}));
-
 vi.mock("@/lib/installation/installer/dispatch", () => ({
   dispatchReadyInstallationOrders: vi.fn(),
 }));
@@ -67,7 +62,6 @@ vi.mock("@/lib/installation/notifications/outbox", () => ({
 
 const getSmsLinkBaseUrlMock = vi.mocked(getSmsLinkBaseUrl);
 const processPendingInstallationOrdersMock = vi.mocked(processPendingInstallationOrders);
-const remindExpiredInstallationCustomerRequestsMock = vi.mocked(remindExpiredInstallationCustomerRequests);
 const fallbackExpiredInstallationCustomerRequestsMock = vi.mocked(fallbackExpiredInstallationCustomerRequests);
 const dispatchReadyInstallationOrdersMock = vi.mocked(dispatchReadyInstallationOrders);
 const timeoutExpiredInstallerAssignmentsMock = vi.mocked(timeoutExpiredInstallerAssignments);
@@ -137,11 +131,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     processPendingInstallationOrdersMock.mockResolvedValue({
       processedCount: 3,
       skippedDuplicateCount: 0,
-      failedCount: 0,
-    });
-    remindExpiredInstallationCustomerRequestsMock.mockResolvedValue({
-      remindedCount: 1,
-      skippedCount: 0,
       failedCount: 0,
     });
     fallbackExpiredInstallationCustomerRequestsMock.mockResolvedValue({
@@ -300,13 +289,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       baseUrl: "https://example.test",
       limit: 7,
     });
-    expect(remindExpiredInstallationCustomerRequestsMock).toHaveBeenCalledWith({
-      baseUrl: "https://example.test",
-      limit: 25,
-    });
-    expect(remindExpiredInstallationCustomerRequestsMock.mock.invocationCallOrder[0]).toBeLessThan(
-      fallbackExpiredInstallationCustomerRequestsMock.mock.invocationCallOrder[0],
-    );
     expect(fallbackExpiredInstallationCustomerRequestsMock).toHaveBeenCalledWith({
       limit: 25,
     });
@@ -359,7 +341,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
           skippedDuplicateCount: 0,
           failedCount: 0,
         },
-        remindCustomerRequests: { remindedCount: 1, skippedCount: 0, failedCount: 0 },
         fallbackCustomerRequests: { fallbackCount: 1, manualRequiredCount: 0, skippedCount: 2 },
         dispatchReadyOrders: { dispatchedCount: 4, skippedCount: 5, failedCount: 0 },
         timeoutInstallerAssignments: { timedOutCount: 6, failedCount: 0 },
@@ -375,7 +356,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       },
       metrics: {
         processInstallationOrders: { durationMs: expect.any(Number) },
-        remindCustomerRequests: { durationMs: expect.any(Number) },
         fallbackCustomerRequests: { durationMs: expect.any(Number) },
         dispatchReadyOrders: { durationMs: expect.any(Number) },
         timeoutInstallerAssignments: { durationMs: expect.any(Number) },
@@ -391,7 +371,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
         smsSendWindowOpen: true,
         limits: {
           processInstallationOrders: 7,
-          remindCustomerRequests: 25,
           fallbackCustomerRequests: 25,
           dispatchReadyOrders: 10,
           timeoutInstallerAssignments: 25,
@@ -431,7 +410,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
 
     expect(response.status).toBe(200);
     expect(processPendingInstallationOrdersMock).not.toHaveBeenCalled();
-    expect(remindExpiredInstallationCustomerRequestsMock).toHaveBeenCalled();
     expect(sendPendingInstallationNotificationsMock).toHaveBeenCalled();
     expect(await response.json()).toMatchObject({
       ok: true,
@@ -463,7 +441,6 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     expect(response.status).toBe(200);
     expect(sendPendingInstallationNotificationsMock).not.toHaveBeenCalled();
     expect(processPendingInstallationOrdersMock).toHaveBeenCalled();
-    expect(remindExpiredInstallationCustomerRequestsMock).toHaveBeenCalled();
     expect(dispatchReadyInstallationOrdersMock).toHaveBeenCalled();
     expect(syncInstallationSmsDeliveryReportsMock).toHaveBeenCalled();
     expect(await response.json()).toMatchObject({
