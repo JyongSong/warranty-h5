@@ -11,8 +11,47 @@
  */
 export const REMINDER_AFTER_HOURS = 12;
 export const FALLBACK_AFTER_HOURS = 24;
-export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = REMINDER_AFTER_HOURS;
-export const REMINDER_TOKEN_TTL_HOURS = FALLBACK_AFTER_HOURS - REMINDER_AFTER_HOURS;
+
+/**
+ * 폴백 시점이 주말이면 다음 영업일로 민다. 문안은 "24시간"이라고만 안내하므로,
+ * 미루는 방향(고객에게 유리)으로만 어긋나게 한다 — 안내보다 일찍 자동 확정되는
+ * 일은 없어야 한다.
+ *
+ * 금요일 발송이 최대 밀림폭이다(토·일 건너뛰어 월요일 = +48시간).
+ */
+const MAX_FALLBACK_DEFERRAL_HOURS = 48;
+
+/**
+ * 고객 링크 유효시간. 폴백이 밀릴 수 있는 최대치까지 살려 둔다.
+ * 시스템이 아직 폴백하지 않았는데 고객 링크만 먼저 만료되면, 눌러도 만료
+ * 화면만 보게 된다.
+ */
+export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS =
+  FALLBACK_AFTER_HOURS + MAX_FALLBACK_DEFERRAL_HOURS;
+export const REMINDER_TOKEN_TTL_HOURS = CUSTOMER_REQUEST_TOKEN_TTL_HOURS;
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isKstWeekend(instant: Date) {
+  const kstDay = new Date(instant.getTime() + KST_OFFSET_MS).getUTCDay();
+  return kstDay === 0 || kstDay === 6; // Sun | Sat
+}
+
+/**
+ * 이 요청이 실제로 폴백되어야 하는 시각.
+ *
+ * 주말만 건너뛴다. 평일에 걸린 법정공휴일은 반영하지 않는다 — 음력에 걸린
+ * 날(설날·추석)까지 다루려면 공휴일 데이터 소스가 필요하다.
+ */
+export function getCustomerFallbackDueAt(createdAt: Date): Date {
+  let due = new Date(createdAt.getTime() + FALLBACK_AFTER_HOURS * 60 * 60 * 1000);
+  // 토·일 연속 최대 2일.
+  for (let i = 0; i < 2 && isKstWeekend(due); i += 1) {
+    due = new Date(due.getTime() + DAY_MS);
+  }
+  return due;
+}
 
 /**
  * 고객이 고를 수 있는 설치 희망일 범위 (KST 오늘 기준).

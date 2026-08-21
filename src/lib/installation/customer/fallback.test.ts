@@ -76,6 +76,8 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       {
         id: "request-1",
         installationOrderId: "order-1",
+        // KST 2026-06-10(수) 21:00 → 만기 06-11(목) 21:00 = now. 주말이 아니다.
+        createdAt: new Date("2026-06-10T12:00:00.000Z"),
         installationOrder: {
           source: {
             phoneEncrypted: "010-1234-5678",
@@ -124,6 +126,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       select: {
         id: true,
         installationOrderId: true,
+        createdAt: true,
         installationOrder: {
           select: {
             source: {
@@ -190,6 +193,7 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       {
         id: "request-1",
         installationOrderId: "order-1",
+        createdAt: new Date("2026-06-10T12:00:00.000Z"),
         installationOrder: {
           source: {
             phoneEncrypted: "010-1234-5678",

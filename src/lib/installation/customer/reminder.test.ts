@@ -102,7 +102,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
       where: { id: "request-1" },
       data: {
         customerTokenHash: hashInstallationCustomerToken("reminder-token"),
-        customerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
+        customerTokenExpiresAt: new Date("2026-06-14T12:00:00.000Z"),
       },
     });
     expect(createNotification).toHaveBeenCalledWith({

@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
+import {
+  FALLBACK_AFTER_HOURS,
+  getCustomerFallbackDueAt,
+} from "@/lib/installation/customer/timing";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -24,6 +27,7 @@ type FallbackOptions = {
 type FallbackCandidate = {
   id: string;
   installationOrderId: string;
+  createdAt: Date;
   installationOrder: {
     source: {
       phoneEncrypted: string | null;
@@ -45,6 +49,8 @@ export async function fallbackExpiredInstallationCustomerRequests({
   now = new Date(),
   limit = 25,
 }: FallbackOptions = {}): Promise<FallbackExpiredInstallationCustomerRequestsResult> {
+  // SQL 은 "최소 24시간 지난 것"까지만 좁힌다. 주말을 건너뛴 실제 만기는
+  // getCustomerFallbackDueAt 이 정하므로 아래에서 한 번 더 거른다.
   const cutoff = new Date(now.getTime() - FALLBACK_AFTER_HOURS * 60 * 60 * 1000);
   const requests = await prisma.installationCustomerRequest.findMany({
     where: {
@@ -74,6 +80,7 @@ export async function fallbackExpiredInstallationCustomerRequests({
     select: {
       id: true,
       installationOrderId: true,
+      createdAt: true,
       installationOrder: {
         select: {
           source: {
@@ -93,6 +100,13 @@ export async function fallbackExpiredInstallationCustomerRequests({
   let skippedCount = 0;
 
   for (const request of requests as FallbackCandidate[]) {
+    // 주말에 걸린 건은 다음 영업일까지 기다린다. 문안은 "24시간"만 안내하므로
+    // 미루는 쪽으로만 어긋나게 한다.
+    if (getCustomerFallbackDueAt(request.createdAt).getTime() > now.getTime()) {
+      skippedCount += 1;
+      continue;
+    }
+
     const fallbackData = buildCustomerRequestFallbackData(request, now);
     if (!fallbackData) {
       await moveCustomerRequestToManualRequired(request, now);
