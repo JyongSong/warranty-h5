@@ -7,11 +7,11 @@ import {
 } from "@/lib/installation/customer/timing";
 
 describe("customer input timeline", () => {
-  // 카카오 알림톡 "설치 예약 정보 입력 안내" 본문에 "48시간"이 고정 문구로
-  // 심사 통과돼 있다. 이 값을 바꾸려면 카카오 템플릿을 재심사해야 하므로
-  // 조용히 바뀌지 않도록 못박아 둔다.
-  it("pins the fallback window to the hours printed in the approved alimtalk template", () => {
-    expect(FALLBACK_AFTER_HOURS).toBe(48);
+  // 카카오 알림톡 "설치 예약 정보 입력 안내"/"재안내" 본문에 이 시간이 고정
+  // 문구로 들어간다. 값을 바꾸면 템플릿도 재심사해야 하므로 조용히 바뀌지
+  // 않도록 못박아 둔다.
+  it("pins the fallback window to the hours printed in the alimtalk templates", () => {
+    expect(FALLBACK_AFTER_HOURS).toBe(24);
   });
 
   it("reminds before the fallback fires", () => {

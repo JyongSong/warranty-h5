@@ -87,7 +87,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
         customerSubmittedAt: null,
         fallbackUsed: false,
         createdAt: {
-          lte: new Date("2026-06-10T12:00:00.000Z"),
+          lte: new Date("2026-06-11T00:00:00.000Z"),
         },
         installationOrder: {
           status: "WAITING_CUSTOMER_INPUT",
@@ -102,7 +102,7 @@ describe("remindExpiredInstallationCustomerRequests", () => {
       where: { id: "request-1" },
       data: {
         customerTokenHash: hashInstallationCustomerToken("reminder-token"),
-        customerTokenExpiresAt: new Date("2026-06-12T12:00:00.000Z"),
+        customerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
       },
     });
     expect(createNotification).toHaveBeenCalledWith({

@@ -9,8 +9,8 @@
  * 링크 유효시간은 이 타임라인을 이어받도록 맞춘다. 최초 토큰은 리마인더
  * 시점까지, 리마인더가 새로 발급하는 토큰은 폴백 시점까지 살아 있다.
  */
-export const REMINDER_AFTER_HOURS = 24;
-export const FALLBACK_AFTER_HOURS = 48;
+export const REMINDER_AFTER_HOURS = 12;
+export const FALLBACK_AFTER_HOURS = 24;
 export const CUSTOMER_REQUEST_TOKEN_TTL_HOURS = REMINDER_AFTER_HOURS;
 export const REMINDER_TOKEN_TTL_HOURS = FALLBACK_AFTER_HOURS - REMINDER_AFTER_HOURS;
 
