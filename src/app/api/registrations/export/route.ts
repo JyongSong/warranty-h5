@@ -183,7 +183,13 @@ export async function GET(req: NextRequest) {
         "확인 완료 시각",
         "확인 주체",
         "만족도 조사 상태",
-        "만족도 조사 평점",
+        "1-1) 설치 기사님은 약속된 시간에 맞춰 방문해 주셨나요?",
+        "1-2) 도어락 설치가 꼼꼼하고 깔끔하게 완료되었다고 느끼셨나요?",
+        "1-3) 기사님께서 제품 사용 방법 및 안전 주의사항을 친절하게 안내해 주셨나요?",
+        "2-1) 도어락과 앱을 설치하고 연결하는 과정은 편리하셨나요?",
+        "2-2) 앱 회원가입 및 기기(도어락) 등록 과정은 큰 어려움 없이 원활하게 진행되었나요?",
+        "2-3) 현재 앱 사용 환경 및 기능 제공은 전반적으로 만족스러우신가요?",
+        "3-1) 아카라 도어락의 전반적인 사용 만족도 (5점 만점)",
         "기타 의견"
       ]
     ];
@@ -203,12 +209,41 @@ export async function GET(req: NextRequest) {
         formatDateTime(item.confirmedAt),
         item.confirmedBy ?? "-",
         surveyStatusLabel(item.surveyStatus),
+        item.survey?.q1_1 ?? "-",
+        item.survey?.q1_2 ?? "-",
+        item.survey?.q1_3 ?? "-",
+        item.survey?.q2_1 ?? "-",
+        item.survey?.q2_2 ?? "-",
+        item.survey?.q2_3 ?? "-",
         item.survey?.q3_1 ? `${item.survey.q3_1}점` : "-",
         item.survey?.comment ?? "-"
       ]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [
+      { wch: 20 }, // SN
+      { wch: 10 }, // 설치 유형
+      { wch: 12 }, // 설치일
+      { wch: 15 }, // 고객 전화번호
+      { wch: 12 }, // 담당 설치 기사
+      { wch: 15 }, // 기사 전화번호
+      { wch: 12 }, // 소속 지사
+      { wch: 10 }, // 상태
+      { wch: 14 }, // 무상 A/S 종료일
+      { wch: 18 }, // 접수 시각
+      { wch: 18 }, // 확인 완료 시각
+      { wch: 12 }, // 확인 주체
+      { wch: 18 }, // 만족도 조사 상태
+      { wch: 16 }, // 1-1
+      { wch: 16 }, // 1-2
+      { wch: 16 }, // 1-3
+      { wch: 16 }, // 2-1
+      { wch: 16 }, // 2-2
+      { wch: 16 }, // 2-3
+      { wch: 16 }, // 3-1
+      { wch: 40 }, // 기타 의견
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "설치 및 만족도 내역");
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
