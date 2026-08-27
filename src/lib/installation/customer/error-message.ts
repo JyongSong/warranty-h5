@@ -25,6 +25,14 @@ const CUSTOMER_REQUEST_ERROR_MESSAGES: Record<string, string> = {
   CUSTOMER_PHONE_REQUIRED: "연락처를 입력해 주세요.",
   CUSTOMER_PHONE_IS_SAFE_NUMBER: SAFE_NUMBER_MESSAGE,
   CUSTOMER_PHONE_NOT_MOBILE: NOT_MOBILE_MESSAGE,
+  // CJ 채널(공개 페이지). 주문번호가 명단에 없을 때는 "없는 번호"라고 단정하지
+  // 않는다 — 실제로는 CJ 의 명단 업로드가 아직 안 된 경우가 대부분이다.
+  CJ_ORDER_NO_NOT_FOUND:
+    "주문번호를 확인해 주세요. 배송 완료 후 등록까지 시간이 걸릴 수 있습니다.",
+  CJ_ORDER_NO_ALREADY_USED:
+    "이미 접수된 주문번호입니다. 변경이 필요하시면 CJ 고객센터로 문의해 주세요.",
+  ORDERER_PHONE_REQUIRED: "주문자 휴대폰 번호를 입력해 주세요.",
+  ORDERER_PHONE_INVALID: "주문자 휴대폰 번호를 다시 확인해 주세요.",
   INTERNAL_ERROR: "일시적으로 제출할 수 없습니다. 잠시 후 다시 시도해 주세요.",
 };
 

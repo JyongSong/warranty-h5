@@ -32,6 +32,8 @@ export type InstallationOrderDetailItem = {
   sourceAddress: string | null;
   sourceOrderDate: string | null;
   sourceMemo: string | null;
+  sourceChannel?: string;
+  sourceExternalOrderNo?: string | null;
   sourceItemsJsonText: string | null;
   requiredCapabilities: string[];
   requiredAqaraAppCapability: string;
@@ -53,6 +55,8 @@ export type InstallationOrderDetailItem = {
     installDate: string | null;
     installTimeSlot: string | null;
     customerPhone: string | null;
+    // CJ 건에만 채워진다(인증을 거친 주문자 번호).
+    ordererPhone?: string | null;
     customerNote: string | null;
     fallbackUsed: boolean;
     status: string;
@@ -255,9 +259,24 @@ export default function InstallationOrderDetail({
     { label: "설치 기사 이름", value: currentInstallerName },
     { label: "설치 기사 브랜치", value: currentInstallerBranch },
   ];
+  const isCjOrder = item.sourceChannel === "CJ";
   const customerInfoRows = [
     { label: "고객명", value: formatText(item.sourceCustomerName) },
-    { label: "고객 전화", value: formatBackofficePhone(item.sourcePhone) },
+    {
+      label: isCjOrder ? "설치 받는 분" : "고객 전화",
+      value: formatBackofficePhone(
+        isCjOrder ? activeCustomerRequest?.customerPhone ?? null : item.sourcePhone,
+      ),
+    },
+    // CJ 건에만 있다. 인증을 거친 번호라 현장 번호가 안 될 때 기댈 곳이다.
+    ...(isCjOrder
+      ? [
+          {
+            label: "주문자(인증)",
+            value: formatBackofficePhone(activeCustomerRequest?.ordererPhone ?? null),
+          },
+        ]
+      : []),
   ];
   const addressRows = [
     { label: "원천 주소", value: formatText(item.sourceAddress) },
@@ -269,6 +288,10 @@ export default function InstallationOrderDetail({
     { label: "Aqara 요구치", value: formatText(item.requiredAqaraAppCapability) },
   ];
   const sourceOrderMetaRows = [
+    { label: "판매 채널", value: isCjOrder ? "CJ 온스타일" : "자사" },
+    ...(isCjOrder
+      ? [{ label: "CJ 주문번호", value: formatText(item.sourceExternalOrderNo ?? null) }]
+      : []),
     { label: "ERP 주문번호", value: item.sourceErpOrderNo },
     { label: "주문일", value: formatBackofficeDateTime(item.sourceOrderDate) },
     { label: "주문번호", value: item.sourceErpOrderNo },

@@ -99,6 +99,7 @@ describe("public installation routes", () => {
               installDate: "2026-06-15",
               installTimeSlot: null,
               customerPhone: null,
+              ordererPhone: null,
             },
           ],
         },

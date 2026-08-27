@@ -81,6 +81,7 @@ type AssignmentWithOrder = {
       installDate: string | null;
       installTimeSlot: string | null;
       customerPhone: string | null;
+      ordererPhone: string | null;
     }>;
     candidateRuns?: Array<{
       candidates: Array<{
@@ -110,6 +111,7 @@ type EncryptedAssignmentWithOrder = Omit<AssignmentWithOrder, "installationOrder
       installDate: string | null;
       installTimeSlot: string | null;
       customerPhoneEncrypted: string | null;
+      ordererPhoneEncrypted: string | null;
     }>;
   };
 };
@@ -241,6 +243,7 @@ const assignmentSelect = {
           installDate: true,
           installTimeSlot: true,
           customerPhoneEncrypted: true,
+          ordererPhoneEncrypted: true,
         },
       },
       candidateRuns: {
@@ -269,15 +272,19 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
     },
   });
 
-  const customerPhone =
-    assignment.installationOrder.customerRequests[0]?.customerPhone ??
-    assignment.installationOrder.sourcePhone;
+  const customerRequestForSms = assignment.installationOrder.customerRequests[0];
+  // 기사가 거는 번호는 "설치 받는 분"이다.
+  const customerPhone = customerRequestForSms?.customerPhone ?? assignment.installationOrder.sourcePhone;
+  // 배정 안내 문자는 주문자에게 보낸다. CJ 채널에서 주문자 번호만 인증을
+  // 거쳤으므로 도달을 보장할 수 있는 쪽이다. 주문자 번호가 없는 자사 건은
+  // 지금까지처럼 설치 받는 분 번호로 간다.
+  const noticePhone = customerRequestForSms?.ordererPhone ?? customerPhone;
 
   // 고객/기사 SMS 양쪽에서 쓰므로 한 번만 조회한다.
   const installer = await getInstallerContact(assignment.installerId, tx as never);
 
-  if (customerPhone) {
-    const normalizedCustomerPhone = normalizePhone11(customerPhone);
+  if (noticePhone) {
+    const normalizedCustomerPhone = normalizePhone11(noticePhone);
     const smsContent = buildCustomerAssignmentConfirmedSmsContent({
       branchName: installer?.branch?.trim() || installer?.name,
       installerPhone: installer?.phone,
@@ -763,6 +770,7 @@ function decryptAssignmentPii(assignment: EncryptedAssignmentWithOrder): Assignm
           installAddress1Encrypted,
           installAddressDetailEncrypted,
           customerPhoneEncrypted,
+          ordererPhoneEncrypted,
           ...requestFields
         } = request;
 
@@ -772,6 +780,7 @@ function decryptAssignmentPii(assignment: EncryptedAssignmentWithOrder): Assignm
           installAddress1: decryptNullablePii(installAddress1Encrypted),
           installAddressDetail: decryptNullablePii(installAddressDetailEncrypted),
           customerPhone: decryptNullablePii(customerPhoneEncrypted),
+          ordererPhone: decryptNullablePii(ordererPhoneEncrypted),
         };
       }),
     },

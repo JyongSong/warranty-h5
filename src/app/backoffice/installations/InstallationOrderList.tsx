@@ -34,6 +34,8 @@ export type InstallationOrderListItem = {
   id: string;
   installationId: string;
   erpOrderNo: string;
+  /** "SELF" = 자사 ERP, "CJ" = CJ 온스타일 공개 페이지 유입 */
+  channel?: string;
   customerName: string | null;
   phone: string | null;
   sourceAddress: string | null;
@@ -334,13 +336,20 @@ export default function InstallationOrderList({
           size: 150,
           minSize: 120,
           cell: ({ row }) => (
-            <Link
-              href={`${basePath}/${row.original.id}${detailSearchQuery ? `?${detailSearchQuery}` : ""}`}
-              aria-current={selectedInstallationId === row.original.id ? "page" : undefined}
-              className="font-semibold text-blue-700 underline decoration-blue-200 underline-offset-2 transition hover:text-blue-900 hover:decoration-blue-500"
-            >
-              {row.original.erpOrderNo}
-            </Link>
+            <div className="flex items-center gap-1.5">
+              {row.original.channel === "CJ" ? (
+                <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                  CJ
+                </span>
+              ) : null}
+              <Link
+                href={`${basePath}/${row.original.id}${detailSearchQuery ? `?${detailSearchQuery}` : ""}`}
+                aria-current={selectedInstallationId === row.original.id ? "page" : undefined}
+                className="truncate font-semibold text-blue-700 underline decoration-blue-200 underline-offset-2 transition hover:text-blue-900 hover:decoration-blue-500"
+              >
+                {row.original.erpOrderNo}
+              </Link>
+            </div>
           ),
           sortingFn: "alphanumeric",
         },

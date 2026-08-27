@@ -87,6 +87,7 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           <Row label="주소" value={item.address ?? "-"} />
           {item.customerName ? <Row label="고객명" value={item.customerName} /> : null}
           {item.customerPhone ? <PhoneRow label="연락처" phone={item.customerPhone} /> : null}
+          {item.backupPhone ? <PhoneRow label="예비 연락처" phone={item.backupPhone} /> : null}
           {item.status === "PENDING" ? (
             <div style={{ fontSize: 12, color: "#92400e", marginTop: 8 }}>
               고객 성함·연락처는 수락 후 표시됩니다.

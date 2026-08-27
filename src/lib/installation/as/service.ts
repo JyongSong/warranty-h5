@@ -106,6 +106,9 @@ export async function findOriginalInstallerForAs(input: {
       or.push(
         { source: { is: { phoneHash } } },
         { customerRequests: { some: { customerPhoneHash: phoneHash } } },
+        // CJ 건은 주문자와 설치 받는 분의 번호가 다를 수 있다. 어느 쪽으로
+        // A/S 를 접수해도 원래 설치 건을 찾아야 한다.
+        { customerRequests: { some: { ordererPhoneHash: phoneHash } } },
       );
     }
   }

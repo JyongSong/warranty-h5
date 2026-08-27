@@ -50,6 +50,8 @@ const installationOrderSourceSelect = {
   orderNumbers: true,
   noGirl: true,
   memo: true,
+  channel: true,
+  externalOrderNo: true,
 } as const;
 
 const installationOrderRawSelect = {
@@ -214,6 +216,7 @@ export async function listInstallationOrderStatuses({
       sourceNoGirl: source?.noGirl ?? null,
       sourceOrderDate: source?.dueDate ?? null,
       sourceMemo: source?.memo ?? null,
+      sourceChannel: source?.channel ?? "SELF",
       sourceItemsJsonText: null as string | null,
       requiredCapabilities: null as string | null,
       requiredAqaraAppCapability: null as string | null,
@@ -337,6 +340,8 @@ function buildInstallationOrderSearchWhere(query: string): Prisma.InstallationOr
     return [
       { source: { is: { phoneHash } } },
       { customerRequests: { some: { customerPhoneHash: phoneHash } } },
+      // CJ 건은 주문자 번호가 따로 있다. 고객이 어느 번호로 문의하든 찾히게 한다.
+      { customerRequests: { some: { ordererPhoneHash: phoneHash } } },
       ...sourceIdentifierSearchWhere,
     ];
   } catch (error) {
@@ -411,6 +416,7 @@ async function buildInstallationOrderSelectedSearchWhere(
       OR: [
         { source: { is: { phoneHash } } },
         { customerRequests: { some: { customerPhoneHash: phoneHash } } },
+        { customerRequests: { some: { ordererPhoneHash: phoneHash } } },
       ],
     };
   }

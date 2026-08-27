@@ -116,6 +116,7 @@ export async function InstallationOrderListView({
       id: order.id,
       installationId: order.id,
       erpOrderNo: order.sourceErpOrderNo,
+      channel: order.sourceChannel,
       customerName: order.sourceCustomerName,
       phone: order.sourcePhone,
       sourceAddress: order.sourceAddress,

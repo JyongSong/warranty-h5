@@ -221,6 +221,7 @@ describe("listInstallationOrderStatuses", () => {
         OR: [
           { source: { is: { phoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
           { customerRequests: { some: { customerPhoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
+          { customerRequests: { some: { ordererPhoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
           { source: { is: { sourceKey: { contains: "010-1234-5678", mode: "insensitive" } } } },
           { source: { is: { orderNumbers: { contains: "010-1234-5678", mode: "insensitive" } } } },
           { source: { is: { noGirl: { contains: "010-1234-5678", mode: "insensitive" } } } },
@@ -538,6 +539,7 @@ describe("listInstallationOrderStatuses", () => {
         OR: [
           { source: { is: { phoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
           { customerRequests: { some: { customerPhoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
+          { customerRequests: { some: { ordererPhoneHash: hmacPii(normalizePhone11("010-1234-5678")) } } },
           { source: { is: { sourceKey: { contains: "010-1234-5678", mode: "insensitive" } } } },
           { source: { is: { orderNumbers: { contains: "010-1234-5678", mode: "insensitive" } } } },
           { source: { is: { noGirl: { contains: "010-1234-5678", mode: "insensitive" } } } },

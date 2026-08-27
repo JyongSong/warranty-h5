@@ -20,6 +20,8 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
           orderNumbers: true,
           noGirl: true,
           memo: true,
+          channel: true,
+          externalOrderNo: true,
         },
       },
       status: true,
@@ -44,6 +46,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
           installDate: true,
           installTimeSlot: true,
           customerPhoneEncrypted: true,
+          ordererPhoneEncrypted: true,
           customerNote: true,
           fallbackUsed: true,
           status: true,
@@ -192,6 +195,8 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
     sourceNoGirl: source?.noGirl ?? null,
     sourceOrderDate: source?.dueDate ?? null,
     sourceMemo: source?.memo ?? null,
+    sourceChannel: source?.channel ?? "SELF",
+    sourceExternalOrderNo: source?.externalOrderNo ?? null,
     sourceItemsJsonText: null as string | null,
     requiredCapabilities: serializeRequiredCapabilities(dispatchRequirement.requiredCapabilities),
     requiredAqaraAppCapability: dispatchRequirement.requiredAqaraAppCapability,
@@ -219,6 +224,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
         installAddressEncrypted,
         installAddressDetailEncrypted,
         customerPhoneEncrypted,
+        ordererPhoneEncrypted,
         ...requestFields
       } = request;
 
@@ -227,6 +233,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
         installAddress: decryptNullablePii(installAddressEncrypted),
         installAddressDetail: decryptNullablePii(installAddressDetailEncrypted),
         customerPhone: decryptNullablePii(customerPhoneEncrypted),
+        ordererPhone: decryptNullablePii(ordererPhoneEncrypted),
       };
     }),
     notifications: notifications.map((notification) => {

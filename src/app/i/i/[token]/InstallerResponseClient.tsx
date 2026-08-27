@@ -31,6 +31,8 @@ type DispatchDetail = {
   timeWindow: string;
   address: string;
   customerPhone: string;
+  // CJ 건에만 있다(주문자 번호). 없으면 빈 문자열.
+  backupPhone: string;
   productItems: { name: string; quantity: number }[];
   requiredCapabilities: string[];
   notes: string[];
@@ -66,6 +68,7 @@ type AssignmentInfo = {
       installDate: string | null;
       installTimeSlot: string | null;
       customerPhone: string | null;
+      ordererPhone: string | null;
     }>;
   };
 };
@@ -203,6 +206,9 @@ function buildDispatchDetail(
     customerPhone: formatPhoneNumber(
       request?.customerPhone ?? assignment?.installationOrder.sourcePhone,
     ),
+    // CJ 건은 주문자 번호가 따로 있다. 현장 번호가 안 될 때 본사를 거치지 않고
+    // 바로 걸 수 있도록 예비 연락처로 같이 보여 준다.
+    backupPhone: request?.ordererPhone ? formatPhoneNumber(request.ordererPhone) : "",
     productItems: parseProductSummaryItems(assignment?.installationOrder.productSummary),
     requiredCapabilities: assignment?.installationOrder.requiredCapabilities ?? [],
     notes: responseConfig.dispatchNotes,
@@ -412,6 +418,9 @@ function DispatchDetailSections({ detail }: { detail: DispatchDetail }) {
           <InlineSummaryRow label="설치 시간" value={detail.timeWindow} />
           <InlineSummaryRow label="주소" value={detail.address} />
           <InlineSummaryRow label="고객 전화번호" value={detail.customerPhone} />
+          {detail.backupPhone ? (
+            <InlineSummaryRow label="예비 연락처" value={detail.backupPhone} />
+          ) : null}
         </div>
       </Section>
 

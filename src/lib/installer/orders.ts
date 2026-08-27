@@ -22,6 +22,8 @@ export type InstallerOrderItem = {
   // Customer name/phone are hidden until the installer accepts (PRD §6.2).
   customerName: string | null;
   customerPhone: string | null;
+  // CJ 건의 주문자 번호(예비 연락처). 현장 번호가 안 될 때 쓴다.
+  backupPhone?: string | null;
   completedDate?: string | null; // YYYY-MM-DD (KST), set for COMPLETED items
   rejectionReason?: string | null; // set on ACCEPTED items with an unhandled HQ rejection
 };
@@ -55,6 +57,7 @@ const orderContentSelect = {
       installDate: true,
       installTimeSlot: true,
       customerPhoneEncrypted: true,
+      ordererPhoneEncrypted: true,
     },
   },
   completion: { select: { reviewStatus: true, rejectionReason: true, installEndAt: true } },
@@ -77,6 +80,7 @@ type OrderContent = {
     installDate: string | null;
     installTimeSlot: string | null;
     customerPhoneEncrypted: string | null;
+    ordererPhoneEncrypted: string | null;
   }>;
   completion: { reviewStatus: string; rejectionReason: string | null; installEndAt: Date } | null;
 };
@@ -118,6 +122,8 @@ function shapeOrder(
     customerPhone: piiVisible
       ? decryptNullablePii(req?.customerPhoneEncrypted) ?? decryptNullablePii(order.source?.phoneEncrypted)
       : null,
+    // CJ 건의 주문자 번호. 현장 번호가 안 될 때 쓰는 예비 연락처.
+    backupPhone: piiVisible ? decryptNullablePii(req?.ordererPhoneEncrypted) : null,
     rejectionReason,
   };
 }
