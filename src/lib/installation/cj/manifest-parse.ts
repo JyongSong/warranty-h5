@@ -60,7 +60,19 @@ export function parseCjManifestText(text: string): ParsedManifestRows {
 
 function splitDelimitedLine(line: string) {
   const delimiter = line.includes("\t") ? "\t" : ",";
-  return line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, ""));
+  return line.split(delimiter).map((cell) => stripCell(cell));
+}
+
+function stripCell(cell: string) {
+  const trimmed = cell.trim();
+
+  // 엑셀은 14자리 주문번호를 숫자로 읽어 2.02606E+13 으로 망가뜨린다. 그래서
+  // 샘플 파일은 ="..." (엑셀에서 텍스트로 고정되는 형식)으로 내려보낸다.
+  // 그대로 저장해 올려도 읽히도록 여기서 벗겨 준다.
+  const excelText = /^="(.*)"$/.exec(trimmed);
+  if (excelText) return excelText[1].trim();
+
+  return trimmed.replace(/^"|"$/g, "");
 }
 
 function isHeaderCell(cell: string | undefined) {

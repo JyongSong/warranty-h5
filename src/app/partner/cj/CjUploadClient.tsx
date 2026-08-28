@@ -74,6 +74,19 @@ export default function CjUploadClient({ partnerName, stats, uploads }: Props) {
             기존 리포트를 그대로 올리셔도 됩니다.
           </p>
 
+          <div style={sampleBoxStyle}>
+            <div>
+              <p style={sampleTitleStyle}>처음이시라면 샘플 파일을 받아 보세요</p>
+              <p style={sampleHintStyle}>
+                엑셀에서 열어도 주문번호가 깨지지 않는 형식입니다. 내용만 바꿔 저장한 뒤 그대로
+                올리시면 됩니다.
+              </p>
+            </div>
+            <button type="button" onClick={downloadSampleCsv} style={sampleButtonStyle}>
+              샘플 받기
+            </button>
+          </div>
+
           <label style={fileLabelStyle}>
             <input
               type="file"
@@ -135,6 +148,28 @@ export default function CjUploadClient({ partnerName, stats, uploads }: Props) {
       </div>
     </div>
   );
+}
+
+// 샘플 파일. 엑셀에서 열어도 주문번호가 망가지지 않도록 ="..." 로 감싸고,
+// 한글 헤더가 깨지지 않도록 BOM 을 붙인다(엑셀은 BOM 없는 UTF-8 을 깨뜨린다).
+function downloadSampleCsv() {
+  const rows = [
+    ["주문번호", "주문일"],
+    ['="20260620034905"', '="20260620"'],
+    ['="20260620034906"', '="20260621"'],
+    ['="20260621034907"', '="20260621"'],
+  ];
+  const csv = rows.map((row) => row.join(",")).join("\r\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "cj-order-sample.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -230,6 +265,42 @@ const cardStyle: CSSProperties = {
 const cardTitleStyle: CSSProperties = { margin: 0, fontSize: 15, fontWeight: 700 };
 
 const cardHintStyle: CSSProperties = { margin: 0, fontSize: 12.5, color: MUTED, lineHeight: 1.7 };
+
+const sampleBoxStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  padding: "14px 16px",
+  borderRadius: 10,
+  background: "#F5F3FF",
+};
+
+const sampleTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#5B21B6",
+};
+
+const sampleHintStyle: CSSProperties = {
+  margin: "4px 0 0",
+  fontSize: 12,
+  color: "#6D28D9",
+  lineHeight: 1.6,
+};
+
+const sampleButtonStyle: CSSProperties = {
+  flexShrink: 0,
+  padding: "9px 16px",
+  borderRadius: 8,
+  border: "none",
+  background: PURPLE,
+  color: "#FFFFFF",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
 
 const fileLabelStyle: CSSProperties = {
   display: "flex",

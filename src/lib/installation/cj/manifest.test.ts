@@ -82,6 +82,28 @@ describe("parseCjManifestText", () => {
     expect(parsed.rows[0]).toEqual({ orderNo: "20260620034905", orderDate: null });
   });
 
+  it("엑셀이 텍스트로 고정한 =\"...\" 셀을 읽는다", () => {
+    // 우리가 내려보내는 샘플 파일의 형식. 담당자가 엑셀에서 열어 내용만 바꿔
+    // 저장해 올려도 그대로 읽혀야 한다.
+    const parsed = parseCjManifestText(
+      ['주문번호,주문일', '="20260620034905",="20260620"', '="20260620034906",="20260621"'].join("\n"),
+    );
+
+    expect(parsed.rows).toEqual([
+      { orderNo: "20260620034905", orderDate: "2026-06-20" },
+      { orderNo: "20260620034906", orderDate: "2026-06-21" },
+    ]);
+    expect(parsed.invalidCount).toBe(0);
+  });
+
+  it("엑셀이 지수 표기로 망가뜨린 주문번호는 조용히 넘기지 않고 오류로 센다", () => {
+    // 2.02606E+13 을 주문번호로 받아들이면 고객이 영영 제출하지 못한다.
+    const parsed = parseCjManifestText("2.02606E+13,20260620");
+
+    expect(parsed.rows).toHaveLength(0);
+    expect(parsed.invalidCount).toBe(1);
+  });
+
   it("따옴표로 감싼 CSV 셀을 벗겨낸다", () => {
     const parsed = parseCjManifestText('"20260620034905","20260620"');
 
