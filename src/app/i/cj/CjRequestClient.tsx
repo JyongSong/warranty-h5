@@ -553,7 +553,7 @@ function BrandMark() {
         </svg>
       </div>
       <div>
-        <p style={brandTitleStyle}>Aqara × CJ Onstyle × 다살림</p>
+        <p style={brandTitleStyle}>Aqara × CJ Onstyle × 다다살림</p>
         <p style={brandSubtitleStyle}>DOORLOCK INSTALL</p>
       </div>
     </div>
