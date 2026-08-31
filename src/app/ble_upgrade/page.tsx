@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import QrScanModal from "@/app/reg/QrScanModal";
+import SnLocationModal from "./SnLocationModal";
 import { normalizePhone, formatKrPhone } from "@/lib/phone";
 
 export default function BleUpgradePage() {
@@ -15,6 +16,7 @@ export default function BleUpgradePage() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const [isScanning, setIsScanning] = useState(false);
+  const [snHelpOpen, setSnHelpOpen] = useState(false);
 
   // Mobile floating jump button: hide once the purchase form is in view
   const [showJumpBtn, setShowJumpBtn] = useState(true);
@@ -298,7 +300,14 @@ export default function BleUpgradePage() {
                     기기 일련번호 (SN)
                   </label>
                   <p className="mb-2 text-xs text-white/40">
-                    도어락 본체 측면 스티커의 일련번호(SN)를 입력하거나 카메라로 스캔하세요.
+                    도어락 본체 측면 스티커의 일련번호(SN)를 입력하거나 카메라로 스캔하세요.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setSnHelpOpen(true)}
+                      className="ml-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 align-middle text-[11px] font-semibold text-sky-300 transition-colors hover:bg-sky-400/20 active:bg-sky-400/25"
+                    >
+                      <span aria-hidden="true">?</span>SN 위치 확인
+                    </button>
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -471,6 +480,9 @@ export default function BleUpgradePage() {
       >
         구매하기
       </a>
+
+      {/* SN Location Guide Modal */}
+      {snHelpOpen && <SnLocationModal onClose={() => setSnHelpOpen(false)} />}
 
       {/* Camera QR Scanning Modal */}
       {isScanning && (
