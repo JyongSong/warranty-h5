@@ -116,14 +116,23 @@ export default function CompletionReviewPanel({
         <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
       </div>
 
-      {completion.photoUrls.length > 0 ? (
+      {completion.photos.length > 0 ? (
         <div style={photoRow}>
-          {completion.photoUrls.map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "block" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`photo-${i + 1}`} style={photo} />
-            </a>
-          ))}
+          {completion.photos.map((p, i) =>
+            p.url ? (
+              <a key={p.path} href={p.url} target="_blank" rel="noreferrer" style={{ display: "block" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt={`photo-${i + 1}`} style={photo} />
+              </a>
+            ) : (
+              // 제출된 사진인데 열람 URL 을 못 만든 경우. 조용히 빼면 검수자가
+              // "원래 이만큼만 올라왔나 보다" 하고 넘어가므로 자리를 남겨 표시한다.
+              <div key={p.path} style={photoMissing} title={p.path}>
+                ⚠<br />
+                불러오지 못함
+              </div>
+            ),
+          )}
         </div>
       ) : (
         <div style={{ fontSize: 13, color: "#a1a1aa" }}>첨부된 사진이 없습니다.</div>
@@ -257,6 +266,23 @@ const title: CSSProperties = { fontSize: 16, fontWeight: 800, margin: 0 };
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
 const photoRow: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8 };
 const photo: CSSProperties = { width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #e4e4e7" };
+
+const photoMissing: CSSProperties = {
+  width: 96,
+  height: 96,
+  borderRadius: 8,
+  border: "1px dashed #fca5a5",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontSize: 11,
+  lineHeight: 1.3,
+  fontWeight: 700,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+};
 function AmountLine({ label, value }: { label: string; value: number }) {
   if (value <= 0) return null;
   return (

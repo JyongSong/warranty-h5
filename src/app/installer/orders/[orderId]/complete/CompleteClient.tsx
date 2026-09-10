@@ -8,6 +8,7 @@ import {
   uploadAndSubmitCompletion,
   type QueuedCompletionInput,
 } from "@/lib/installer/completionQueue";
+import { compressImage } from "@/lib/installer/image";
 import ConfirmAmountDialog, { type AmountLine } from "../../../ConfirmAmountDialog";
 import { previewInstallSettlementAction, type SettlementPreview } from "./actions";
 import PhotoPicker from "../../../PhotoPicker";
@@ -23,36 +24,11 @@ const ERR: Record<string, string> = {
   ORDER_NOT_SUBMITTABLE: "완료 등록할 수 없는 상태입니다.",
   INSTALL_END_REQUIRED: "설치 종료 일시를 입력해 주세요.",
   PHOTO_COUNT_INVALID: "사진을 1~4장 첨부해 주세요.",
+  PHOTO_MISSING: "사진 업로드가 완료되지 않았습니다. 사진을 다시 첨부해 주세요.",
   INVALID_CAPABILITY: "연동 등급을 확인해 주세요.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
-
-// Downscale + re-encode to keep the upload well under the Server Action /
-// Vercel body limits (phone photos are several MB each).
-async function compressImage(file: File): Promise<File> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const maxDim = 1600;
-    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close?.();
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.7),
-    );
-    if (!blob) return file;
-    return new File([blob], `${file.name.replace(/\.\w+$/, "")}.jpg`, { type: "image/jpeg" });
-  } catch {
-    return file;
-  }
-}
 
 export default function CompleteClient({
   orderId,

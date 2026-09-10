@@ -129,6 +129,11 @@ const menuItems: MenuItem[] = [
         icon: "settings",
       },
       {
+        href: "/backoffice/settings/data-import/as-history",
+        label: "A/S 설치이력 가져오기",
+        icon: "settings",
+      },
+      {
         href: "/backoffice/settings/json-entities",
         label: "매핑/라벨 확인",
         icon: "settings",

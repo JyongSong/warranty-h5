@@ -2,7 +2,11 @@
 
 import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerAsOrderView } from "@/lib/installer/asOrders";
-import { COMPLETION_PHOTO_BUCKET, createAsCompletionUploadTargets } from "@/lib/installer/storage";
+import {
+  COMPLETION_PHOTO_BUCKET,
+  createAsCompletionUploadTargets,
+  findMissingPhotos,
+} from "@/lib/installer/storage";
 import { AsOrderError, submitAsCompletion } from "@/lib/installation/as/service";
 
 export type AsUploadTargetsResult =
@@ -48,6 +52,18 @@ export async function submitAsCompletionAction(input: {
   if (photoPaths.length > 4) return { ok: false, error: "PHOTO_COUNT_INVALID" };
   if (!photoPaths.every((p) => typeof p === "string" && p.startsWith(`as/${input.asOrderId}/`))) {
     return { ok: false, error: "INVALID_PHOTO_PATHS" };
+  }
+
+  // 경로 문자열만 믿으면 업로드가 깨진 채로도 "완료" 가 된다. 실물을 확인한다.
+  // (A/S 는 사진이 0장일 수 있다 — 설정만 바꿔 해결되는 건이 있어서다.
+  //  그 경우 확인할 대상이 없으므로 그냥 통과한다.)
+  const missing = await findMissingPhotos(photoPaths);
+  if (missing.length > 0) {
+    console.error("[installer/as/submit] 업로드되지 않은 사진", {
+      asOrderId: input.asOrderId,
+      missing,
+    });
+    return { ok: false, error: "PHOTO_MISSING" };
   }
 
   try {

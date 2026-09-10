@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { getAsUploadTargetsAction, submitAsCompletionAction } from "./actions";
+import { compressImage } from "@/lib/installer/image";
 import ConfirmAmountDialog from "../../../ConfirmAmountDialog";
 import PhotoPicker from "../../../PhotoPicker";
 import * as ui from "../../../ui";
@@ -21,30 +22,11 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
-async function compressImage(file: File): Promise<File> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close?.();
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.7));
-    return blob ? new File([blob], `${file.name.replace(/\.\w+$/, "")}.jpg`, { type: "image/jpeg" }) : file;
-  } catch {
-    return file;
-  }
-}
-
 const ERR: Record<string, string> = {
   AS_ORDER_NOT_SUBMITTABLE: "완료 등록할 수 없는 상태입니다.",
   RESOLUTION_DETAIL_REQUIRED: "처리 내용을 입력해 주세요.",
   PHOTO_COUNT_INVALID: "사진은 최대 4장입니다.",
+  PHOTO_MISSING: "사진 업로드가 완료되지 않았습니다. 사진을 다시 첨부해 주세요.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };

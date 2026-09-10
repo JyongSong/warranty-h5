@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AsAdminDetail, AsInstallerRecommendation } from "@/lib/installation/as/service";
+import type {
+  AsAdminDetail,
+  AsInstallerRecommendation,
+  AsOriginalInstallRecord,
+} from "@/lib/installation/as/service";
+import type { CompletionPhoto } from "@/lib/installer/storage";
+import OriginalInstallCards from "../OriginalInstallCards";
 import {
   approveAsCompletionAction,
   assignAsOrderAction,
@@ -30,6 +36,8 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<AsInstallerRecommendation[]>([]);
+  const [history, setHistory] = useState<AsOriginalInstallRecord[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -42,31 +50,40 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
     else setError(res.error);
   }
 
+  // 이력이 나와도 바로 배정하지 않는다. ERP 원장은 기사를 37%만 채워 두기
+  // 때문에 대부분은 업체까지만 알 수 있고, 누구를 보낼지는 담당자가 고른다.
   async function findOriginal() {
     setBusy(true);
     setError(null);
+    setNotice(null);
+    setHistory([]);
     const res = await lookupOriginalInstallerAction({
       orderNo: detail.orderNo ?? "",
       phone: detail.customerPhone ?? "",
+      customerName: detail.customerName ?? "",
+      address: detail.address ?? "",
     });
     setBusy(false);
-    if (res.ok && res.result) {
-      const installerId = res.result.installerId;
-      await run(() => assignAsOrderAction(detail.id, installerId));
-    } else if (res.ok) {
-      setError("원 설치 이력을 찾지 못했습니다. 주소로 추천하세요.");
-    } else {
+    if (!res.ok) {
       setError(res.error);
+      return;
+    }
+    setHistory(res.records);
+    if (res.records.length === 0) {
+      setNotice("원 시공 이력을 찾지 못했습니다. 주소로 추천하거나 직접 지정하세요.");
     }
   }
 
   async function recommend() {
     setBusy(true);
     setError(null);
+    setNotice(null);
     const res = await recommendAsInstallersAction(detail.address ?? "");
     setBusy(false);
-    if (res.ok) setCandidates(res.recommendations);
-    else setError(res.error);
+    if (res.ok) {
+      setCandidates(res.recommendations);
+      setHistory([]);
+    } else setError(res.error);
   }
 
   return (
@@ -103,12 +120,21 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
           <div className="mb-2 text-sm font-semibold text-zinc-700">기사 지정</div>
           <div className="mb-2 flex flex-wrap gap-2">
             <button className={btnSec} disabled={busy} onClick={findOriginal}>
-              원 설치기사 배정
+              원 시공 이력 찾기
             </button>
             <button className={btnSec} disabled={busy} onClick={recommend}>
               주소로 기사 추천
             </button>
           </div>
+          {notice ? <div className="mb-2 text-sm text-zinc-600">{notice}</div> : null}
+          {history.length > 0 ? (
+            <div className="mb-2">
+              <OriginalInstallCards
+                records={history}
+                onSelect={(installer) => run(() => assignAsOrderAction(detail.id, installer.id))}
+              />
+            </div>
+          ) : null}
           {candidates.length > 0 ? (
             <div className="grid gap-1">
               {candidates.map((c) => (
@@ -135,15 +161,8 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
           <div className="mb-2 text-sm font-semibold text-zinc-700">완료 검수</div>
           <Row label="처리 내용" value={detail.resolutionDetail ?? "-"} />
           <Row label="용역비" value={detail.serviceFee != null ? `${detail.serviceFee.toLocaleString()}원` : "-"} />
-          {detail.photoUrls.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {detail.photoUrls.map((u, i) => (
-                <a key={i} href={u} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={u} alt={`photo-${i + 1}`} className="h-24 w-24 rounded-md border border-zinc-200 object-cover" />
-                </a>
-              ))}
-            </div>
+          {detail.photos.length > 0 ? (
+            <PhotoGrid photos={detail.photos} />
           ) : (
             <div className="text-sm text-zinc-400">첨부 사진 없음</div>
           )}
@@ -189,15 +208,8 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
           <div className="mb-2 text-sm font-semibold text-zinc-700">처리 결과</div>
           <Row label="처리 내용" value={detail.resolutionDetail ?? "-"} />
           <Row label="용역비" value={detail.serviceFee != null ? `${detail.serviceFee.toLocaleString()}원` : "-"} />
-          {detail.photoUrls.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {detail.photoUrls.map((u, i) => (
-                <a key={i} href={u} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={u} alt={`photo-${i + 1}`} className="h-24 w-24 rounded-md border border-zinc-200 object-cover" />
-                </a>
-              ))}
-            </div>
+          {detail.photos.length > 0 ? (
+            <PhotoGrid photos={detail.photos} />
           ) : null}
         </div>
       ) : null}
@@ -216,6 +228,38 @@ export default function AsAdminDetailClient({ detail }: { detail: AsAdminDetail 
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * 완료 사진 그리드. 서명 URL 을 못 만든 사진은 빼지 않고 빈 칸으로 남긴다.
+ * 조용히 빼면 검수자가 "원래 이만큼만 올라왔다" 고 오해한 채 승인하게 된다.
+ */
+function PhotoGrid({ photos }: { photos: CompletionPhoto[] }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {photos.map((p, i) =>
+        p.url ? (
+          <a key={p.path} href={p.url} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={p.url}
+              alt={`photo-${i + 1}`}
+              className="h-24 w-24 rounded-md border border-zinc-200 object-cover"
+            />
+          </a>
+        ) : (
+          <div
+            key={p.path}
+            title={p.path}
+            className="flex h-24 w-24 flex-col items-center justify-center rounded-md border border-dashed border-red-300 bg-red-50 text-center text-[11px] font-bold leading-tight text-red-700"
+          >
+            ⚠<br />
+            불러오지 못함
+          </div>
+        ),
+      )}
     </div>
   );
 }

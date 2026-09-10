@@ -8,7 +8,8 @@ import {
   lookupOriginalInstallerAction,
   recommendAsInstallersAction,
 } from "../actions";
-import type { AsInstallerRecommendation } from "@/lib/installation/as/service";
+import type { AsInstallerRecommendation, AsOriginalInstallRecord } from "@/lib/installation/as/service";
+import OriginalInstallCards from "../OriginalInstallCards";
 
 const input = "h-9 w-full rounded-md border border-zinc-300 px-3 text-sm text-zinc-900 outline-none focus:border-zinc-950";
 const label = "text-xs font-semibold text-zinc-600";
@@ -30,6 +31,7 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
   const [selected, setSelected] = useState<SelectedInstaller>(null);
   const [originalInstallationOrderId, setOriginalInstallationOrderId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<AsInstallerRecommendation[]>([]);
+  const [history, setHistory] = useState<AsOriginalInstallRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +47,23 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await lookupOriginalInstallerAction({ orderNo, phone: customerPhone });
+    setHistory([]);
+    const res = await lookupOriginalInstallerAction({
+      orderNo,
+      phone: customerPhone,
+      customerName,
+      address,
+    });
     setBusy(false);
     if (!res.ok) {
       setError("조회에 실패했습니다.");
       return;
     }
-    if (res.result) {
-      setSelected({ id: res.result.installerId, name: res.result.installerName, from: "original" });
-      setOriginalInstallationOrderId(res.result.installationOrderId);
-      setNotice(`원 설치기사: ${res.result.installerName}`);
-    } else {
-      setNotice("원 설치 이력을 찾지 못했습니다. 주소로 추천하거나 직접 지정하세요.");
+    setHistory(res.records);
+    if (res.records.length === 0) {
+      setNotice(
+        "원 설치 이력을 찾지 못했습니다. 안심번호(0503…)로 접수된 건은 전화로 찾히지 않으니 주소나 고객명을 채우고 다시 조회해 보세요.",
+      );
     }
   }
 
@@ -71,6 +78,7 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
       return;
     }
     setCandidates(res.recommendations);
+    setHistory([]);
     if (res.recommendations.length === 0) setNotice("주소에 맞는 후보가 없습니다.");
   }
 
@@ -163,7 +171,7 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
           <div className="mb-2 text-xs font-semibold text-zinc-600">기사 지정</div>
           <div className="mb-2 flex flex-wrap gap-2">
             <button type="button" className={btnSecondary} disabled={busy} onClick={findOriginal}>
-              원 설치기사 찾기 (주문번호/전화)
+              원 시공 이력 찾기 (주문번호·전화·주소·이름)
             </button>
             <button type="button" className={btnSecondary} disabled={busy} onClick={recommendByAddress}>
               주소로 기사 추천
@@ -171,7 +179,7 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
           </div>
           {selected ? (
             <div className="mb-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              지정됨: <b>{selected.name}</b> ({selected.from === "original" ? "원 설치기사" : "주소 추천"})
+              지정됨: <b>{selected.name}</b> ({selected.from === "original" ? "원 시공 이력" : "주소 추천"})
               <button
                 type="button"
                 className="ml-2 text-xs text-zinc-500 underline"
@@ -186,6 +194,15 @@ export default function AsRegisterClient({ categories }: { categories: AsSymptom
           ) : (
             <div className="mb-2 text-sm text-zinc-500">미지정 시 접수만 되고 나중에 배정합니다.</div>
           )}
+          {history.length > 0 ? (
+            <div className="mb-2">
+              <OriginalInstallCards
+                records={history}
+                onSelect={(installer) => setSelected({ ...installer, from: "original" })}
+                onLinkOrder={setOriginalInstallationOrderId}
+              />
+            </div>
+          ) : null}
           {candidates.length > 0 ? (
             <div className="grid gap-1">
               {candidates.map((c) => (

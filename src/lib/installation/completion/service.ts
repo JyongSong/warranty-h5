@@ -3,7 +3,7 @@ import {
   INSTALLATION_ORDER_STATUSES,
   transitionInstallationOrderStatus,
 } from "@/lib/installation/orders/status";
-import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
+import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/installer/storage";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
 import { createInstallSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
@@ -247,7 +247,7 @@ export type InstallationCompletionView = {
   installEndAt: string;
   reviewStatus: string;
   rejectionReason: string | null;
-  photoUrls: string[];
+  photos: CompletionPhoto[];
 };
 
 export async function getInstallationCompletionForOrder(
@@ -267,6 +267,6 @@ export async function getInstallationCompletionForOrder(
     installEndAt: c.installEndAt.toISOString(),
     reviewStatus: c.reviewStatus,
     rejectionReason: c.rejectionReason,
-    photoUrls: await getCompletionPhotoSignedUrls(c.photoPaths),
+    photos: await getCompletionPhotoSignedUrls(c.photoPaths),
   };
 }

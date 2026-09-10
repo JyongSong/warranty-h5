@@ -75,6 +75,7 @@ model Installer {
   asOrders             AsOrder[]                                 @relation("AsCurrentInstaller")
   rateOverride         InstallerRate?                            @relation("InstallerRateOverride")
   settlementLines      SettlementLine[]                          @relation("InstallerSettlementLines")
+  asInstallHistory     AsInstallHistory[]                        @relation("AsHistoryInstaller")
 
   @@index([branch])
   @@index([region])
@@ -767,6 +768,50 @@ model AsOrderStatusEvent {
 
   @@index([asOrderId, createdAt])
   @@map("as_order_status_events")
+}
+
+// ERP(ECOUNT) 에서 내려받은 과거 설치 이력. A/S "누가 깔았나" 추적 전용
+// 읽기 전용 사본이라 installation_orders(운영 상태머신)와 섞지 않는다.
+// ERP 원장 자체가 담당기사를 37% 밖에 안 채우므로, 매칭 목표는 기사가 아니라
+// 시공 "업체"다. 기사명이 있으면 덤으로 같이 붙인다.
+model AsInstallHistory {
+  id                     String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  /// ERP 전표번호("26/09/04 -7"). 재업로드 시 upsert 키.
+  erpDocNo               String     @unique @map("erp_doc_no")
+  installDate            String?    @map("install_date")
+  customerNameEncrypted  String?    @map("customer_name_encrypted")
+  customerNameHash       String?    @map("customer_name_hash")
+  customerPhoneEncrypted String?    @map("customer_phone_encrypted")
+  customerPhoneHash      String?    @map("customer_phone_hash")
+  /// MOBILE(01X, 조회 가능) | SAFE(050X 안심번호, 조회 불가) | OTHER
+  phoneKind              String     @default("OTHER") @map("phone_kind")
+  addressEncrypted       String?    @map("address_encrypted")
+  /// 시도 별칭·공백·번지를 정규화한 주소의 hash. 안심번호 건의 유일한 조회 키.
+  addressHash            String?    @map("address_hash")
+  itemName               String?    @map("item_name")
+  /// ERP 원문 그대로. 매칭 실패해도 화면에 보여줄 수 있어야 한다.
+  vendorName             String?    @map("vendor_name")
+  installerNameRaw       String?    @map("installer_name_raw")
+  /// 담당기사가 특정 1명으로 확정될 때만 채운다. 업체만 아는 건은 비워 둔다 —
+  /// 한 업체에 기사가 여럿이라 아무나 넣으면 시공 실적이 엉뚱하게 붙는다.
+  matchedInstallerId     String?    @map("matched_installer_id")
+  matchedInstaller       Installer? @relation("AsHistoryInstaller", fields: [matchedInstallerId], references: [id], onDelete: SetNull)
+  /// 거래처명이 붙은 installers.branch. 업체 단위 조회(대부분의 건)가 여기로 걸린다.
+  matchedBranch          String?    @map("matched_branch")
+  /// INSTALLER_NAME(기사 1명 확정) | VENDOR_NAME(업체까지만) | NONE
+  matchedBy              String     @default("NONE") @map("matched_by")
+  serviceFee             Int?       @map("service_fee")
+  erpStatus              String?    @map("erp_status")
+  memo                   String?    @db.Text
+  createdAt              DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([customerPhoneHash])
+  @@index([customerNameHash])
+  @@index([addressHash])
+  @@index([matchedInstallerId])
+  @@index([matchedBranch])
+  @@map("as_install_history")
 }
 
 model InstallationIssue {

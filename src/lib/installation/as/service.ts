@@ -12,9 +12,10 @@ import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher
 import { listDispatchCandidateInstallers } from "@/lib/installation/installer/source";
 import { createAsSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
-import { getCompletionPhotoSignedUrls } from "@/lib/installer/storage";
+import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/installer/storage";
 import { sendSms } from "@/lib/sms";
 import { getAsSymptomLabel, isValidAsSymptomCode } from "@/lib/installation/as/symptom-codes";
+import { normalizeAddressKey } from "@/lib/backoffice/as-history-import";
 
 export class AsOrderError extends Error {
   constructor(message: string) {
@@ -81,14 +82,61 @@ export async function transitionAsOrderStatus(
 }
 
 // --- Original-installer history lookup ("who installed it repairs it") ---
-export async function findOriginalInstallerForAs(input: {
+//
+// 두 곳을 본다. 새 배정 시스템(installation_orders)은 기사까지 정확히 알지만
+// 가동 직후라 이력이 거의 없고, ERP 사본(as_install_history)은 2026년치가 다
+// 있지만 담당기사가 37%만 채워져 있다. 그래서 결과는 "기사 1명"이 아니라
+// 이력 카드 목록이다 — 대부분의 건은 시공 "업체"까지만 알 수 있고, A/S 배정은
+// 어차피 담당자가 손으로 하므로 그 정도로 충분하다.
+export type AsOriginalInstallRecord = {
+  source: "DISPATCH" | "ERP_HISTORY";
+  /** 새 배정 시스템 건만. A/S 주문에 원 설치건을 걸어 두는 데 쓴다. */
+  installationOrderId: string | null;
+  installDate: string | null;
+  itemName: string | null;
+  /** ERP 거래처명 원문. 매칭이 안 돼도 담당자가 보고 판단할 수 있어야 한다. */
+  vendorName: string | null;
+  /** 기사가 1명으로 확정된 건만. 업체까지만 아는 건은 null. */
+  installerId: string | null;
+  installerName: string | null;
+  branch: string | null;
+  /** 그 업체에 속한 지정 가능한 기사들. 업체만 아는 건의 지정 후보가 된다. */
+  branchInstallers: Array<{ id: string; name: string; phone: string }>;
+  serviceFee: number | null;
+  customerName: string | null;
+  address: string | null;
+  erpStatus: string | null;
+  /** 어느 키로 찾혔는지. 담당자가 신뢰도를 판단하는 근거. */
+  matchedOn: "ORDER_NO" | "PHONE" | "ADDRESS" | "CUSTOMER_NAME";
+};
+
+const AS_HISTORY_LOOKUP_LIMIT = 5;
+// 반품/취소 건은 설치가 안 됐다는 뜻이라 A/S 추적에서 뺀다.
+const AS_HISTORY_EXCLUDED_STATUSES = ["반품/취소"];
+
+export async function findOriginalInstallsForAs(input: {
   orderNo?: string | null;
   phone?: string | null;
-}): Promise<{ installationOrderId: string; installerId: string; installerName: string } | null> {
+  customerName?: string | null;
+  address?: string | null;
+}): Promise<AsOriginalInstallRecord[]> {
+  const dispatch = await findDispatchInstallForAs(input);
+  const history = await findErpHistoryForAs(input);
+
+  // 새 배정 시스템 건이 항상 먼저다 — 기사까지 확실하다.
+  const records = [...dispatch, ...history].slice(0, AS_HISTORY_LOOKUP_LIMIT);
+  return attachBranchInstallers(records);
+}
+
+async function findDispatchInstallForAs(input: {
+  orderNo?: string | null;
+  phone?: string | null;
+}): Promise<AsOriginalInstallRecord[]> {
   const orderNo = input.orderNo?.trim();
   const phone = input.phone ? normalizePhone(input.phone) : "";
 
   const or: Array<Record<string, unknown>> = [];
+  const matchedOnByOrderNo = Boolean(orderNo);
   if (orderNo) {
     or.push(
       { source: { is: { sourceKey: { contains: orderNo, mode: "insensitive" } } } },
@@ -112,19 +160,160 @@ export async function findOriginalInstallerForAs(input: {
       );
     }
   }
-  if (or.length === 0) return null;
+  if (or.length === 0) return [];
 
-  const order = await prisma.installationOrder.findFirst({
+  const orders = await prisma.installationOrder.findMany({
     where: { OR: or, currentInstallerId: { not: null } },
     orderBy: { statusChangedAt: "desc" },
-    select: { id: true, currentInstaller: { select: { id: true, name: true } } },
+    take: 3,
+    select: {
+      id: true,
+      currentInstaller: { select: { id: true, name: true, branch: true } },
+      source: { select: { customerNameEncrypted: true, addressEncrypted: true } },
+      completion: { select: { installEndAt: true } },
+    },
   });
-  if (!order?.currentInstaller) return null;
-  return {
-    installationOrderId: order.id,
-    installerId: order.currentInstaller.id,
-    installerName: order.currentInstaller.name,
-  };
+
+  return orders
+    .filter((order) => order.currentInstaller)
+    .map((order) => ({
+      source: "DISPATCH" as const,
+      installationOrderId: order.id,
+      installDate: order.completion?.installEndAt.toISOString().slice(0, 10) ?? null,
+      itemName: null,
+      vendorName: order.currentInstaller?.branch ?? null,
+      installerId: order.currentInstaller!.id,
+      installerName: order.currentInstaller!.name,
+      branch: order.currentInstaller?.branch ?? null,
+      branchInstallers: [],
+      serviceFee: null,
+      customerName: decryptNullablePii(order.source?.customerNameEncrypted ?? null),
+      address: decryptNullablePii(order.source?.addressEncrypted ?? null),
+      erpStatus: null,
+      matchedOn: matchedOnByOrderNo ? ("ORDER_NO" as const) : ("PHONE" as const),
+    }));
+}
+
+async function findErpHistoryForAs(input: {
+  phone?: string | null;
+  customerName?: string | null;
+  address?: string | null;
+}): Promise<AsOriginalInstallRecord[]> {
+  // 정확한 키부터 차례로 본다. 안심번호(050X)로 접수된 42% 는 전화가 영영
+  // 안 맞으므로 주소가 사실상 유일한 키고, 주소도 없으면 이름으로 훑는다.
+  const attempts: Array<{ matchedOn: AsOriginalInstallRecord["matchedOn"]; where: Prisma.AsInstallHistoryWhereInput }> = [];
+
+  const phone = input.phone ? normalizePhone(input.phone) : "";
+  if (phone.length >= 10) {
+    const hashes = [safeHash(phone)];
+    try {
+      hashes.push(safeHash(normalizePhone11(phone)));
+    } catch {
+      // 11자리로 정규화할 수 없는 번호는 원문 hash 만 본다.
+    }
+    const phoneHashes = hashes.filter((h): h is string => Boolean(h));
+    if (phoneHashes.length > 0) {
+      attempts.push({ matchedOn: "PHONE", where: { customerPhoneHash: { in: phoneHashes } } });
+    }
+  }
+
+  const addressKey = input.address ? normalizeAddressKey(input.address) : null;
+  const addressHash = addressKey ? safeHash(addressKey) : null;
+  if (addressHash) {
+    attempts.push({ matchedOn: "ADDRESS", where: { addressHash } });
+  }
+
+  const name = input.customerName?.trim();
+  const nameHash = name ? safeHash(normalizeNameForHash(name)) : null;
+  if (nameHash) {
+    attempts.push({ matchedOn: "CUSTOMER_NAME", where: { customerNameHash: nameHash } });
+  }
+
+  const found = new Map<string, AsOriginalInstallRecord>();
+  for (const attempt of attempts) {
+    if (found.size >= AS_HISTORY_LOOKUP_LIMIT) break;
+
+    const rows = await prisma.asInstallHistory.findMany({
+      where: { ...attempt.where, erpStatus: { notIn: AS_HISTORY_EXCLUDED_STATUSES } },
+      orderBy: [{ installDate: "desc" }, { createdAt: "desc" }],
+      take: AS_HISTORY_LOOKUP_LIMIT,
+      select: {
+        id: true,
+        installDate: true,
+        itemName: true,
+        vendorName: true,
+        installerNameRaw: true,
+        matchedInstallerId: true,
+        matchedBranch: true,
+        serviceFee: true,
+        erpStatus: true,
+        customerNameEncrypted: true,
+        addressEncrypted: true,
+        matchedInstaller: { select: { id: true, name: true } },
+      },
+    });
+
+    for (const row of rows) {
+      if (found.has(row.id)) continue;
+      found.set(row.id, {
+        source: "ERP_HISTORY",
+        installationOrderId: null,
+        installDate: row.installDate,
+        itemName: row.itemName,
+        vendorName: row.vendorName,
+        installerId: row.matchedInstaller?.id ?? null,
+        // 매칭이 안 된 기사도 원문은 보여 준다. 담당자가 아는 이름일 수 있다.
+        installerName: row.matchedInstaller?.name ?? row.installerNameRaw,
+        branch: row.matchedBranch,
+        branchInstallers: [],
+        serviceFee: row.serviceFee,
+        customerName: decryptNullablePii(row.customerNameEncrypted),
+        address: decryptNullablePii(row.addressEncrypted),
+        erpStatus: row.erpStatus,
+        matchedOn: attempt.matchedOn,
+      });
+    }
+  }
+
+  return [...found.values()].slice(0, AS_HISTORY_LOOKUP_LIMIT);
+}
+
+/**
+ * 업체까지만 아는 건에 그 업체의 현직 기사를 붙인다. 담당자가 카드에서 바로
+ * 고를 수 있어야 "누가 깔았나"가 실제 배정으로 이어진다.
+ */
+async function attachBranchInstallers(
+  records: AsOriginalInstallRecord[],
+): Promise<AsOriginalInstallRecord[]> {
+  const branches = [...new Set(records.map((r) => r.branch).filter((b): b is string => Boolean(b)))];
+  if (branches.length === 0) return records;
+
+  const installers = await prisma.installer.findMany({
+    where: { branch: { in: branches }, active: true },
+    select: { id: true, name: true, phone: true, branch: true },
+    orderBy: { name: "asc" },
+  });
+
+  const byBranch = new Map<string, Array<{ id: string; name: string; phone: string }>>();
+  for (const installer of installers) {
+    if (!installer.branch) continue;
+    const bucket = byBranch.get(installer.branch) ?? [];
+    bucket.push({ id: installer.id, name: installer.name, phone: installer.phone });
+    byBranch.set(installer.branch, bucket);
+  }
+
+  return records.map((record) => ({
+    ...record,
+    branchInstallers: record.branch ? (byBranch.get(record.branch) ?? []) : [],
+  }));
+}
+
+function safeHash(value: string): string | null {
+  try {
+    return hmacPii(value);
+  } catch {
+    return null;
+  }
 }
 
 export type AsInstallerRecommendation = {
@@ -421,7 +610,7 @@ export type AsAdminDetail = {
   serviceFee: number | null;
   reviewStatus: string | null;
   hqRejectionReason: string | null;
-  photoUrls: string[];
+  photos: CompletionPhoto[];
   createdAt: string;
 };
 
@@ -467,7 +656,7 @@ export async function getAsOrderForAdmin(asOrderId: string): Promise<AsAdminDeta
     serviceFee: o.serviceFee,
     reviewStatus: o.reviewStatus,
     hqRejectionReason: o.hqRejectionReason,
-    photoUrls: await getCompletionPhotoSignedUrls(o.completionPhotoPaths),
+    photos: await getCompletionPhotoSignedUrls(o.completionPhotoPaths),
     createdAt: o.createdAt.toISOString(),
   };
 }

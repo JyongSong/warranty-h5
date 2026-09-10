@@ -7,10 +7,11 @@ import {
   assignAsOrderInstaller,
   cancelAsOrder,
   createAsOrder,
-  findOriginalInstallerForAs,
+  findOriginalInstallsForAs,
   recommendInstallersForAs,
   rejectAsCompletion,
   type AsInstallerRecommendation,
+  type AsOriginalInstallRecord,
 } from "@/lib/installation/as/service";
 
 async function requireAsAdmin(): Promise<{ ok: true; admin: { id: string } } | { ok: false; error: string }> {
@@ -56,15 +57,14 @@ export async function createAsOrderAction(
 export async function lookupOriginalInstallerAction(input: {
   orderNo?: string;
   phone?: string;
-}): Promise<
-  | { ok: true; result: { installationOrderId: string; installerId: string; installerName: string } | null }
-  | { ok: false; error: string }
-> {
+  customerName?: string;
+  address?: string;
+}): Promise<{ ok: true; records: AsOriginalInstallRecord[] } | { ok: false; error: string }> {
   const auth = await requireAsAdmin();
   if (!auth.ok) return auth;
   try {
-    const result = await findOriginalInstallerForAs(input);
-    return { ok: true, result };
+    const records = await findOriginalInstallsForAs(input);
+    return { ok: true, records };
   } catch (error) {
     console.error("[as/lookup-installer]", error);
     return { ok: false, error: "LOOKUP_FAILED" };

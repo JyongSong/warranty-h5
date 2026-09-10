@@ -1,5 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import {
+  classifyUploadError,
+  isAutoFlushable,
+  nextStatus,
+  readStatus,
+  resetForRetry,
+  type QueueEntryStatus,
+} from "./completionQueueState";
+import {
   getCompletionUploadTargetsAction,
   submitCompletionAction,
 } from "@/app/installer/orders/[orderId]/complete/actions";
@@ -21,7 +29,15 @@ export type QueuedCompletionInput = {
   photos: Blob[];
 };
 
-type StoredCompletion = QueuedCompletionInput & { id: number; queuedAt: string };
+type StoredCompletion = QueuedCompletionInput &
+  Partial<QueueEntryStatus> & { id: number; queuedAt: string };
+
+/** 화면에 뿌릴 큐 항목 요약. 사진 Blob 은 뺀다. */
+export type QueueItemView = QueueEntryStatus & {
+  id: number;
+  orderId: string;
+  queuedAt: string;
+};
 
 const DB_NAME = "installer-app";
 const STORE = "completion-queue";
@@ -44,23 +60,26 @@ export async function enqueueCompletion(entry: QueuedCompletionInput): Promise<v
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).add({ ...entry, queuedAt: new Date().toISOString() });
+    tx.objectStore(STORE).add({
+      ...entry,
+      queuedAt: new Date().toISOString(),
+      ...resetForRetry(),
+    });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
   db.close();
 }
 
-export async function countQueuedCompletions(): Promise<number> {
-  const db = await openDb();
-  const n = await new Promise<number>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readonly");
-    const req = tx.objectStore(STORE).count();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return n;
+/** 큐에 쌓인 항목을 화면용으로. 사진 Blob 은 제외한다. */
+export async function listQueuedCompletions(): Promise<QueueItemView[]> {
+  const rows = await listQueued();
+  return rows.map((row) => ({
+    id: row.id,
+    orderId: row.orderId,
+    queuedAt: row.queuedAt,
+    ...readStatus(row),
+  }));
 }
 
 async function listQueued(): Promise<StoredCompletion[]> {
@@ -73,6 +92,31 @@ async function listQueued(): Promise<StoredCompletion[]> {
   });
   db.close();
   return rows;
+}
+
+async function patchQueued(id: number, status: QueueEntryStatus): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const req = store.get(id);
+    req.onsuccess = () => {
+      const row = req.result as StoredCompletion | undefined;
+      // 그사이 다른 탭이 지웠을 수 있다. 없으면 되살리지 않고 넘어간다.
+      if (row) store.put({ ...row, ...status });
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+export async function retryQueuedCompletion(id: number): Promise<void> {
+  await patchQueued(id, resetForRetry());
+}
+
+export async function discardQueuedCompletion(id: number): Promise<void> {
+  await deleteQueued(id);
 }
 
 async function deleteQueued(id: number): Promise<void> {
@@ -98,8 +142,9 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
-// The online path: direct-to-Storage upload + submit. Thrown errors (network)
-// are treated as retriable; returned {ok:false} (validation) are not.
+// 온라인 경로: Storage 직접 업로드 후 제출. 던져진 예외는 classifyUploadError 로
+// 재시도 여부를 가리고, 서버가 돌려준 {ok:false}(검증 실패)는 UNAUTHORIZED 만
+// 재시도한다 — 세션이 잠깐 끊긴 것 때문에 사진까지 버릴 수는 없기 때문이다.
 export async function uploadAndSubmitCompletion(
   entry: QueuedCompletionInput,
 ): Promise<{ ok: true } | { ok: false; retriable: boolean; error: string }> {
@@ -132,26 +177,48 @@ export async function uploadAndSubmitCompletion(
     });
     if (!res.ok) return { ok: false, retriable: res.error === "UNAUTHORIZED", error: res.error };
     return { ok: true };
-  } catch {
-    // network / upload failure — keep it queued for retry
-    return { ok: false, retriable: true, error: "NETWORK" };
+  } catch (error) {
+    // 업로드 중 터진 예외. 다시 시도해서 달라질 실패인지 아닌지를 가려낸다
+    // (용량 초과 같은 건 몇 번을 보내도 같으므로 바로 멈춘다).
+    return { ok: false, ...classifyUploadError(error) };
   }
 }
 
-export async function flushCompletionQueue(): Promise<{ flushed: number; remaining: number }> {
+/**
+ * 대기 중인 항목을 순서대로 전송한다.
+ *
+ * 성공한 항목만 지운다. 실패는 지우지 않고 상태와 사유를 기록해 두었다가
+ * 화면에 드러낸다 (nextStatus 참고). 재시도 상한을 넘기거나 애초에 재시도가
+ * 무의미한 실패는 FAILED 로 두고 자동 전송에서 제외한다 — 기사가 '다시 시도'
+ * 를 누르기 전까지는 건드리지 않는다.
+ */
+export async function flushCompletionQueue(): Promise<{
+  flushed: number;
+  pending: number;
+  failed: number;
+}> {
   const entries = await listQueued();
   let flushed = 0;
+
   for (const entry of entries) {
-    const res = await uploadAndSubmitCompletion(entry);
-    if (res.ok) {
+    const status = readStatus(entry);
+    if (!isAutoFlushable(status)) continue;
+
+    const outcome = await uploadAndSubmitCompletion(entry);
+    const decision = nextStatus(status, outcome);
+
+    if (decision.action === "DELETE") {
       await deleteQueued(entry.id);
       flushed += 1;
-    } else if (!res.retriable) {
-      // Order state moved on (already submitted/cancelled) — drop the stale item.
-      await deleteQueued(entry.id);
+    } else {
+      await patchQueued(entry.id, decision.status);
     }
-    // retriable → leave in queue for the next attempt
   }
-  const remaining = await countQueuedCompletions();
-  return { flushed, remaining };
+
+  const remaining = await listQueuedCompletions();
+  return {
+    flushed,
+    pending: remaining.filter((r) => r.state === "PENDING").length,
+    failed: remaining.filter((r) => r.state === "FAILED").length,
+  };
 }
