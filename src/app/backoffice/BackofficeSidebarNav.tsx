@@ -7,7 +7,20 @@ import { usePathname, useSearchParams } from "next/navigation";
 type MenuItem = {
   href: string;
   label: string;
-  icon: "database" | "queue" | "search" | "settings" | "as" | "installer" | "query" | "survey" | "dashboard" | "orders" | "dispatch" | "sms";
+  icon:
+    | "database"
+    | "queue"
+    | "search"
+    | "settings"
+    | "as"
+    | "installer"
+    | "query"
+    | "survey"
+    | "dashboard"
+    | "orders"
+    | "dispatch"
+    | "sms"
+    | "iot";
   subItems?: MenuItem[];
 };
 
@@ -80,6 +93,23 @@ const menuItems: MenuItem[] = [
         href: "/backoffice/installers-assignment-status",
         label: "기사 배정현황",
         icon: "installer",
+      },
+    ],
+  },
+  {
+    href: "/backoffice/iot-pass",
+    label: "IoT Pass 관리",
+    icon: "iot",
+    subItems: [
+      {
+        href: "/backoffice/iot-pass",
+        label: "IoT Pass 목록",
+        icon: "iot",
+      },
+      {
+        href: "/backoffice/iot-pass/new",
+        label: "IoT Pass 추가",
+        icon: "iot",
       },
     ],
   },
@@ -471,6 +501,15 @@ function SidebarItemIcon({ icon }: { icon: MenuItem["icon"] }) {
     return (
       <svg {...commonProps}>
         <path d="M8 7h8m0 0l-3-3m3 3l-3 3m-5 3H4m0 0l3 3m-3-3l3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "iot") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="10" cy="14" r="1.5" fill="currentColor" />
+        <path d="M6.8 11.2a4.5 4.5 0 016.4 0M4.2 8.6a8.2 8.2 0 0111.6 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
     );
   }

@@ -341,6 +341,16 @@ describe("backoffice installation order routes", () => {
     expect(existsSync(join(backofficeDir, "installers"))).toBe(true);
   });
 
+  it("exposes IoT Pass management in the backoffice menu", () => {
+    const sidebarSource = readFileSync(join(backofficeDir, "BackofficeSidebarNav.tsx"), "utf8");
+
+    expect(sidebarSource).toContain('label: "IoT Pass 관리"');
+    expect(sidebarSource).toContain('href: "/backoffice/iot-pass"');
+    expect(sidebarSource).toContain('href: "/backoffice/iot-pass/new"');
+    expect(existsSync(join(backofficeDir, "iot-pass"))).toBe(true);
+    expect(existsSync(join(backofficeDir, "iot-pass", "[id]", "page.tsx"))).toBe(true);
+  });
+
   it("does not keep mock or raw query handling in backoffice page implementations", () => {
     const sourcePaths = [
       join(backofficeDir, "installation-order-source", "page.tsx"),
