@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/adminAuth";
 import { getErrorMessage } from "@/lib/error";
-import { parseInstallerPayload } from "@/lib/installer";
+import { parseInstallerPatch } from "@/lib/installer";
 import { prisma } from "@/lib/prisma";
 
 type Context = {
@@ -15,7 +15,8 @@ export async function PATCH(req: Request, context: Context) {
 
     const { id } = await context.params;
     const body = await req.json();
-    const data = parseInstallerPayload(body);
+    // 보낸 항목만 바꾼다. 폼에 없는 항목이 기본값으로 덮이면 안 된다.
+    const data = parseInstallerPatch(body);
 
     const item = await prisma.installer.update({
       where: { id },

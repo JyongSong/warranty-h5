@@ -68,6 +68,16 @@ model Installer {
   hasAqaraHubInventory Boolean                                   @default(false) @map("has_aqara_hub_inventory")
   monthlyDispatchCount Int                                       @default(0) @map("monthly_dispatch_count")
   active               Boolean                                   @default(true) @map("active")
+  // 가장 최근에 받은 기사 명단(엑셀)에 이 기사가 들어 있었는지.
+  // 명단을 반영할 때마다 전체를 false 로 내린 뒤 명단에 있는 사람만 true 로 올린다.
+  // active 와는 다른 축이다 — 명단에서 빠졌다고 바로 배차를 끊지는 않고,
+  // 우선 표시만 해 두고 배차 중단 여부는 사람이 따로 판단한다.
+  inCurrentRoster      Boolean                                   @default(false) @map("in_current_roster")
+  // A/S 긴급출동 가능 여부. 기사 명단 엑셀의 「A/S 긴급출동 가능여부」 칸을 그대로 받는다.
+  // 예: "주중 / 야간 모두 가능". 앞으로 A/S 배차가 이 값을 보고 기사를 고른다.
+  // 값의 종류가 아직 정해지지 않아(0828 명단은 이 칸이 전부 비어 있다) 원문을
+  // 그대로 보관한다. 실제 값이 쌓이면 그때 열거형으로 정리한다.
+  asEmergencyAvailability String?                                @map("as_emergency_availability")
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
