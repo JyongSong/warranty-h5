@@ -5,6 +5,8 @@ import { SYSTEM_SETTING_KEYS, isSystemSettingEnabled } from "@/lib/backoffice/sy
 export const INSTALLATION_SYNC_ORDERS_ENABLED_KEY = SYSTEM_SETTING_KEYS.installationSyncOrdersEnabled;
 export const INSTALLATION_DISPATCHER_ENABLED_KEY = SYSTEM_SETTING_KEYS.installationDispatcherEnabled;
 export const INSTALLATION_DISPATCHER_LOCK_KEY = "installation.dispatcher";
+export const SURVEY_AUTO_SEND_ENABLED_KEY = SYSTEM_SETTING_KEYS.surveyAutoSendEnabled;
+export const SURVEY_AUTO_SEND_LOCK_KEY = "survey.autoSend";
 
 export async function isCronJobEnabled(key: string) {
   return isSystemSettingEnabled(key);

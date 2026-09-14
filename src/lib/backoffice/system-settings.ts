@@ -8,6 +8,7 @@ export const SYSTEM_SETTING_KEYS = {
   backofficeAssignmentSmsMaxRecipientsPerDay:
     "backoffice.sms.assignment.maxRecipientsPerDay",
   installationSyncOrdersEnabled: "installation.syncOrders.enabled",
+  surveyAutoSendEnabled: "survey.autoSend.enabled",
   installationDispatcherEnabled: "installation.dispatcher.enabled",
   installationDispatcherLockTtlMs: "installation.dispatcher.lockTtlMs",
   installationDispatcherLimitProcessInstallationOrders:
@@ -110,6 +111,13 @@ const SYSTEM_SETTING_SPECS = ([
   {
     key: SYSTEM_SETTING_KEYS.installationSyncOrdersEnabled,
     description: "설치 주문 동기화 cron 실행 여부",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.surveyAutoSendEnabled,
+    description: "만족도 조사 자동 발송 cron 실행 여부(영업일 15시 KST)",
     type: "boolean" as const,
     defaultValue: "false",
     validationHint: "true 또는 false",

@@ -10,6 +10,10 @@
     {
       "path": "/api/internal/cron/installation/sync-orders",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/internal/cron/send-surveys",
+      "schedule": "0 6 * * 1-5"
     }
   ]
 }

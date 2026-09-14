@@ -191,6 +191,25 @@ describe("getBackofficeSystemStatusSummary", () => {
             tone: "success",
           },
         },
+        {
+          key: "survey.autoSend",
+          label: "만족도 조사 자동 발송",
+          path: "/api/internal/cron/send-surveys",
+          schedule: "0 6 * * 1-5",
+          enabled: false,
+          effectiveMode: null,
+          lastCalledAt: null,
+          lastStartedAt: null,
+          lastFinishedAt: null,
+          lastStatus: null,
+          lastDurationMs: null,
+          lastErrorCode: null,
+          health: {
+            status: "disabled",
+            label: "비활성",
+            tone: "muted",
+          },
+        },
       ],
     });
 
@@ -198,7 +217,7 @@ describe("getBackofficeSystemStatusSummary", () => {
     expect(cronJobStatusFindMany).toHaveBeenCalledWith({
       where: {
         key: {
-          in: ["installation.syncOrders", "installation.dispatcher"],
+          in: ["installation.syncOrders", "installation.dispatcher", "survey.autoSend"],
         },
       },
     });
@@ -208,6 +227,7 @@ describe("getBackofficeSystemStatusSummary", () => {
           in: [
             "installation.syncOrders.enabled",
             "installation.dispatcher.enabled",
+            "survey.autoSend.enabled",
             "installation.sms.customerInputRequestMode",
           ],
         },
@@ -277,6 +297,17 @@ describe("getBackofficeSystemStatusSummary", () => {
             status: "stale",
             label: "호출 지연",
             tone: "danger",
+          },
+        },
+        {
+          // 일 단위 스케줄은 "호출 지연" 판정 대상이 아니다. 설정이 없으면 비활성.
+          key: "survey.autoSend",
+          enabled: false,
+          effectiveMode: null,
+          health: {
+            status: "disabled",
+            label: "비활성",
+            tone: "muted",
           },
         },
       ],

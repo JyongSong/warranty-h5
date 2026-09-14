@@ -544,7 +544,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
               <MetricCard
                 title="발송 대기"
                 value={stats.ready}
-                description="오늘 전송 예정"
+                description="영업일 15시 자동 발송"
                 type="info"
               />
               <MetricCard title="알림톡 발송 완료" value={stats.sent} description="고객 전송 완료" />
@@ -871,7 +871,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                           {selectedItem.surveyStatus === "SENT"
                             ? "고객에게 카카오 알림톡/SMS를 통해 만족도 조사 전용 링크가 전송되었습니다. 고객이 설문에 참여하면 여기에 실시간으로 평점과 응답 피드백이 표시됩니다."
                             : selectedItem.surveyStatus === "READY"
-                            ? "설치 확정 후 7영업일이 경과하여 발송 대기 중인 상태입니다. 매일 오전 10시 30분 시스템 스케줄러(Cron)가 돌 때 자동으로 발송 링크가 나갑니다."
+                            ? "설치 확정 후 7영업일이 경과하여 발송 대기 중인 상태입니다. 영업일(주말·공휴일 제외) 오후 3시에 시스템이 자동으로 발송 링크를 보냅니다. 그 전에 보내려면 아래 버튼을 누르세요."
                             : "설치 확인 완료 후 영업일 기준 7일이 경과해야 설문조사 링크가 자동으로 발송됩니다. 주말 및 국가 공휴일은 발송 대기 일수 계산에서 자동 제외됩니다."}
                         </p>
                         {(selectedItem.surveyStatus === "READY" || selectedItem.surveyStatus === "SENT") && (

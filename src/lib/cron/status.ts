@@ -26,9 +26,19 @@ export const INSTALLATION_DISPATCHER_CRON_JOB: CronJobDefinition = {
   enabledSettingKey: "installation.dispatcher.enabled",
 };
 
+export const SATISFACTION_SURVEY_SEND_CRON_JOB: CronJobDefinition = {
+  key: "survey.autoSend",
+  label: "만족도 조사 자동 발송",
+  path: "/api/internal/cron/send-surveys",
+  // Vercel cron 은 UTC 로 돈다. 06:00 UTC = 15:00 KST, 월~금.
+  schedule: "0 6 * * 1-5",
+  enabledSettingKey: "survey.autoSend.enabled",
+};
+
 export const INSTALLATION_CRON_JOBS = [
   INSTALLATION_SYNC_ORDERS_CRON_JOB,
   INSTALLATION_DISPATCHER_CRON_JOB,
+  SATISFACTION_SURVEY_SEND_CRON_JOB,
 ] as const;
 
 export async function recordCronJobCalled(job: CronJobDefinition, now = new Date()) {
