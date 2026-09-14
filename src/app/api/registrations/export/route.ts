@@ -4,6 +4,7 @@ import { getErrorMessage } from "@/lib/error";
 import { normalizePhone, formatKrPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
+import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
 
 export const dynamic = "force-dynamic";
 
@@ -86,15 +87,11 @@ function surveyStatusLabel(status: string) {
   }
 }
 
+// 화면과 같은 한국 시각으로 내보낸다. UTC ISO 문자열을 그대로 자르면
+// 엑셀에 9시간 이른 값이 들어간다.
 function formatDateTime(value: Date | string | null) {
   if (!value) return "-";
-  let str = "";
-  if (value instanceof Date) {
-    str = value.toISOString();
-  } else {
-    str = value;
-  }
-  return str.replace("T", " ").slice(0, 16);
+  return formatBackofficeDateTime(value instanceof Date ? value.toISOString() : value);
 }
 
 export async function GET(req: NextRequest) {

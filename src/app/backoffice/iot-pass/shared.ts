@@ -1,5 +1,7 @@
 // IoT Pass 관리 화면(목록·추가·수정)이 함께 쓰는 타입·라벨·시각 변환.
 
+import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
+
 export type { IotPassItem } from "@/lib/iotPass";
 
 export const PURCHASE_STATUS_OPTIONS = [
@@ -47,14 +49,9 @@ function kstParts(date: Date) {
   };
 }
 
-/** 목록·상세에 보이는 시각. 브라우저 시간대와 무관하게 한국 시각으로 읽는다. */
+/** 목록·상세에 보이는 시각. 백오피스 공용 변환기가 한국 시각으로 바꿔 준다. */
 export function formatKstDateTime(iso: string | null | undefined): string {
-  if (!iso) return "-";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  const { year, month, day, hour, minute } = kstParts(date);
-  return `${year}-${month}-${day} ${hour}:${minute}`;
+  return formatBackofficeDateTime(iso);
 }
 
 /** datetime-local 입력칸 값(한국 시각 기준). */

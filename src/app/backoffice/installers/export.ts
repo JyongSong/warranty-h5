@@ -1,4 +1,5 @@
 import { formatKrPhone } from "@/lib/phone";
+import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
 import { AQARA_APP_LABEL, CAPABILITY_LABEL, type InstallerItem } from "./shared";
 
 // 기사 목록 엑셀 내려받기. 화면에 보이는(= 필터가 적용된) 목록만 내보낸다.
@@ -40,7 +41,7 @@ function toRow(item: InstallerItem): string[] {
     item.happyCallLt == null ? "" : String(item.happyCallLt),
     item.defectCount == null ? "" : String(item.defectCount),
     item.dissatisfactionNote ?? "",
-    item.updatedAt ? item.updatedAt.replace("T", " ").slice(0, 16) : "",
+    item.updatedAt ? formatBackofficeDateTime(item.updatedAt) : "",
   ];
 }
 

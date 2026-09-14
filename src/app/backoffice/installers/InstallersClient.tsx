@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { AuthAdmin } from "@/lib/adminAuth";
 import { formatKrPhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
+import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
 import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
@@ -252,8 +253,7 @@ export default function InstallersClient({ admin }: { admin: AuthAdmin }) {
         accessorFn: (row) => row.updatedAt ?? "",
         header: "수정일",
         size: 130,
-        cell: ({ row }) =>
-          row.original.updatedAt ? row.original.updatedAt.replace("T", " ").slice(0, 16) : "-",
+        cell: ({ row }) => formatBackofficeDateTime(row.original.updatedAt),
       },
     ],
     [],

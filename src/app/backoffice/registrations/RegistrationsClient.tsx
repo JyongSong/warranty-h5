@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import type { AuthAdmin } from "@/lib/adminAuth";
 import { formatKrPhone } from "@/lib/phone";
 import { getErrorMessage } from "@/lib/error";
+import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
 
 type SurveyItem = {
   id: string;
@@ -92,9 +93,16 @@ function surveyStatusStyle(status: string) {
   }
 }
 
+// DB 의 시각은 UTC 로 저장되어 UTC ISO 문자열로 내려온다. 문자열을 그대로
+// 자르면 한국 시각보다 9시간 이른 값이 보인다. 백오피스 공용 변환기를 쓴다.
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatBackofficeDateTime(value);
+}
+
+/** 날짜만 보여 주는 자리. 한국 시각으로 바꾼 뒤 날짜를 뗀다. */
+function formatDate(value: string | null) {
+  const text = formatBackofficeDateTime(value);
+  return text === "-" ? "-" : text.slice(0, 10);
 }
 
 const SURVEY_QUESTIONS: Record<string, string> = {
@@ -740,7 +748,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                               active ? "text-white/60" : "text-zinc-400"
                             }`}
                           >
-                            설치일: {item.installDate} | 확정일: {item.confirmedAt ? item.confirmedAt.slice(0, 10) : "-"}
+                            설치일: {item.installDate} | 확정일: {formatDate(item.confirmedAt)}
                           </div>
                         </button>
                       </div>
