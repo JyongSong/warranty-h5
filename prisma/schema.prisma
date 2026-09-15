@@ -78,6 +78,9 @@ model Installer {
   // 값의 종류가 아직 정해지지 않아(0828 명단은 이 칸이 전부 비어 있다) 원문을
   // 그대로 보관한다. 실제 값이 쌓이면 그때 열거형으로 정리한다.
   asEmergencyAvailability String?                                @map("as_emergency_availability")
+  // 기사가 /installer/me/edit 에서 본인 정보를 확인·제출한 시각.
+  // 비어 있으면 아직 응답하지 않은 사람이라 재발송 대상이 된다.
+  profileConfirmedAt      DateTime?                              @map("profile_confirmed_at") @db.Timestamptz(6)
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]

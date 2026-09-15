@@ -85,6 +85,11 @@ const menuItems: MenuItem[] = [
         icon: "installer",
       },
       {
+        href: "/backoffice/installers/profile-sms",
+        label: "기사 정보 확인 문자",
+        icon: "installer",
+      },
+      {
         href: "/backoffice/installers-settlement",
         label: "기사 정산",
         icon: "installer",

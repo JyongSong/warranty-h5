@@ -29,6 +29,10 @@ export default async function InstallerMePage() {
           <Row label="지역" value={profile?.region?.trim() || "-"} />
         </div>
 
+        <Link href="/installer/me/edit" style={primaryLink}>
+          내 정보 확인·수정
+        </Link>
+
         <Link href="/installer/guide" style={guideLink}>
           앱 사용 안내 다시 보기
         </Link>
@@ -40,12 +44,27 @@ export default async function InstallerMePage() {
         </form>
 
         <p style={footNote}>
-          정보 수정이 필요하시면 본사 담당자에게 문의해 주세요.
+          이름·주소·연동 능력·A/S 긴급출동은 위 버튼에서 직접 수정하실 수 있습니다.
+          담당 지역과 설치 가능 항목 변경은 본사 담당자에게 문의해 주세요.
         </p>
       </div>
     </main>
   );
 }
+
+const primaryLink: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 50,
+  borderRadius: 10,
+  background: "#111",
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 700,
+  textDecoration: "none",
+  marginTop: 8,
+};
 
 const guideLink: CSSProperties = {
   ...ui.secondaryButton,
