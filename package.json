@@ -19,7 +19,8 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:import-shipped": "node scripts/import-shipped-devices.mjs",
-    "db:import-installers": "node scripts/import-installers.mjs"
+    "db:import-installers": "node scripts/import-installers.mjs",
+    "db:backup": "bash scripts/backup-supabase.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.5.0",

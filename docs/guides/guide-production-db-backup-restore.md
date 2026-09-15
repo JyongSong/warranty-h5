@@ -4,6 +4,9 @@
 
 이 문서는 운영 PostgreSQL DB에 Prisma migration을 적용하기 전, 테이블 구조와 데이터를 백업하고 문제가 생겼을 때 복구하는 절차를 정의한다.
 
+> 매일 도는 상시 로컬 백업은 [guide-scheduled-local-backup.md](./guide-scheduled-local-backup.md) 를 본다.
+> 이 문서는 migration 직전/직후의 일회성 백업과 복구 절차를 다룬다.
+
 대상 상황:
 
 - 운영 DB에 새 migration을 적용하기 전

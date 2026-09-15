@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  매일 11:30 (KST) 에 Supabase 백업을 로컬로 내린다. 그 시각에 맥이 꺼져 있었으면
+  다음에 깨어날 때 한 번 따라잡아서 실행한다 (StartCalendarInterval 의 기본 동작).
+
+  설치:
+    cp scripts/launchd/com.lumi.warranty.backup.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lumi.warranty.backup.plist
+  즉시 한 번 실행:
+    launchctl kickstart -p gui/$(id -u)/com.lumi.warranty.backup
+  해제:
+    launchctl bootout gui/$(id -u)/com.lumi.warranty.backup
+  로그:
+    tail -f ~/data_backup/warranty-h5/backup.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lumi.warranty.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/zhiyongsong/warranty-h5/scripts/backup-supabase.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/zhiyongsong/warranty-h5</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>11</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/zhiyongsong/data_backup/warranty-h5/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/zhiyongsong/data_backup/warranty-h5/backup.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+</dict>
+</plist>
