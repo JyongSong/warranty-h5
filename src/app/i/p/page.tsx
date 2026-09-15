@@ -23,7 +23,6 @@ export default async function InstallerProfilePage() {
         branch: profile.branch,
         region: profile.region,
         address: profile.address,
-        serviceAreas: profile.serviceAreas,
         capabilities: profile.capabilities,
         aqaraAppCapability: profile.aqaraAppCapability,
         asEmergencyAvailability: profile.asEmergencyAvailability,

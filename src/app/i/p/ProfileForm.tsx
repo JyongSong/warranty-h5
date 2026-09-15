@@ -33,7 +33,6 @@ export type Profile = {
   branch: string | null;
   region: string | null;
   address: string | null;
-  serviceAreas: string[];
   capabilities: string[];
   aqaraAppCapability: string;
   asEmergencyAvailability: string | null;
@@ -154,17 +153,17 @@ export default function ProfileForm({
             </div>
           </div>
 
-          {/* 배차 기준이라 기사가 바꿀 수 없는 항목. 확인만 할 수 있게 보여준다. */}
+          {/* 이 화면에서 고칠 수 없는 항목만 둔다. 아래에서 고치는 항목(실명·상호·주소)을
+              여기에도 늘어놓으면, 고친 뒤에도 위에는 예전 값이 남아 저장이 안 된 것처럼 보인다. */}
           <div style={ui.card}>
             <SectionTitle>등록된 정보</SectionTitle>
             <Row label="연락처" value={formatKrPhone(profile.phone)} />
-            <Row label="담당 지역" value={formatList(profile.serviceAreas)} />
             <Row
               label="설치 가능 항목"
               value={formatList(profile.capabilities.map((c) => CAPABILITY_LABEL_KO[c] ?? c))}
             />
             <p style={readonlyNote}>
-              담당 지역과 설치 가능 항목은 배차 기준이라 이 화면에서는 바꿀 수 없습니다.
+              연락처·설치 가능 항목·담당 지역은 배차 기준이라 이 화면에서는 바꿀 수 없습니다.
               변경이 필요하시면 본사 담당자에게 알려 주세요.
             </p>
           </div>
