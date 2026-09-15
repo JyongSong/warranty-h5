@@ -12,7 +12,7 @@ import {
   type RecipientScope,
 } from "./actions";
 
-// 문자 본문의 {link} 자리에 /installer/me/edit 주소가 들어간다.
+// 문자 본문의 {link} 자리에 /i/p 주소가 들어간다.
 const DEFAULT_BODY = [
   "[아카라라이프]",
   "안녕하세요, 아카라라이프입니다.",
@@ -114,7 +114,7 @@ export default function ProfileSmsClient({ baseUrl }: { baseUrl: string }) {
     });
   }
 
-  const preview = body.replaceAll("{link}", `${baseUrl}/installer/me/edit`);
+  const preview = body.replaceAll("{link}", `${baseUrl}/i/p`);
   const bytes = new TextEncoder().encode(preview).length;
 
   return (

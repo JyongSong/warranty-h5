@@ -7,11 +7,14 @@ import { sendSms } from "@/lib/sms";
 
 // 기사에게 "본인 정보 확인" 링크를 문자로 보낸다.
 //
-// 링크는 /installer/me/edit 하나뿐이고 사람마다 다르지 않다. 링크를 눌러도
-// requireInstallerPage 가 로그인으로 보내고, 본인 휴대폰으로 받은 인증번호를
-// 넣어야 들어갈 수 있다. 그래서 링크가 새어 나가도 남의 정보를 볼 수 없다.
+// 링크는 /i/p 하나뿐이고 사람마다 다르지 않다. 열면 휴대폰 인증을 먼저 받으므로
+// 링크가 새어 나가도 남의 정보를 볼 수 없다.
+//
+// 기사 앱(/installer/*) 이 아니라 앱 밖 화면으로 보낸다. 명단을 받는 기사 대부분은
+// 앱 사용자가 아니고, 정보 한 번 채우자고 앱 전체에 들어갈 수 있는 세션을 줄
+// 이유가 없기 때문이다.
 
-const PROFILE_SMS_PATH = "/installer/me/edit";
+const PROFILE_SMS_PATH = "/i/p";
 
 export type Recipient = {
   id: string;
