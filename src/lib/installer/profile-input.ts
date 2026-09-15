@@ -20,8 +20,8 @@ export const CAPABILITY_LABEL_KO: Record<string, string> = {
 
 export const AQARA_APP_CHOICES = [
   { value: "NONE", label: "앱 연동 불가" },
-  { value: "DOORLOCK_AND_APP", label: "App 연동 가능" },
-  { value: "DOORLOCK_AND_APP_AND_HUB", label: "App + 허브 연동 가능" },
+  { value: "DOORLOCK_AND_APP", label: "앱 연동 가능" },
+  { value: "DOORLOCK_AND_APP_AND_HUB", label: "앱 + 허브 연동 가능" },
 ] as const;
 
 export const AS_EMERGENCY_CHOICES = [
@@ -41,6 +41,7 @@ export class InstallerProfileError extends Error {
 
 export type InstallerProfileInput = {
   name: string;
+  branch: string;
   address: string;
   aqaraAppCapability: string;
   asEmergencyAvailability: string;
@@ -52,12 +53,18 @@ export type InstallerProfileInput = {
  */
 export function parseInstallerProfileInput(input: {
   name?: unknown;
+  branch?: unknown;
   address?: unknown;
   aqaraAppCapability?: unknown;
   asEmergencyAvailability?: unknown;
 }): InstallerProfileInput {
   const name = String(input.name ?? "").replace(/\s+/g, " ").trim();
   if (!name) throw new InstallerProfileError("NAME_REQUIRED");
+
+  // 상호명은 배차 문자에 상호로 찍히는 값이라, 총판 명단의 표기가 맞는지
+  // 본인에게 확인받는다.
+  const branch = String(input.branch ?? "").replace(/\s+/g, " ").trim();
+  if (!branch) throw new InstallerProfileError("BRANCH_REQUIRED");
 
   const address = String(input.address ?? "").replace(/\s+/g, " ").trim();
   if (!address) throw new InstallerProfileError("ADDRESS_REQUIRED");
@@ -72,5 +79,5 @@ export function parseInstallerProfileInput(input: {
     throw new InstallerProfileError("AS_EMERGENCY_REQUIRED");
   }
 
-  return { name, address, aqaraAppCapability, asEmergencyAvailability };
+  return { name, branch, address, aqaraAppCapability, asEmergencyAvailability };
 }

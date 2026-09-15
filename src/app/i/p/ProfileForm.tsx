@@ -13,8 +13,12 @@ import {
 import { Row } from "@/app/installer/cards";
 import * as ui from "@/app/installer/ui";
 
+// 화면에서 반드시 채워야 하는 항목 수. 안내 문구가 실제와 어긋나지 않게 한곳에서 센다.
+const REQUIRED_COUNT = 5;
+
 const ERROR_LABEL: Record<string, string> = {
   NAME_REQUIRED: "이름을 입력해 주세요.",
+  BRANCH_REQUIRED: "상호명을 입력해 주세요.",
   ADDRESS_REQUIRED: "주소를 입력해 주세요.",
   AQARA_APP_CAPABILITY_REQUIRED: "Aqara 앱 연동 능력을 선택해 주세요.",
   AS_EMERGENCY_REQUIRED: "A/S 긴급출동 가능 여부를 선택해 주세요.",
@@ -49,6 +53,7 @@ export default function ProfileForm({
   profile: Profile;
   onSave: (input: {
     name: string;
+    branch: string;
     address: string;
     aqaraAppCapability: string;
     asEmergencyAvailability: string;
@@ -57,6 +62,8 @@ export default function ProfileForm({
   const router = useRouter();
 
   const [name, setName] = useState(profile.name ?? "");
+  // 총판 명단의 상호명을 미리 채워 두고, 맞는지 본인이 확인·수정하게 한다.
+  const [branch, setBranch] = useState(profile.branch ?? "");
   // 주소는 우편번호 검색으로 채운 부분과 기사가 직접 쓰는 상세 주소로 나눈다.
   // 기존 값은 어디까지가 검색 결과인지 알 수 없으므로 통째로 상세 칸에 넣는다.
   const [baseAddress, setBaseAddress] = useState("");
@@ -72,6 +79,7 @@ export default function ProfileForm({
 
   const missing = [
     name.trim() ? null : "이름",
+    branch.trim() ? null : "상호명",
     address ? null : "주소",
     aqara ? null : "Aqara 앱 연동 능력",
     asEmergency ? null : "A/S 긴급출동 가능 여부",
@@ -95,6 +103,7 @@ export default function ProfileForm({
 
     const res = await onSave({
       name: name.trim(),
+      branch: branch.trim(),
       address,
       aqaraAppCapability: aqara,
       asEmergencyAvailability: asEmergency,
@@ -141,7 +150,7 @@ export default function ProfileForm({
             <div style={{ fontSize: 13, color: "#71717a" }}>
               {profile.confirmed
                 ? "이미 제출하셨습니다. 수정 후 다시 저장하실 수 있습니다."
-                : "필수 항목 4가지를 모두 채워 주세요."}
+                : `필수 항목 ${REQUIRED_COUNT}가지를 모두 채워 주세요.`}
             </div>
           </div>
 
@@ -149,7 +158,6 @@ export default function ProfileForm({
           <div style={ui.card}>
             <SectionTitle>등록된 정보</SectionTitle>
             <Row label="연락처" value={formatKrPhone(profile.phone)} />
-            <Row label="소속" value={profile.branch?.trim() || "-"} />
             <Row label="담당 지역" value={formatList(profile.serviceAreas)} />
             <Row
               label="설치 가능 항목"
@@ -173,6 +181,19 @@ export default function ProfileForm({
           </div>
 
           <div style={ui.card}>
+            <SectionTitle required>상호명</SectionTitle>
+            <input
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              placeholder="상호명을 입력해 주세요"
+              style={input}
+            />
+            <p style={hint}>
+              등록된 상호명이 맞는지 확인해 주세요. 다르면 정확한 상호명으로 고쳐 주세요.
+            </p>
+          </div>
+
+          <div style={ui.card}>
             <SectionTitle required>주소</SectionTitle>
             <button type="button" onClick={openPostcode} style={ui.secondaryButton}>
               주소 검색
@@ -184,11 +205,19 @@ export default function ProfileForm({
               placeholder={baseAddress ? "상세 주소 (동/호수 등)" : "주소를 입력해 주세요"}
               style={{ ...input, marginTop: 8 }}
             />
+            <p style={hint}>
+              {baseAddress
+                ? "동/호수 등 상세 주소를 입력해 주세요."
+                : profile.address
+                  ? "등록된 주소입니다. 바꾸시려면 '주소 검색' 을 눌러 주세요."
+                  : "'주소 검색' 으로 주소를 찾은 뒤 상세 주소를 입력해 주세요."}
+            </p>
           </div>
 
           <div style={ui.card}>
             <SectionTitle required>Aqara 앱 연동 능력</SectionTitle>
             <ChoiceList
+              name="aqaraAppCapability"
               options={AQARA_APP_CHOICES}
               value={aqara}
               onChange={setAqara}
@@ -198,6 +227,7 @@ export default function ProfileForm({
           <div style={ui.card}>
             <SectionTitle required>A/S 긴급출동 가능 여부</SectionTitle>
             <ChoiceList
+              name="asEmergencyAvailability"
               options={AS_EMERGENCY_CHOICES}
               value={asEmergency}
               onChange={setAsEmergency}
@@ -237,11 +267,20 @@ function formatList(values: string[]) {
   return values.length > 0 ? values.join(", ") : "-";
 }
 
+/**
+ * 한 가지만 고르는 항목. 라디오 버튼으로 둔다.
+ *
+ * 처음에는 고른 항목을 검은 버튼으로 칠했는데, 나머지 항목도 버튼처럼 보여서
+ * "고른 것" 인지 "누를 수 있는 것" 인지 구분이 안 된다는 이야기가 나왔다.
+ * 동그라미 표시가 있으면 한눈에 갈린다.
+ */
 function ChoiceList({
+  name,
   options,
   value,
   onChange,
 }: {
+  name: string;
   options: ReadonlyArray<{ value: string; label: string }>;
   value: string;
   onChange: (next: string) => void;
@@ -251,19 +290,26 @@ function ChoiceList({
       {options.map((option) => {
         const selected = value === option.value;
         return (
-          <button
+          <label
             key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
             style={{
               ...choice,
               borderColor: selected ? "#111" : "#e4e4e7",
-              background: selected ? "#111" : "#fff",
-              color: selected ? "#fff" : "#3f3f46",
+              background: selected ? "#f4f4f5" : "#fff",
             }}
           >
-            {option.label}
-          </button>
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={selected}
+              onChange={() => onChange(option.value)}
+              style={radio}
+            />
+            <span style={{ fontWeight: selected ? 800 : 500, color: "#18181b" }}>
+              {option.label}
+            </span>
+          </label>
         );
       })}
     </div>
@@ -313,13 +359,24 @@ const baseAddressBox: CSSProperties = {
 };
 
 const choice: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
   minHeight: 48,
+  padding: "0 14px",
   borderRadius: 10,
   border: "1px solid",
   fontSize: 15,
-  fontWeight: 700,
   cursor: "pointer",
-  textAlign: "center",
+};
+
+const radio: CSSProperties = {
+  width: 20,
+  height: 20,
+  margin: 0,
+  flexShrink: 0,
+  accentColor: "#111",
+  cursor: "pointer",
 };
 
 const hint: CSSProperties = { fontSize: 12, color: "#a1a1aa", marginTop: 6, lineHeight: 1.5 };

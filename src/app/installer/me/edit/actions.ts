@@ -17,6 +17,7 @@ export type SaveProfileResult = { ok: true } | { ok: false; error: string };
  */
 export async function saveInstallerProfileAction(input: {
   name: string;
+  branch: string;
   address: string;
   aqaraAppCapability: string;
   asEmergencyAvailability: string;

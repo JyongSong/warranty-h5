@@ -3,6 +3,7 @@ import { parseInstallerProfileInput } from "./profile-input";
 
 const valid = {
   name: "홍길동",
+  branch: "지용열쇠상사",
   address: "서울특별시 강남구 논현로 127길 13-11 3층",
   aqaraAppCapability: "DOORLOCK_AND_APP",
   asEmergencyAvailability: "가능",
@@ -26,6 +27,11 @@ describe("parseInstallerProfileInput", () => {
   it("이름은 필수다", () => {
     expect(() => parseInstallerProfileInput({ ...valid, name: "   " })).toThrow("NAME_REQUIRED");
     expect(() => parseInstallerProfileInput({ ...valid, name: undefined })).toThrow("NAME_REQUIRED");
+  });
+
+  it("상호명은 필수다", () => {
+    // 배차 문자에 상호로 찍히는 값이라 비워 둘 수 없다.
+    expect(() => parseInstallerProfileInput({ ...valid, branch: "  " })).toThrow("BRANCH_REQUIRED");
   });
 
   it("주소는 필수다", () => {
@@ -65,6 +71,7 @@ describe("parseInstallerProfileInput", () => {
       "address",
       "aqaraAppCapability",
       "asEmergencyAvailability",
+      "branch",
       "name",
     ]);
   });

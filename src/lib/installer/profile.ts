@@ -12,6 +12,7 @@ export async function saveInstallerProfile(installerId: string, input: Installer
     where: { id: installerId },
     data: {
       name: input.name,
+      branch: input.branch,
       address: input.address,
       aqaraAppCapability: input.aqaraAppCapability,
       asEmergencyAvailability: input.asEmergencyAvailability,

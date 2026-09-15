@@ -44,6 +44,7 @@ export async function verifyProfileOtpAction(phone: string, code: string): Promi
 /** 3단계: 저장. 대상은 쿠키가 가리키는 기사 본인뿐이다. */
 export async function saveProfileAction(input: {
   name: string;
+  branch: string;
   address: string;
   aqaraAppCapability: string;
   asEmergencyAvailability: string;
