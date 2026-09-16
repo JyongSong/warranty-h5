@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   retrySmsNotification,
+  sendInstallationNotificationById,
   sendPendingInstallationNotifications,
   syncInstallationSmsDeliveryReports,
 } from "@/lib/installation/notifications/outbox";
@@ -1362,6 +1363,43 @@ describe("sendPendingInstallationNotifications", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("carries the alimtalk columns into the manual resend row", async () => {
+    findUnique.mockResolvedValue({
+      id: "notification-1",
+      installationOrderId: "order-1",
+      customerRequestId: "request-1",
+      assignmentAttemptId: null,
+      smsType: "CUSTOMER_INPUT_LINK",
+      recipientType: "CUSTOMER",
+      recipientPhoneEncrypted: "encrypted-phone",
+      recipientPhoneHash: "phone-hash",
+      smsTemplateKey: "customer_reservation_link",
+      alimtalkTemplateKey: "customer_reservation_link",
+      alimtalkVariables: {
+        productSummary: "K100 외",
+        reservationUrl: "https://example.com/i/c/token",
+      },
+      smsBody: "reuse existing link https://example.com/i/c/token",
+      provider: "solapi",
+      status: "SENT",
+      sentAt: new Date("2026-06-11T00:00:00.000Z"),
+    });
+    create.mockResolvedValue({ id: "notification-resend-1", status: "PENDING" });
+
+    await retrySmsNotification("notification-1", {
+      now: new Date("2026-06-12T00:00:00.000Z"),
+    });
+
+    // 컬럼이 빠지면 재발송분만 SMS 로 나간다.
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      alimtalkTemplateKey: "customer_reservation_link",
+      alimtalkVariables: {
+        productSummary: "K100 외",
+        reservationUrl: "https://example.com/i/c/token",
+      },
+    });
+  });
+
   it("does not resend a sent notification without an installation order", async () => {
     findUnique.mockResolvedValue({
       id: "notification-1",
@@ -1374,6 +1412,66 @@ describe("sendPendingInstallationNotifications", () => {
 
     expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendInstallationNotificationById", () => {
+  beforeEach(() => {
+    findUnique.mockReset();
+    update.mockReset();
+    findUniqueCustomerRequest.mockReset();
+    createInstallationIssue.mockReset();
+  });
+
+  it("sends the manual immediate send with the stored subject and alimtalk template", async () => {
+    findUnique.mockResolvedValue({
+      id: "notification-1",
+      installationOrderId: "order-1",
+      assignmentAttemptId: null,
+      smsType: "CUSTOMER_INPUT_LINK",
+      customerRequestId: "request-1",
+      recipientPhoneEncrypted: encryptPii("01012345678"),
+      smsTemplateKey: "customer_reservation_link",
+      alimtalkTemplateKey: "customer_reservation_link",
+      alimtalkVariables: {
+        productSummary: "K100 외",
+        reservationUrl: "https://example.com/i/c/token",
+      },
+      smsBody: "예약 정보를 입력해 주세요 https://example.com/i/c/token",
+      retryCount: 0,
+      status: "PENDING",
+      sentAt: null,
+    });
+    findUniqueCustomerRequest.mockResolvedValue({
+      status: "PENDING_INPUT",
+      installationOrder: {
+        status: "WAITING_CUSTOMER_INPUT",
+        activeCustomerRequestId: "request-1",
+      },
+    });
+    update.mockResolvedValue({});
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "msg-1" });
+
+    await sendInstallationNotificationById("notification-1", {
+      now: new Date("2026-06-11T00:00:00.000Z"),
+      sendSms,
+    });
+
+    // 배치 경로와 같은 제목·알림톡으로 나가야 한다.
+    expect(sendSms).toHaveBeenCalledWith(
+      "01012345678",
+      "예약 정보를 입력해 주세요 https://example.com/i/c/token",
+      {
+        subject: "[아카라라이프] 설치 예약 안내",
+        alimtalk: {
+          templateKey: "customer_reservation_link",
+          variables: {
+            productSummary: "K100 외",
+            reservationUrl: "https://example.com/i/c/token",
+          },
+        },
+      },
+    );
   });
 });
 

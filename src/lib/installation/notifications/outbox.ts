@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import {
@@ -471,6 +472,9 @@ export async function sendInstallationNotificationById(
       smsType: true,
       customerRequestId: true,
       recipientPhoneEncrypted: true,
+      smsTemplateKey: true,
+      alimtalkTemplateKey: true,
+      alimtalkVariables: true,
       smsBody: true,
       retryCount: true,
       status: true,
@@ -513,6 +517,8 @@ export async function retrySmsNotification(
       recipientPhoneEncrypted: true,
       recipientPhoneHash: true,
       smsTemplateKey: true,
+      alimtalkTemplateKey: true,
+      alimtalkVariables: true,
       smsBody: true,
       provider: true,
       status: true,
@@ -554,6 +560,8 @@ async function createManualResendNotification(
     recipientPhoneEncrypted: string | null;
     recipientPhoneHash: string | null;
     smsTemplateKey: string | null;
+    alimtalkTemplateKey: string | null;
+    alimtalkVariables: unknown;
     smsBody: string;
     provider: string;
   },
@@ -573,6 +581,8 @@ async function createManualResendNotification(
       recipientPhoneEncrypted: notification.recipientPhoneEncrypted,
       recipientPhoneHash: notification.recipientPhoneHash,
       smsTemplateKey: notification.smsTemplateKey,
+      // 알림톡 컬럼을 빼먹으면 재발송분만 SMS 로 나간다.
+      ...toAlimtalkResendFields(notification),
       smsBody: notification.smsBody,
       provider: notification.provider,
       status: "PENDING",
@@ -583,6 +593,21 @@ async function createManualResendNotification(
       status: true,
     },
   });
+}
+
+/**
+ * 재발송 행에 이어줄 알림톡 컬럼. Prisma 의 nullable Json 은 null 대입을 받지
+ * 않아 값이 없으면 키 자체를 빼야 한다 (생성 시점 헬퍼와 같은 이유).
+ */
+function toAlimtalkResendFields(notification: {
+  alimtalkTemplateKey: string | null;
+  alimtalkVariables: unknown;
+}) {
+  if (!notification.alimtalkTemplateKey || !notification.alimtalkVariables) return {};
+  return {
+    alimtalkTemplateKey: notification.alimtalkTemplateKey,
+    alimtalkVariables: notification.alimtalkVariables as unknown as Prisma.InputJsonValue,
+  };
 }
 
 async function findRetryTargetNotification(notification: {
@@ -812,9 +837,16 @@ async function sendOneInstallationNotification(
 ) {
   let providerAccepted = false;
   try {
+    // 배치(sendPendingInstallationNotifications)와 같은 본문·제목·알림톡으로
+    // 나가야 한다. 여기만 빠지면 수동 발송분이 제목 없는 SMS 로 나간다.
+    const deadlineText = await resolveResponseDeadlineText(notification, now);
     const sendResult = await sendSms(
       decryptNullablePii(notification.recipientPhoneEncrypted),
-      notification.smsBody,
+      applyInstallerResponseDeadline(notification.smsBody, deadlineText),
+      {
+        subject: getInstallationSmsSubject(notification.smsTemplateKey),
+        alimtalk: toAlimtalkRequest(notification, deadlineText),
+      },
     );
     providerAccepted = true;
     await prisma.installationNotification.update({
