@@ -231,17 +231,34 @@ export async function dispatchReadyInstallationOrders({
     });
     const candidates = findBestMatchingInstallers(installAddress, installers);
     const candidate = candidates[0];
-    if (!candidate) {
-      await markNoCandidateFound(order.id, customerRequest.id, "조건에 맞는 후보 기사가 없습니다.", now, {
-        customerRequestId: customerRequest.id,
-        assignmentSource: "AUTO",
-        reasonCode: installers.length === 0 ? "NO_CAPABILITY_MATCH" : "NO_REGION_MATCH",
-        requiredCapabilities,
-        requiredAqaraAppCapability,
-        installAddress,
-        installDate: customerRequest.installDate,
-        candidates,
-      });
+    // 그 시·군·구를 실제로 담당하는 기사(EXACT_DISTRICT)가 있을 때만 자동으로 배차한다.
+    // 도 단위만 걸치는 광역 후보(REGION_ONLY)밖에 없다면 그 지역에 담당 기사가
+    // 없다는 뜻이므로, 멀리 있는 사람에게 조용히 넘기지 않고 관리자에게 넘긴다.
+    // 후보 목록 자체는 candidateRun 에 그대로 남겨서 관리자가 보고 고를 수 있게 한다.
+    if (!candidate || candidate.matchTier !== "EXACT_DISTRICT") {
+      const onlyRegionMatch = Boolean(candidate);
+      await markNoCandidateFound(
+        order.id,
+        customerRequest.id,
+        onlyRegionMatch
+          ? "해당 시·군·구를 담당하는 기사가 없습니다. 광역 담당 기사만 있어 관리자 확인이 필요합니다."
+          : "조건에 맞는 후보 기사가 없습니다.",
+        now,
+        {
+          customerRequestId: customerRequest.id,
+          assignmentSource: "AUTO",
+          reasonCode: onlyRegionMatch
+            ? "ONLY_REGION_MATCH"
+            : installers.length === 0
+              ? "NO_CAPABILITY_MATCH"
+              : "NO_REGION_MATCH",
+          requiredCapabilities,
+          requiredAqaraAppCapability,
+          installAddress,
+          installDate: customerRequest.installDate,
+          candidates,
+        },
+      );
       skippedCount += 1;
       continue;
     }

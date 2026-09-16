@@ -909,6 +909,58 @@ describe("dispatchReadyInstallationOrders", () => {
     });
   });
 
+  it("leaves the order to an admin when only a region-wide installer matches", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    // 주소는 강남구인데 기사는 "서울" 광역만 담당한다 — 그 구를 실제로 맡는
+    // 기사가 없다는 뜻이므로 자동 배차하지 않고 관리자에게 넘긴다.
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        source: { memo: "설치비 (K100) x1", addressEncrypted: null },
+        requiredCapabilities: JSON.stringify(["DOORLOCK"]),
+        requiredAqaraAppCapability: "NONE",
+        activeCustomerRequestId: "request-1",
+        customerRequests: [
+          {
+            id: "request-1",
+            installAddressEncrypted: "서울 강남구 테헤란로 1",
+            installDate: "2026-06-20",
+          },
+        ],
+      },
+    ]);
+    findManyInstallers.mockResolvedValue([
+      {
+        id: "installer-1",
+        name: "서울광역기사",
+        phone: "010-1111-2222",
+        branch: "서울지점",
+        region: "서울특별시",
+        coverage: null,
+        serviceAreas: [],          // 담당 시·군·구 없음 → REGION_ONLY 로만 걸린다
+        capabilities: ["DOORLOCK"],
+        aqaraAppCapability: "NONE",
+        monthlyDispatchCount: 0,
+        active: true,
+      },
+    ]);
+    createIssue.mockResolvedValue({ id: "issue-1" });
+    createCandidateRun.mockResolvedValue({ id: "candidate-run-1" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    updateOrder.mockResolvedValue({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
+
+    expect(result).toEqual({ dispatchedCount: 0, skippedCount: 1, failedCount: 0 });
+    expect(createAssignment).not.toHaveBeenCalled();
+
+    const candidateRunArgs = createCandidateRun.mock.calls.at(-1)?.[0];
+    expect(candidateRunArgs.data.reasonCode).toBe("ONLY_REGION_MATCH");
+    // 관리자가 고를 수 있도록 광역 후보는 기록에 남겨 둔다.
+    expect(candidateRunArgs.data.candidates.create).toHaveLength(1);
+  });
+
   it("records an unparsable address candidate run when the install address is missing", async () => {
     const now = new Date("2026-06-11T01:00:00.000Z");
     findManyOrders.mockResolvedValue([
