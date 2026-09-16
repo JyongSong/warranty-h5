@@ -12,7 +12,8 @@
 export type AlimtalkTemplateKey =
   | "user_registration_completed"
   | "installer_confirm_link"
-  | "assignment_completed";
+  | "assignment_completed"
+  | "customer_reservation_link";
 
 type AlimtalkTemplateSpec = {
   /** 솔라피에 등록된 템플릿 ID */
@@ -48,6 +49,14 @@ export const ALIMTALK_TEMPLATES = {
     variables: ["confirmLink"],
     linkVariables: ["confirmLink"],
     note: "버튼 링크가 https://#{confirmLink} 로 등록되어 있어 값에서 프로토콜을 제거한다.",
+  },
+  // 7번: 고객에게 보내는 설치 예약 정보 입력 링크
+  customer_reservation_link: {
+    templateId: "KA01TP260820020210587ia2n5UL8Rgn",
+    name: "설치 예약 정보 입력 링크",
+    variables: ["productSummary", "reservationUrl"],
+    linkVariables: ["reservationUrl"],
+    note: "버튼 링크가 https://#{reservationUrl} 로 등록되어 있어 값에서 프로토콜을 제거한다. 본문의 \"24시간\" 은 FALLBACK_AFTER_HOURS 와 짝이라 상수를 바꾸면 카카오 템플릿도 재심사해야 한다.",
   },
   // 5번(엑셀 일괄) / 10번(신규 배차 플로우) 공용
   assignment_completed: {

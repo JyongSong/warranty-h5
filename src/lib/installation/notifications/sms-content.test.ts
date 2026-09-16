@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
+import { ALIMTALK_TEMPLATES } from "@/lib/notifications/alimtalk";
 import {
   buildCustomerAssignmentConfirmedSmsContent,
   buildCustomerReservationLinkSmsContent,
@@ -41,6 +42,26 @@ describe("installation SMS content", () => {
         `※ 설치 접수 후 ${FALLBACK_AFTER_HOURS}시간 이내 미입력 시 주문하신 배송지 정보로 설치가 진행됩니다.\n` +
         "\n" +
         "※ 발신전용",
+    );
+  });
+
+  it("carries the reservation link alimtalk template with the same product summary as the SMS", () => {
+    const content = buildCustomerReservationLinkSmsContent({
+      productSummary: "Aqara 스마트 도어락 K100 x1 / 용역 출장비 x1",
+      reservationUrl: "https://example.com/i/c/token-1",
+    });
+
+    expect(content.alimtalk).toEqual({
+      templateKey: "customer_reservation_link",
+      variables: {
+        // 본문과 같은 요약을 쓴다 (알림톡/대체발송 SMS 문구가 어긋나면 안 된다)
+        productSummary: "Aqara 스마트 도어락 K100 x1 외",
+        // 프로토콜 제거는 버튼 링크를 만드는 레지스트리 쪽 책임이라 여기선 원본 그대로.
+        reservationUrl: "https://example.com/i/c/token-1",
+      },
+    });
+    expect(Object.keys(content.alimtalk!.variables).sort()).toEqual(
+      [...ALIMTALK_TEMPLATES.customer_reservation_link.variables].sort(),
     );
   });
 

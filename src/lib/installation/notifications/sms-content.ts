@@ -55,6 +55,17 @@ export function buildCustomerReservationLinkSmsContent({
       // 문안의 시간과 실제 폴백 시점이 어긋나지 않도록 상수에서 렌더한다.
       fallbackHours: String(FALLBACK_AFTER_HOURS),
     }),
+    // 알림톡 템플릿 "설치 예약 정보 입력 링크". 링크는 본문이 아니라 버튼에
+    // 들어가고 버튼이 `https://#{reservationUrl}` 로 등록돼 있어, 레지스트리의
+    // linkVariables 가 값에서 프로토콜을 떼어낸다. 폴백 시간은 템플릿 본문에
+    // "24시간" 으로 박혀 있어 변수로 넘기지 않는다.
+    alimtalk: {
+      templateKey: "customer_reservation_link",
+      variables: {
+        productSummary: formatSmsProductSummary(productSummary),
+        reservationUrl,
+      },
+    },
   };
 }
 
