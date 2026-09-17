@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
-import { sendSms } from "@/lib/sms";
-import { buildSurveySmsText, SURVEY_SMS_SUBJECT } from "@/lib/survey/send";
+import { sendSurveySms } from "@/lib/survey/send";
 import { getErrorMessage } from "@/lib/error";
 
 export async function POST(req: Request) {
@@ -47,7 +46,7 @@ export async function POST(req: Request) {
             for (const reg of eligibleRegs) {
                 try {
                     // 자동 발송(cron)과 같은 문구를 쓴다.
-                    await sendSms(reg.userPhone, buildSurveySmsText(reg.id), SURVEY_SMS_SUBJECT);
+                    await sendSurveySms(reg.userPhone, reg.id);
                     console.log(`[BATCH SURVEY SMS SENT] Registration ID: ${reg.id}, Phone: ${reg.userPhone}`);
 
                     // Update the sent timestamp in DB
@@ -97,7 +96,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "REGISTRATION_NOT_CONFIRMED" }, { status: 400 });
         }
 
-        await sendSms(reg.userPhone, buildSurveySmsText(reg.id), SURVEY_SMS_SUBJECT);
+        await sendSurveySms(reg.userPhone, reg.id);
 
         console.log(`[MANUAL SURVEY SMS SENT] Registration ID: ${reg.id}, Phone: ${reg.userPhone}`);
 

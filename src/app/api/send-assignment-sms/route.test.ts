@@ -219,7 +219,7 @@ describe("POST /api/send-assignment-sms", () => {
       text: "hello",
       kakaoOptions: {
         pfId: "KA01PF260706032300158y6gaHPMaEfL",
-        templateId: "KA01TP26070707483285849dA5feTIvF",
+        templateId: "KA01TP260917014330329y9obgbLbjTg",
         variables: {
           "#{branchName}": "강남점",
           "#{installerPhone}": "01011112222",

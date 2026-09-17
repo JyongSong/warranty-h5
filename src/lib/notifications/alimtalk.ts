@@ -13,7 +13,8 @@ export type AlimtalkTemplateKey =
   | "user_registration_completed"
   | "installer_confirm_link"
   | "assignment_completed"
-  | "customer_reservation_link";
+  | "customer_reservation_link"
+  | "satisfaction_survey";
 
 type AlimtalkTemplateSpec = {
   /** 솔라피에 등록된 템플릿 ID */
@@ -58,10 +59,18 @@ export const ALIMTALK_TEMPLATES = {
     linkVariables: ["reservationUrl"],
     note: "버튼 링크가 https://#{reservationUrl} 로 등록되어 있어 값에서 프로토콜을 제거한다. 본문의 \"24시간\" 은 FALLBACK_AFTER_HOURS 와 짝이라 상수를 바꾸면 카카오 템플릿도 재심사해야 한다.",
   },
+  // 만족도 조사 안내 (buildSurveySms 와 짝)
+  satisfaction_survey: {
+    templateId: "KA01TP26091702303363416kMW2B1ci3",
+    name: "만족도 조사 참여 안내",
+    variables: ["surveyUrl"],
+    linkVariables: ["surveyUrl"],
+    note: "버튼 링크가 https://#{surveyUrl} 로 등록되어 있어 값에서 프로토콜을 제거한다.",
+  },
   // 5번(엑셀 일괄) / 10번(신규 배차 플로우) 공용
   assignment_completed: {
-    templateId: "KA01TP26070707483285849dA5feTIvF",
-    name: "기사배정 완료 안내문(사본)",
+    templateId: "KA01TP260917014330329y9obgbLbjTg",
+    name: "기사배정 완료 안내문_260917",
     variables: ["branchName", "installerPhone"],
   },
 } as const satisfies Record<AlimtalkTemplateKey, AlimtalkTemplateSpec>;

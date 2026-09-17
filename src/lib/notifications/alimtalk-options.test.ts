@@ -79,7 +79,7 @@ describe("alimtalk gate", () => {
       }),
     ).resolves.toEqual({
       pfId: PF_ID,
-      templateId: "KA01TP26070707483285849dA5feTIvF",
+      templateId: "KA01TP260917014330329y9obgbLbjTg",
       variables: {
         "#{branchName}": "강남점",
         "#{installerPhone}": "01011112222",

@@ -3,31 +3,55 @@
 
 import { getBaseUrl } from "@/lib/getBaseUrl";
 import { prisma } from "@/lib/prisma";
+import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
 import { sendSms } from "@/lib/sms";
 import { hasPassedKstBusinessDays } from "@/lib/survey/business-days";
 
 /** 설치 확정 후 이만큼의 영업일이 지나야 설문을 보낸다. */
 export const SURVEY_SEND_BUSINESS_DAYS = 7;
 
-export const SURVEY_SMS_SUBJECT = "[Aqara]";
+const SURVEY_SMS_SUBJECT = "[Aqara]";
 
-export function buildSurveySmsText(registrationId: string, baseUrl = getBaseUrl()) {
+/**
+ * 만족도 조사 안내. 알림톡이 꺼져 있거나 카카오 발송이 실패하면 text 가 SMS 로
+ * 나간다. 수동 발송(백오피스)과 자동 발송(cron)이 이 빌더 하나를 쓴다.
+ */
+export function buildSurveySms(registrationId: string, baseUrl = getBaseUrl()) {
   const surveyLink = `${baseUrl}/satisfaction-survey?id=${registrationId}`;
 
-  return `설문 참여하고 커피 쿠폰 받으세요!
+  // 알림톡 템플릿 "만족도 조사 참여 안내". 링크는 본문이 아니라 버튼에 들어가고
+  // 버튼이 `https://#{surveyUrl}` 로 등록돼 있어, 레지스트리의 linkVariables 가
+  // 값에서 프로토콜을 떼어낸다.
+  const alimtalk: AlimtalkRequest = {
+    templateKey: "satisfaction_survey",
+    variables: { surveyUrl: surveyLink },
+  };
 
-안녕하세요, 고객님.
-아카라 스마트 도어락을 이용해주셔서 감사합니다.
+  const text = `1분 설문 참여하고 커피 쿠폰 받으세요!
 
-더 나은 제품과 서비스를 제공해드리고자 간단한 만족도 조사를 진행하고 있습니다.
-설문에 참여해주신 모든 분들께 감사의 마음을 담아 커피 쿠폰을 선물로 드립니다. (1분 소요)
+고객님, 아카라 스마트 도어락 잘 사용하고 계신가요?
+사용하시면서 좋았던 점이나 불편했던 점을 들려주세요.
 
-■ 설문 참여 링크: ${surveyLink}
+설문을 완료해주신 모든 고객님께 커피 쿠폰을 드립니다.
 
-잠시만 시간 내어 소중한 의견을 들려주시면 감사하겠습니다.
+■ 소요 시간: 1분 이내
+■ 참여 혜택: 커피 쿠폰
+
+▼ 설문 참여하기
+${surveyLink}
+
+고객님의 의견을 제품과 서비스 개선에 반영하겠습니다. 감사합니다.
 
 문의: https://o8znz.channel.io
-※ 발신전용`;
+※ 본 문자는 발신 전용입니다.`;
+
+  return { subject: SURVEY_SMS_SUBJECT, text, alimtalk };
+}
+
+/** 설문 안내 1건 발송. 수동/자동 발송이 같은 호출 형태를 쓰게 모아 둔다. */
+export async function sendSurveySms(phone: string | null | undefined, registrationId: string) {
+  const sms = buildSurveySms(registrationId);
+  await sendSms(phone, sms.text, sms.subject, { alimtalk: sms.alimtalk });
 }
 
 export type SendDueSurveysResult = {
@@ -71,7 +95,7 @@ export async function sendDueSatisfactionSurveys({
 
   for (const reg of targets) {
     try {
-      await sendSms(reg.userPhone, buildSurveySmsText(reg.id), SURVEY_SMS_SUBJECT);
+      await sendSurveySms(reg.userPhone, reg.id);
 
       // 발송 표시. 이걸 남기지 못하면 다음 실행에서 같은 사람에게 또 간다.
       await prisma.warrantyRegistration.update({
