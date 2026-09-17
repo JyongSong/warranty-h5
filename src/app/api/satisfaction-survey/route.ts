@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { registrationId, q1_1, q1_2, q1_3, q2_1, q2_2, q2_3, q3_1, comment } = body;
+    const { registrationId, q1_1, q1_2, q1_3, q2_1, q2_2, q2_3, q3_1, comment, couponConsent } =
+      body;
 
     if (!registrationId) {
       return NextResponse.json({ error: "등록 ID가 필요합니다." }, { status: 400 });
@@ -44,6 +45,8 @@ export async function POST(request: Request) {
         q2_3,
         q3_1: Number(q3_1),
         comment: comment || null,
+        // 쿠폰 발송 대상은 이 값으로 가른다. 동의는 선택이라 기본은 false.
+        couponConsent: couponConsent === true,
       },
     });
 

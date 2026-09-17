@@ -160,6 +160,8 @@ model SatisfactionSurvey {
   q2_3           String
   q3_1           Int
   comment        String?
+  /// 커피 쿠폰 발송을 위한 개인정보 이용 동의(선택). 발송 대상 판단 근거이자 동의 증적.
+  couponConsent  Boolean              @default(false) @map("coupon_consent")
   createdAt      DateTime             @default(now()) @map("created_at")
   registration   WarrantyRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 

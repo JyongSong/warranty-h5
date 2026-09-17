@@ -82,7 +82,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
     q2_2 !== "" &&
     q2_3 !== "" &&
     q3_1 > 0 &&
-    consentEvent &&
+    // 쿠폰 동의는 선택 항목이라 제출을 막지 않는다.
     !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -106,6 +106,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
           q2_3,
           q3_1,
           comment,
+          couponConsent: consentEvent,
         }),
       });
 
@@ -360,7 +361,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
               }}
             />
             <label htmlFor="consentEvent" style={{ fontSize: 13, fontWeight: 700, color: "#1d3129", cursor: "pointer", userSelect: "none" }}>
-              (필수) 만족도 조사 참여 및 커피 쿠폰 발송을 위한 개인정보 수집·이용 동의
+              (선택) 커피 쿠폰 발송을 위한 개인정보 이용 동의
             </label>
           </div>
           <div style={{
@@ -376,7 +377,7 @@ export default function SurveyClient({ registrationId }: SurveyClientProps) {
             overflowY: "auto",
           }}>
             <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "#27272a" }}>[개인정보 수집 및 이용 동의]</p>
-            <p style={{ margin: "0 0 4px 0" }}>아카라 라이프는 만족도 조사 참여 혜택(커피 쿠폰) 제공을 위해 아래와 같이 고객님의 개인정보를 수집 및 이용합니다.</p>
+            <p style={{ margin: "0 0 4px 0" }}>아카라 라이프는 만족도 조사 참여 혜택(커피 쿠폰) 제공을 위해 아래와 같이 고객님의 개인정보를 이용합니다. 본 동의는 선택 사항이며, 동의하지 않으셔도 설문에는 참여하실 수 있습니다.</p>
             <ul style={{ margin: 0, paddingLeft: 14 }}>
               <li><b>수집 및 이용 목적:</b> 만족도 조사 참여자 식별 및 모바일 커피 쿠폰 발송</li>
               <li><b>수집하는 개인정보 항목:</b> 휴대폰 번호</li>
