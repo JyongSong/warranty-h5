@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
+import { parseSeminarContacts } from "@/lib/seminar/state";
 import {
   cancelSeminarAction,
   lookupSeminarAction,
@@ -122,6 +123,7 @@ export default function SeminarClient({
     setNotice(null);
   }
 
+  const contacts = parseSeminarContacts(seminar.contactName, seminar.contactPhone);
   const mapUrl = `https://map.naver.com/p/search/${encodeURIComponent(seminar.venue.replace(/\s*\d+호$/, ""))}`;
 
   return (
@@ -154,16 +156,18 @@ export default function SeminarClient({
           />
           {seminar.attendanceNote ? <InfoRow icon="people" label="참석" value={seminar.attendanceNote} /> : null}
           {seminar.parkingInfo ? <InfoRow icon="car" label="주차 안내" value={seminar.parkingInfo} /> : null}
-          {seminar.contactPhone ? (
+          {contacts.length > 0 ? (
             <InfoRow
               icon="phone"
               label="문의 전화"
-              value={[seminar.contactName, formatKrPhone(seminar.contactPhone)].filter(Boolean).join(" ")}
-              extra={
-                <a href={`tel:${normalizePhone(seminar.contactPhone)}`} style={chipLink}>
-                  전화 걸기
-                </a>
-              }
+              value={contacts.map((contact) => (
+                <div key={contact.phone} style={contactLine}>
+                  <span>{[contact.name, formatKrPhone(contact.phone)].filter(Boolean).join(" ")}</span>
+                  <a href={`tel:${contact.phone}`} style={chipLink}>
+                    전화 걸기
+                  </a>
+                </div>
+              ))}
               last
             />
           ) : null}
@@ -414,6 +418,14 @@ const iconWrap: CSSProperties = {
 const infoLabel: CSSProperties = { fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 2 };
 const infoValue: CSSProperties = { fontSize: 15.5, fontWeight: 700, color: INK, lineHeight: 1.5 };
 const infoNote: CSSProperties = { fontSize: 13, color: MUTED, marginTop: 1 };
+
+const contactLine: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  padding: "3px 0",
+};
 
 const chipLink: CSSProperties = {
   display: "inline-block",

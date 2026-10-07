@@ -4,6 +4,7 @@ import {
   formatSeminarDateTime,
   isPastSeminarDeadline,
   maskInstallerName,
+  parseSeminarContacts,
   resolveSeminarState,
 } from "./state";
 
@@ -70,5 +71,20 @@ describe("buildSeminarConfirmationSms", () => {
     expect(text).toContain("■ 일시: 10월 17일(토) 09:00~12:00");
     expect(text).toContain("■ 장소: 서울시 금천구 대륭테크노타운 6차 702호");
     expect(text.endsWith("https://example.com/i/s/l100se")).toBe(true);
+  });
+});
+
+describe("parseSeminarContacts", () => {
+  it("pairs comma-separated names and phones in order", () => {
+    expect(parseSeminarContacts("김시열, 김동수", "01099614937, 010-2245-2222")).toEqual([
+      { name: "김시열", phone: "01099614937" },
+      { name: "김동수", phone: "01022452222" },
+    ]);
+  });
+
+  it("handles a single contact, a missing name and no contact", () => {
+    expect(parseSeminarContacts("김시열", "01099614937")).toEqual([{ name: "김시열", phone: "01099614937" }]);
+    expect(parseSeminarContacts(null, "01099614937")).toEqual([{ name: "", phone: "01099614937" }]);
+    expect(parseSeminarContacts("김시열", null)).toEqual([]);
   });
 });

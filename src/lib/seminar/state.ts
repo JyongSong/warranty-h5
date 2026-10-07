@@ -34,6 +34,21 @@ export function maskInstallerName(name: string): string {
   return `${chars[0]}${"*".repeat(chars.length - 2)}${chars[chars.length - 1]}`;
 }
 
+/**
+ * 문의 전화. 담당자가 여럿이면 contact_name / contact_phone 에 쉼표로 나란히 적는다.
+ * 예: "김시열, 김동수" / "01099614937, 01022452222" — 같은 순서끼리 짝을 짓는다.
+ */
+export function parseSeminarContacts(
+  names: string | null,
+  phones: string | null,
+): Array<{ name: string; phone: string }> {
+  const nameList = (names ?? "").split(",").map((name) => name.trim());
+  return (phones ?? "")
+    .split(",")
+    .map((phone, index) => ({ name: nameList[index] ?? "", phone: phone.replace(/\D/g, "") }))
+    .filter((contact) => contact.phone);
+}
+
 const KST_FORMATTER = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
   year: "numeric",
