@@ -87,6 +87,7 @@ model Installer {
   devices              InstallerDevice[]                         @relation("InstallerDevices")
   asOrders             AsOrder[]                                 @relation("AsCurrentInstaller")
   rateOverride         InstallerRate?                            @relation("InstallerRateOverride")
+  seminarRegistrations SeminarRegistration[]
   settlementLines      SettlementLine[]                          @relation("InstallerSettlementLines")
   asInstallHistory     AsInstallHistory[]                        @relation("AsHistoryInstaller")
 
@@ -990,4 +991,55 @@ model PartnerAccount {
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("partner_accounts")
+}
+
+// 기사 대상 세미나. 문자로 /i/s/{slug} 링크를 보내면 기사가 휴대폰 번호만 넣고
+// 참석을 신청한다. 화면에 보이는 안내 문구를 전부 여기에 두어, 다음 세미나는
+// 행 하나만 추가하면 열 수 있다.
+model Seminar {
+  id             String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  slug           String    @unique
+  title          String
+  description    String?
+  scheduleText   String    @map("schedule_text")
+  venue          String
+  venueNote      String?   @map("venue_note")
+  // 화면에 그대로 보여 주는 모집 문구(예: "선착순 30명 (업체당 1명)").
+  // 실제로 접수를 막는 숫자는 capacity 이고, 화면에는 capacity 를 드러내지 않는다.
+  attendanceNote String?   @map("attendance_note")
+  programItems   String[]  @default([]) @map("program_items")
+  parkingInfo    String?   @map("parking_info")
+  contactName    String?   @map("contact_name")
+  contactPhone   String?   @map("contact_phone")
+  capacity       Int
+  // 이 시각이 지나면 신청도 취소도 받지 않는다.
+  closesAt       DateTime? @map("closes_at") @db.Timestamptz(6)
+  // 관리자가 백오피스에서 직접 닫은 경우.
+  manuallyClosed Boolean   @default(false) @map("manually_closed")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  registrations SeminarRegistration[]
+
+  @@map("seminars")
+}
+
+// 세미나 참석 신청. 한 기사는 세미나마다 행 하나만 가진다 — 취소하면 cancelled_at 을
+// 채우고, 다시 신청하면 같은 행을 되살린다. 정원은 cancelled_at 이 빈 행만 센다.
+model SeminarRegistration {
+  id           String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  seminarId    String    @map("seminar_id")
+  installerId  String    @map("installer_id")
+  registeredAt DateTime  @default(now()) @map("registered_at") @db.Timestamptz(6)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  // "SELF" (기사 본인) | "ADMIN" (백오피스)
+  cancelledBy  String?   @map("cancelled_by")
+
+  seminar   Seminar   @relation(fields: [seminarId], references: [id], onDelete: Cascade)
+  installer Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+
+  @@unique([seminarId, installerId])
+  @@index([seminarId, cancelledAt])
+  @@index([installerId])
+  @@map("seminar_registrations")
 }
