@@ -62,7 +62,7 @@ INSERT INTO "seminars" (
   "attendance_note", "program_items", "parking_info",
   "contact_name", "contact_phone", "capacity", "closes_at"
 ) VALUES (
-  'l100se',
+  '1017',
   '아카라 도어락 파트너 세미나',
   '아카라 도어락 파트너분들을 대상으로 신제품 L100SE 소개와 신규 서비스 안내, 스마트홈 제품 실습을 함께하는 파트너 세미나를 진행합니다.',
   '10월 17일(토) 09:00~12:00',
