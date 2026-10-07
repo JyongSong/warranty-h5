@@ -65,21 +65,11 @@ export function formatSeminarDateTime(value: Date): string {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
-export function buildSeminarConfirmationSms(input: {
-  installerName: string;
-  title: string;
-  scheduleText: string;
-  venue: string;
-  link: string;
-}): string {
-  return [
-    `[${input.title}]`,
-    `${input.installerName}님, 참석 신청이 완료되었습니다.`,
-    "",
-    `■ 일시: ${input.scheduleText}`,
-    `■ 장소: ${input.venue}`,
-    "",
-    "참석이 어려우신 경우 아래 링크에서 취소해 주세요.",
-    input.link,
-  ].join("\n");
+/**
+ * 신청 확인 문자. SMS 한 건(90바이트, 한글 2바이트)에 들어가도록 짧게 쓴다.
+ * 일시·장소는 초대 문자와 신청 화면에 이미 있으므로 넣지 않는다.
+ * 이름이 길어 90바이트를 넘으면 발송사가 알아서 LMS 로 보낸다.
+ */
+export function buildSeminarConfirmationSms(input: { installerName: string; link: string }): string {
+  return `[아카라] ${input.installerName}님 세미나 참석 신청 완료\n취소: ${input.link}`;
 }

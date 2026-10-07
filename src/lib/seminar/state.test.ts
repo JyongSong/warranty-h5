@@ -58,19 +58,20 @@ describe("formatSeminarDateTime", () => {
 });
 
 describe("buildSeminarConfirmationSms", () => {
-  it("includes the schedule, venue and cancel link", () => {
-    const text = buildSeminarConfirmationSms({
-      installerName: "김철수",
-      title: "아카라 도어락 파트너 세미나",
-      scheduleText: "10월 17일(토) 09:00~12:00",
-      venue: "서울시 금천구 대륭테크노타운 6차 702호",
-      link: "https://example.com/i/s/l100se",
-    });
+  // SMS 는 EUC-KR 기준 90바이트까지다. 한글은 2바이트, 그 밖은 1바이트로 센다.
+  const smsBytes = (text: string) =>
+    Array.from(text).reduce((sum, char) => sum + (char.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+  const link = "https://aqaralife-service.kr/i/s/1017";
 
-    expect(text.startsWith("[아카라 도어락 파트너 세미나]\n김철수님, 참석 신청이 완료되었습니다.")).toBe(true);
-    expect(text).toContain("■ 일시: 10월 17일(토) 09:00~12:00");
-    expect(text).toContain("■ 장소: 서울시 금천구 대륭테크노타운 6차 702호");
-    expect(text.endsWith("https://example.com/i/s/l100se")).toBe(true);
+  it("names the installer and ends with the cancel link", () => {
+    expect(buildSeminarConfirmationSms({ installerName: "김철수", link })).toBe(
+      `[아카라] 김철수님 세미나 참석 신청 완료\n취소: ${link}`,
+    );
+  });
+
+  it("fits in a single SMS for names up to four characters", () => {
+    expect(smsBytes(buildSeminarConfirmationSms({ installerName: "김철수", link }))).toBe(83);
+    expect(smsBytes(buildSeminarConfirmationSms({ installerName: "남궁민수", link }))).toBeLessThanOrEqual(90);
   });
 });
 

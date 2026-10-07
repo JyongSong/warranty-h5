@@ -141,16 +141,13 @@ export async function registerForSeminar(
   if (outcome === "ALREADY") return { alreadyRegistered: true };
 
   // sendSms 는 실패를 삼킨다. 문자가 안 나가도 신청 자체는 이미 끝났다.
+  // 제목(subject)을 붙이면 LMS 로 나가므로 붙이지 않는다.
   await sendSms(
     installer.phone,
     buildSeminarConfirmationSms({
       installerName: installer.name,
-      title: seminar.title,
-      scheduleText: seminar.scheduleText,
-      venue: seminar.venue,
       link: `${getBaseUrl()}${seminarPublicPath(seminar.slug)}`,
     }),
-    seminar.title,
   );
 
   return { alreadyRegistered: false };
