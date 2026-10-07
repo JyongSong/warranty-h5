@@ -67,7 +67,7 @@ describe("buildSeminarConfirmationSms", () => {
       link: "https://example.com/i/s/l100se",
     });
 
-    expect(text.startsWith("[아카라 도어락 파트너 세미나]\n김철수 기사님")).toBe(true);
+    expect(text.startsWith("[아카라 도어락 파트너 세미나]\n김철수님, 참석 신청이 완료되었습니다.")).toBe(true);
     expect(text).toContain("■ 일시: 10월 17일(토) 09:00~12:00");
     expect(text).toContain("■ 장소: 서울시 금천구 대륭테크노타운 6차 702호");
     expect(text.endsWith("https://example.com/i/s/l100se")).toBe(true);

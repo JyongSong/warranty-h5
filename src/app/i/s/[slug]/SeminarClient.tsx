@@ -229,7 +229,7 @@ export default function SeminarClient({
               <div style={identity}>
                 <div style={avatar}>{Array.from(lookup.maskedName)[0]}</div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: INK }}>{lookup.maskedName} 기사님</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: INK }}>{lookup.maskedName}</div>
                   <div style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>
                     {[lookup.region, formatKrPhone(normalized)].filter(Boolean).join(" · ")}
                   </div>

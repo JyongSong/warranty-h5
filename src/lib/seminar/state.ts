@@ -74,7 +74,7 @@ export function buildSeminarConfirmationSms(input: {
 }): string {
   return [
     `[${input.title}]`,
-    `${input.installerName} 기사님, 참석 신청이 완료되었습니다.`,
+    `${input.installerName}님, 참석 신청이 완료되었습니다.`,
     "",
     `■ 일시: ${input.scheduleText}`,
     `■ 장소: ${input.venue}`,
