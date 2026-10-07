@@ -13,6 +13,17 @@ export function linkageFeeForCapability(
   return 0;
 }
 
+/**
+ * 야간/휴일 할증은 폐지됐다. 이 시각 전에 처음 제출된 완료 건만 옛 규칙대로
+ * 할증을 계산한다 — 기사가 제출할 때 할증이 포함된 금액을 보고 올린 건이라
+ * 승인 시점에 금액이 줄면 안 된다. 그 뒤에 제출된 건은 할증이 없다.
+ */
+export const NIGHT_WEEKEND_SURCHARGE_ENDED_AT = new Date("2026-10-08T00:00:00+09:00");
+
+export function isSurchargeEligible(firstSubmittedAt: Date): boolean {
+  return firstSubmittedAt.getTime() < NIGHT_WEEKEND_SURCHARGE_ENDED_AT.getTime();
+}
+
 // Night/weekend judged from the install-end instant in KST.
 export function isNight(installEndAt: Date, nightStartHour: number, nightEndHour: number): boolean {
   const kstHour = new Date(installEndAt.getTime() + KST_OFFSET_MS).getUTCHours();
@@ -53,14 +64,17 @@ export function computeInstallLineItems(input: {
   longDistanceAmount: number | null;
   wallpadAmount: number | null;
   installEndAt: Date;
+  /** 완료 건이 처음 제출된 시각. 할증 폐지 전 건인지 가린다. */
+  firstSubmittedAt: Date;
   rates: EffectiveRates;
 }): { items: SettlementLineItems; breakdown: InstallBreakdown } {
   const { rates } = input;
   const linkageFee = linkageFeeForCapability(input.achievedAqaraAppCapability, rates);
   const travelFee = rates.travelFee;
   const longDistanceFee = Math.max(0, input.longDistanceAmount ?? 0);
-  const night = isNight(input.installEndAt, rates.nightStartHour, rates.nightEndHour);
-  const weekend = isWeekend(input.installEndAt);
+  const eligible = isSurchargeEligible(input.firstSubmittedAt);
+  const night = eligible && isNight(input.installEndAt, rates.nightStartHour, rates.nightEndHour);
+  const weekend = eligible && isWeekend(input.installEndAt);
   const nightWeekendFee = (night ? rates.nightSurcharge : 0) + (weekend ? rates.weekendSurcharge : 0);
   const wallpadAmount = Math.max(0, input.wallpadAmount ?? 0);
 

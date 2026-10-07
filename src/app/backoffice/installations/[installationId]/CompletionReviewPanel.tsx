@@ -56,6 +56,7 @@ export default function CompletionReviewPanel({
           longDistanceAmount: Number(longDistance.replace(/[^\d]/g, "") || 0),
           wallpadAmount: completion.wallpadAmount,
           installEndAt: new Date(completion.installEndAt),
+          firstSubmittedAt: new Date(completion.firstSubmittedAt),
           rates,
         })
       : null;
@@ -158,7 +159,10 @@ export default function CompletionReviewPanel({
             <AmountLine label="연동비" value={preview.items.linkageFee} />
             <AmountLine label="출장비" value={preview.items.travelFee} />
             <AmountLine label="장거리" value={preview.items.longDistanceFee} />
-            <AmountLine label="야간/휴일" value={preview.items.nightWeekendFee} />
+            {/* 할증 폐지 전에 제출된 건에만 남아 있는 항목. */}
+            {preview.items.nightWeekendFee > 0 ? (
+              <AmountLine label="야간/휴일" value={preview.items.nightWeekendFee} />
+            ) : null}
           </div>
           {preview.breakdown.night || preview.breakdown.weekend ? (
             <div style={amountNote}>

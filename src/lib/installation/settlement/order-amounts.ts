@@ -39,6 +39,7 @@ export async function getInstallOrderAmounts(
         longDistanceAmount: true,
         wallpadAmount: true,
         installEndAt: true,
+        createdAt: true,
         installationOrder: { select: { currentInstallerId: true } },
       },
     }),
@@ -65,6 +66,7 @@ export async function getInstallOrderAmounts(
       longDistanceAmount: completion.longDistanceAmount,
       wallpadAmount: completion.wallpadAmount,
       installEndAt: completion.installEndAt,
+      firstSubmittedAt: completion.createdAt,
       rates,
     });
 

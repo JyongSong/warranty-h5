@@ -22,7 +22,6 @@ const CAPABILITIES = [
 
 const ERR: Record<string, string> = {
   ORDER_NOT_SUBMITTABLE: "완료 등록할 수 없는 상태입니다.",
-  INSTALL_END_REQUIRED: "설치 종료 일시를 입력해 주세요.",
   PHOTO_COUNT_INVALID: "사진을 1~4장 첨부해 주세요.",
   PHOTO_MISSING: "사진 업로드가 완료되지 않았습니다. 사진을 다시 첨부해 주세요.",
   INVALID_CAPABILITY: "연동 등급을 확인해 주세요.",
@@ -44,7 +43,6 @@ export default function CompleteClient({
   const [wallpadLinked, setWallpadLinked] = useState(false);
   const [wallpadAmount, setWallpadAmount] = useState("");
   const [longDistanceAmount, setLongDistanceAmount] = useState("");
-  const [installEndAt, setInstallEndAt] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -53,8 +51,7 @@ export default function CompleteClient({
   const [preview, setPreview] = useState<SettlementPreview | null>(null);
 
   const hasLinkage = capability !== "NONE";
-  const canSubmit =
-    installEndAt.length > 0 && photos.length >= 1 && photos.length <= 4 && !busy && !compressing;
+  const canSubmit = photos.length >= 1 && photos.length <= 4 && !busy && !compressing;
 
   async function addPhotos(list: FileList | null) {
     if (!list) return;
@@ -78,7 +75,6 @@ export default function CompleteClient({
           capability,
           longDistanceAmount: toNumberOrNull(longDistanceAmount),
           wallpadAmount: toNumberOrNull(wallpadAmount),
-          installEndAt,
         });
 
     setPreview(result);
@@ -98,7 +94,9 @@ export default function CompleteClient({
       wallpadLinked,
       wallpadAmount: amount ? Number(amount) : null,
       longDistanceAmount: longDistance ? Number(longDistance) : null,
-      installEndAt,
+      // 설치 종료 시각 = 지금 제출을 누른 시각. 오프라인 대기열에 들어가도
+      // 나중에 전송된 시각이 아니라 이 시각이 남는다.
+      installEndAt: new Date().toISOString(),
       photos,
     };
 
@@ -195,16 +193,6 @@ export default function CompleteClient({
           />
         </div>
 
-        <div style={ui.card}>
-          <label style={ui.label}>설치 종료 일시 (필수)</label>
-          <input
-            style={ui.input}
-            type="datetime-local"
-            value={installEndAt}
-            onChange={(e) => setInstallEndAt(e.target.value)}
-          />
-        </div>
-
         <PhotoPicker
           label="사진 (1~4장)"
           photos={photos}
@@ -247,7 +235,8 @@ function previewLines(preview: SettlementPreview | null): AmountLine[] {
     { label: "연동비", value: preview.linkageFee },
     { label: "출장비", value: preview.travelFee },
     { label: "장거리", value: preview.longDistanceFee },
-    { label: "야간/휴일", value: preview.nightWeekendFee },
+    // 할증 폐지 전에 처음 제출했던 건을 다시 올릴 때만 남아 있는 항목.
+    ...(preview.nightWeekendFee > 0 ? [{ label: "야간/휴일", value: preview.nightWeekendFee }] : []),
   ];
 }
 

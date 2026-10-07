@@ -1,5 +1,6 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
 import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
 import {
@@ -16,6 +17,28 @@ import {
   InstallationCompletionError,
   submitInstallerCompletion,
 } from "@/lib/installation/completion/service";
+
+/**
+ * 설치 종료 시각 = 기사가 완료 제출을 누른 시각.
+ *
+ * 입력란은 없앴다(야간/휴일 할증 폐지). 앱이 누른 시각을 실어 보내므로 오프라인
+ * 대기열에 있다가 늦게 올라온 건도 실제 제출 시각으로 남는다. 값이 없거나
+ * 읽을 수 없거나 미래 시각이면 서버가 받은 시각을 쓴다.
+ *
+ * 타임존 없는 "2026-08-20T15:23" 형식은 입력란이 있던 때의 대기열 항목이다.
+ * 기사가 고른 한국 현지 시각이므로 KST 로 읽는다.
+ */
+function resolveInstallEndAt(raw: string | null | undefined): Date {
+  const now = new Date();
+  const value = raw?.trim() ?? "";
+  if (!value) return now;
+
+  const parsed = parseKstDateTimeLocal(value) ?? new Date(value);
+  if (Number.isNaN(parsed.getTime())) return now;
+  // 단말 시계가 조금 빠른 정도는 봐주되, 미래 시각은 받지 않는다.
+  if (parsed.getTime() > now.getTime() + 5 * 60 * 1000) return now;
+  return parsed;
+}
 
 export type SubmitCompletionResult = { ok: true } | { ok: false; error: string };
 
@@ -55,7 +78,7 @@ export async function submitCompletionAction(input: {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
   longDistanceAmount: number | null;
-  installEndAt: string;
+  installEndAt?: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
   const installer = await getCurrentInstaller();
@@ -65,9 +88,7 @@ export async function submitCompletionAction(input: {
   const view = await getInstallerOrderView(installer.id, orderId);
   if (!view || view.status !== "ACCEPTED") return { ok: false, error: "ORDER_NOT_SUBMITTABLE" };
 
-  // 기사가 고른 시각은 한국 현지 시각이다. 서버 TZ(UTC)로 해석하면 9시간 밀린다.
-  const installEndAt = parseKstDateTimeLocal(input.installEndAt ?? "");
-  if (!installEndAt) return { ok: false, error: "INSTALL_END_REQUIRED" };
+  const installEndAt = resolveInstallEndAt(input.installEndAt);
 
   const photoPaths = Array.isArray(input.photoPaths) ? input.photoPaths : [];
   if (photoPaths.length < 1 || photoPaths.length > 4) return { ok: false, error: "PHOTO_COUNT_INVALID" };
@@ -130,24 +151,30 @@ export async function previewInstallSettlementAction(input: {
   capability: string;
   longDistanceAmount: number | null;
   wallpadAmount: number | null;
-  installEndAt: string;
 }): Promise<SettlementPreview> {
   try {
     const installer = await getCurrentInstaller();
     if (!installer) return { ok: false };
 
-    const view = await getInstallerOrderView(installer.id, input.orderId?.trim() ?? "");
+    const orderId = input.orderId?.trim() ?? "";
+    const view = await getInstallerOrderView(installer.id, orderId);
     if (!view || view.status !== "ACCEPTED") return { ok: false };
 
-    const installEndAt = parseKstDateTimeLocal(input.installEndAt ?? "");
-    if (!installEndAt) return { ok: false };
+    // 반려 후 재제출이면 처음 제출 때의 시각이 그대로 쓰인다. 할증 폐지 전에
+    // 올렸던 건은 그래서 옛 규칙의 금액이 다시 보인다.
+    const existing = await prisma.installationCompletion.findUnique({
+      where: { installationOrderId: orderId },
+      select: { installEndAt: true, createdAt: true },
+    });
+    const now = new Date();
 
     const { rates } = await resolveInstallerRates(installer.id);
     const { items, breakdown } = computeInstallLineItems({
       achievedAqaraAppCapability: input.capability,
       longDistanceAmount: input.longDistanceAmount,
       wallpadAmount: input.wallpadAmount,
-      installEndAt,
+      installEndAt: existing?.installEndAt ?? now,
+      firstSubmittedAt: existing?.createdAt ?? now,
       rates,
     });
 
