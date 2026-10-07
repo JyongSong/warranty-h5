@@ -33,7 +33,7 @@ type Notice = { tone: "ok" | "info"; text: string };
 
 const ERROR_LABEL: Record<string, string> = {
   INVALID_PHONE: "휴대폰 번호를 다시 확인해 주세요.",
-  INSTALLER_NOT_FOUND: "등록된 기사 번호가 아닙니다. 문자를 받으신 번호로 입력해 주세요.",
+  INSTALLER_NOT_FOUND: "등록된 번호가 아닙니다. 문자를 받으신 번호로 입력해 주세요.",
   SEMINAR_FULL: "접수가 마감되었습니다.",
   SEMINAR_CLOSED: "접수가 마감되었습니다.",
   CANCEL_CLOSED: "취소 가능 시간이 지났습니다. 문의 전화로 연락해 주세요.",
@@ -194,11 +194,9 @@ export default function SeminarClient({
 
           {!lookup ? (
             <>
-              <p style={hint}>
-                {open
-                  ? "안내 문자를 받으신 휴대폰 번호를 입력해 주세요."
-                  : "접수가 마감되었습니다. 이미 신청하신 분은 번호로 내역을 확인할 수 있습니다."}
-              </p>
+              {!open ? (
+                <p style={hint}>접수가 마감되었습니다. 이미 신청하신 분은 번호로 내역을 확인할 수 있습니다.</p>
+              ) : null}
               <label style={label} htmlFor="seminar-phone">
                 휴대폰 번호
               </label>
