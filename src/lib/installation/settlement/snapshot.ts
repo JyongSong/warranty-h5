@@ -25,6 +25,7 @@ export async function createInstallSettlementSnapshot(
       longDistanceAmount: true,
       wallpadAmount: true,
       installEndAt: true,
+      createdAt: true,
     },
   });
   if (!completion) return;
@@ -35,6 +36,7 @@ export async function createInstallSettlementSnapshot(
     longDistanceAmount: completion.longDistanceAmount,
     wallpadAmount: completion.wallpadAmount,
     installEndAt: completion.installEndAt,
+    firstSubmittedAt: completion.createdAt,
     rates,
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeAsLineItems,
   computeInstallLineItems,
+  NIGHT_WEEKEND_SURCHARGE_ENDED_AT,
   isNight,
   isWeekend,
   parseKstDateTimeLocal,
@@ -18,6 +19,9 @@ const RATES: EffectiveRates = {
   nightStartHour: 20,
   nightEndHour: 6,
 };
+
+// 할증 폐지 전에 제출된 건 (옛 규칙 적용 대상).
+const BEFORE_END = new Date(NIGHT_WEEKEND_SURCHARGE_ENDED_AT.getTime() - 1);
 
 // A KST wall-clock time → the UTC Date it corresponds to (KST = UTC+9).
 function kst(dateStr: string, hour: number): Date {
@@ -101,6 +105,7 @@ describe("computeInstallLineItems", () => {
       longDistanceAmount: null,
       wallpadAmount: null,
       installEndAt: kst("2026-08-12", 14), // Wed 14:00
+      firstSubmittedAt: BEFORE_END,
       rates: RATES,
     });
     expect(items.linkageFee).toBe(10000);
@@ -115,6 +120,7 @@ describe("computeInstallLineItems", () => {
       longDistanceAmount: 30000,
       wallpadAmount: 50000,
       installEndAt: kst("2026-08-15", 22), // Sat 22:00 → night + weekend
+      firstSubmittedAt: BEFORE_END,
       rates: RATES,
     });
     expect(items.linkageFee).toBe(25000);
@@ -126,12 +132,29 @@ describe("computeInstallLineItems", () => {
     expect(items.totalAmount).toBe(82000); // 25000+15000+30000+12000
   });
 
+  // 할증 폐지 이후에 제출된 건은 야간·주말에 끝났어도 할증이 없다.
+  it("no surcharge for a completion first submitted after the surcharge ended", () => {
+    const { items, breakdown } = computeInstallLineItems({
+      achievedAqaraAppCapability: "DOORLOCK_AND_APP_AND_HUB",
+      longDistanceAmount: 30000,
+      wallpadAmount: null,
+      installEndAt: kst("2026-10-10", 22), // Sat 22:00
+      firstSubmittedAt: NIGHT_WEEKEND_SURCHARGE_ENDED_AT,
+      rates: RATES,
+    });
+    expect(items.nightWeekendFee).toBe(0);
+    expect(breakdown.night).toBe(false);
+    expect(breakdown.weekend).toBe(false);
+    expect(items.totalAmount).toBe(70000); // 25000+15000+30000
+  });
+
   it("NONE capability: no linkage fee", () => {
     const { items } = computeInstallLineItems({
       achievedAqaraAppCapability: "NONE",
       longDistanceAmount: null,
       wallpadAmount: null,
       installEndAt: kst("2026-08-12", 14),
+      firstSubmittedAt: BEFORE_END,
       rates: RATES,
     });
     expect(items.linkageFee).toBe(0);

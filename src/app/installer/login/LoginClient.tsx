@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { requestInstallerOtpAction, verifyInstallerOtpAction } from "./actions";
 import * as ui from "../ui";
+
+const guideLink: CSSProperties = {
+  display: "block",
+  textAlign: "center",
+  fontSize: 14,
+  color: "#52525b",
+  textDecoration: "underline",
+  padding: "10px 0",
+};
 
 const MSG: Record<string, string> = {
   INVALID_PHONE: "전화번호를 확인해 주세요.",
@@ -104,6 +113,10 @@ export default function LoginClient({ redirectUrl }: { redirectUrl: string }) {
             )}
           </div>
         </div>
+
+        <a href="/installer-start.html" style={guideLink}>
+          처음이신가요? 사용 방법 보기
+        </a>
       </div>
     </main>
   );

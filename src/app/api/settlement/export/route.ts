@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
       aggregateSettlementByInstaller(filter),
     ]);
 
+    // 야간/휴일 할증은 폐지됐다. 폐지 전 건이 섞인 기간에만 열을 남긴다.
+    const hasNightWeekend = lines.some((l) => l.nightWeekendFee > 0);
+
     const detailRows = lines.map((l) => ({
       기사: l.installerName,
       구분: SOURCE_LABEL[l.sourceType] ?? l.sourceType,
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
       연동비: l.linkageFee,
       출장비: l.travelFee,
       장거리: l.longDistanceFee,
-      "야간/주말": l.nightWeekendFee,
+      ...(hasNightWeekend ? { "야간/주말": l.nightWeekendFee } : {}),
       용역비: l.serviceFee,
       "합계(정산)": l.totalAmount,
       "월패드(현장·참고)": l.wallpadAmount,
@@ -56,7 +59,7 @@ export async function GET(req: NextRequest) {
       연동비: s.linkageFee,
       출장비: s.travelFee,
       장거리: s.longDistanceFee,
-      "야간/주말": s.nightWeekendFee,
+      ...(hasNightWeekend ? { "야간/주말": s.nightWeekendFee } : {}),
       용역비: s.serviceFee,
       합계: s.totalAmount,
     }));

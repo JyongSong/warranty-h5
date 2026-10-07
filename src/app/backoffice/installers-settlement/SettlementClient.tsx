@@ -99,6 +99,9 @@ function SettlementTab({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // 야간/휴일 할증은 폐지됐다. 폐지 전 건이 섞인 조회에만 열을 남긴다.
+  const hasNightWeekend = summary.some((s) => s.nightWeekendFee > 0);
+
   // create-period form
   const [name, setName] = useState("");
   const [start, setStart] = useState("");
@@ -290,7 +293,7 @@ function SettlementTab({
                         <th className="text-right">연동비</th>
                         <th className="text-right">출장비</th>
                         <th className="text-right">장거리</th>
-                        <th className="text-right">야간/휴일</th>
+                        {hasNightWeekend ? <th className="text-right">야간/휴일</th> : null}
                         <th className="text-right">용역비</th>
                         <th className="text-right">합계</th>
                       </tr>
@@ -304,7 +307,9 @@ function SettlementTab({
                           <td className="text-right">{won(s.linkageFee)}</td>
                           <td className="text-right">{won(s.travelFee)}</td>
                           <td className="text-right">{won(s.longDistanceFee)}</td>
-                          <td className="text-right">{won(s.nightWeekendFee)}</td>
+                          {hasNightWeekend ? (
+                            <td className="text-right">{won(s.nightWeekendFee)}</td>
+                          ) : null}
                           <td className="text-right">{won(s.serviceFee)}</td>
                           <td className="text-right font-bold">{won(s.totalAmount)}</td>
                         </tr>
@@ -382,9 +387,6 @@ function RatesTab({
           <Stat label="연동비 · APP" value={won(rateDefaults.linkageAppFee)} />
           <Stat label="연동비 · 허브" value={won(rateDefaults.linkageHubFee)} />
           <Stat label="출장비" value={won(rateDefaults.travelFee)} />
-          <Stat label="야간 할증" value={won(rateDefaults.nightSurcharge)} />
-          <Stat label="휴일 할증" value={won(rateDefaults.weekendSurcharge)} />
-          <Stat label="야간 시간대" value={`${rateDefaults.nightStartHour}시~${rateDefaults.nightEndHour}시`} />
         </div>
       </section>
 
@@ -410,8 +412,6 @@ function RateOverrideRow({ row }: { row: InstallerRateOverrideView }) {
     linkageAppFee: row.linkageAppFee?.toString() ?? "",
     linkageHubFee: row.linkageHubFee?.toString() ?? "",
     travelFee: row.travelFee?.toString() ?? "",
-    nightSurcharge: row.nightSurcharge?.toString() ?? "",
-    weekendSurcharge: row.weekendSurcharge?.toString() ?? "",
   });
 
   const parse = (s: string): number | null => {
@@ -428,8 +428,10 @@ function RateOverrideRow({ row }: { row: InstallerRateOverrideView }) {
         linkageAppFee: parse(vals.linkageAppFee),
         linkageHubFee: parse(vals.linkageHubFee),
         travelFee: parse(vals.travelFee),
-        nightSurcharge: parse(vals.nightSurcharge),
-        weekendSurcharge: parse(vals.weekendSurcharge),
+        // 야간/휴일 할증은 폐지되어 입력란이 없다. 폐지 전에 제출된 건이 아직
+        // 이 값을 쓰므로 저장할 때 지우지 않고 그대로 둔다.
+        nightSurcharge: row.nightSurcharge,
+        weekendSurcharge: row.weekendSurcharge,
       });
       if (!res.ok) setErr(res.error);
       else {
@@ -458,8 +460,6 @@ function RateOverrideRow({ row }: { row: InstallerRateOverrideView }) {
       {field("linkageAppFee", "APP")}
       {field("linkageHubFee", "허브")}
       {field("travelFee", "출장")}
-      {field("nightSurcharge", "야간")}
-      {field("weekendSurcharge", "휴일")}
       <button className={primaryBtn} disabled={pending} onClick={save}>
         저장
       </button>

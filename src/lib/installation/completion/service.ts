@@ -71,7 +71,8 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         wallpadLinked: input.wallpadLinked,
         wallpadAmount: input.wallpadAmount,
         longDistanceAmount: input.longDistanceAmount,
-        installEndAt: input.installEndAt,
+        // installEndAt 은 덮어쓰지 않는다. 이제 기사가 입력하는 값이 아니라 제출
+        // 시각이라, 반려 후 재제출 때 바꾸면 설치일과 정산 월이 재제출일로 밀린다.
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
         reviewedByAdminId: null,
@@ -240,6 +241,8 @@ async function notifyInstallerOfCompletionRejection(installerId: string, reason:
 
 export type InstallationCompletionView = {
   submittedAt: string;
+  /** 처음 제출된 시각 (재제출해도 바뀌지 않는다) */
+  firstSubmittedAt: string;
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
@@ -260,6 +263,7 @@ export async function getInstallationCompletionForOrder(
 
   return {
     submittedAt: c.submittedAt.toISOString(),
+    firstSubmittedAt: c.createdAt.toISOString(),
     achievedAqaraAppCapability: c.achievedAqaraAppCapability,
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
