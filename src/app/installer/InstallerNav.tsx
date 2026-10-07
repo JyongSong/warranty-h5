@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallerTabCounts } from "@/lib/installer/tabCounts";
+import GuideArrow, { guideRing } from "./guide/GuideArrow";
 
 // 기사 앱 하단 탭. 모바일 한 손 조작을 전제로 사이드바 대신 하단 고정.
 
@@ -84,6 +85,30 @@ export default function InstallerNav({ counts }: { counts: InstallerTabCounts })
   );
 }
 
+/**
+ * 사용 안내에서 하단 탭 하나를 화살표로 가리킨다.
+ *
+ * 탭 위치를 재지 않고 탭과 같은 격자를 그 위에 한 겹 더 깐다. 탭 배치가
+ * 바뀌어도 같은 TABS·스타일을 쓰므로 따로 맞출 것이 없다.
+ */
+export function TabPointer({ href }: { href: string }) {
+  const index = TABS.findIndex((tab) => tab.href === href);
+  if (index < 0) return null;
+
+  return (
+    <div style={pointerLayer} aria-hidden>
+      <div style={navInner}>
+        <div style={{ gridColumnStart: index + 1, position: "relative", minHeight: 56 }}>
+          <span style={pointerRing} />
+          <span style={pointerArrow}>
+            <GuideArrow direction="down" />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const nav: CSSProperties = {
   position: "fixed",
   left: 0,
@@ -94,6 +119,27 @@ const nav: CSSProperties = {
   // 홈 인디케이터가 있는 기기에서 탭이 가려지지 않게 한다.
   paddingBottom: "env(safe-area-inset-bottom)",
   zIndex: 50,
+};
+
+const pointerLayer: CSSProperties = {
+  ...nav,
+  background: "none",
+  borderTop: "1px solid transparent",
+  zIndex: 60,
+  // 가리키기만 한다. 탭은 그대로 눌린다.
+  pointerEvents: "none",
+};
+
+const pointerRing: CSSProperties = { ...guideRing, position: "absolute", inset: "7px 10px" };
+
+const pointerArrow: CSSProperties = {
+  position: "absolute",
+  bottom: "100%",
+  left: 0,
+  right: 0,
+  display: "flex",
+  justifyContent: "center",
+  paddingBottom: 4,
 };
 
 const navInner: CSSProperties = {
