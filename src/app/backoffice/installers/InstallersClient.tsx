@@ -128,11 +128,30 @@ export default function InstallersClient({ admin }: { admin: AuthAdmin }) {
         cell: ({ row }) => row.original.branch || "-",
       },
       {
-        id: "region",
-        accessorFn: (row) => row.region ?? "",
-        header: "광역",
+        id: "appInstalled",
+        accessorFn: (row) => row.appLastSeenAt ?? "",
+        header: "앱 설치",
         size: 90,
-        cell: ({ row }) => row.original.region || "-",
+        cell: ({ row }) => {
+          const seenAt = row.original.appLastSeenAt;
+          // 판단 근거는 앱이 올린 알림 토큰이다. 앱을 깔고도 알림을 거부한 기사는
+          // 토큰이 없어 미설치로 보인다 — 어차피 앱 알림을 받지 못하는 상태다.
+          return seenAt ? (
+            <span
+              className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+              title={`최근 접속 ${formatBackofficeDateTime(seenAt)}`}
+            >
+              설치
+            </span>
+          ) : (
+            <span
+              className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-500"
+              title="앱 미설치 또는 알림 미허용"
+            >
+              미설치
+            </span>
+          );
+        },
       },
       {
         id: "serviceAreas",
