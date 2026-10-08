@@ -21,6 +21,11 @@ export type InstallerItem = {
   asEmergencyAvailability: string | null;
   inCurrentRoster: boolean;
   active: boolean;
+  /**
+   * 기사 앱이 마지막으로 기기 토큰을 올린 시각. 없으면 앱 미설치(또는 알림 미허용).
+   * 목록 API 만 채운다 (수정 화면은 쓰지 않는다).
+   */
+  appLastSeenAt?: string | null;
   updatedAt: string;
 };
 

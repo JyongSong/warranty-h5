@@ -46,9 +46,19 @@ export async function GET(req: Request) {
       where: filters,
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       take: 500,
+      // 기사 앱은 로그인 후 알림을 허용하면 기기 토큰을 올린다. 토큰이 있으면
+      // 앱을 설치해 쓰고 있다는 뜻이다 (브라우저 접속은 토큰을 올리지 않는다).
+      include: {
+        devices: { select: { lastSeenAt: true }, orderBy: { lastSeenAt: "desc" }, take: 1 },
+      },
     });
 
-    return NextResponse.json({ items: rows });
+    const items = rows.map(({ devices, ...installer }) => ({
+      ...installer,
+      appLastSeenAt: devices[0]?.lastSeenAt ?? null,
+    }));
+
+    return NextResponse.json({ items });
   } catch (error: unknown) {
     return NextResponse.json(
       { error: getErrorMessage(error, "UNKNOWN_ERROR") },

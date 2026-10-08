@@ -7,7 +7,7 @@ import { AQARA_APP_LABEL, CAPABILITY_LABEL, type InstallerItem } from "./shared"
 const HEADERS = [
   "이름", "전화번호", "소속", "광역", "담당 지역", "지역 메모", "주소",
   "분류", "능력 메모", "설치 가능 항목", "Aqara 앱 연동", "허브 보유",
-  "A/S 긴급출동", "기사 명단", "활성",
+  "A/S 긴급출동", "기사 명단", "활성", "앱 설치",
   "설치 실적", "Happy Call LT", "하자 건수", "불만 사항", "수정일",
 ];
 
@@ -37,6 +37,7 @@ function toRow(item: InstallerItem): string[] {
     item.asEmergencyAvailability ?? "",
     item.inCurrentRoster ? "이번 명단" : "명단 밖",
     item.active ? "활성" : "비활성",
+    item.appLastSeenAt ? "설치" : "미설치",
     item.installCount == null ? "" : String(item.installCount),
     item.happyCallLt == null ? "" : String(item.happyCallLt),
     item.defectCount == null ? "" : String(item.defectCount),
