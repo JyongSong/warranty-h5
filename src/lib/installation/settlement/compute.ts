@@ -47,6 +47,8 @@ export type SettlementLineItems = {
   longDistanceFee: number;
   nightWeekendFee: number;
   serviceFee: number;
+  /** 기타 청구 — 본사가 승인한 금액 */
+  extraClaimFee: number;
   wallpadAmount: number;
   totalAmount: number;
 };
@@ -62,6 +64,7 @@ export type InstallBreakdown = {
 export function computeInstallLineItems(input: {
   achievedAqaraAppCapability: string;
   longDistanceAmount: number | null;
+  extraClaimAmount?: number | null;
   wallpadAmount: number | null;
   installEndAt: Date;
   /** 완료 건이 처음 제출된 시각. 할증 폐지 전 건인지 가린다. */
@@ -72,13 +75,14 @@ export function computeInstallLineItems(input: {
   const linkageFee = linkageFeeForCapability(input.achievedAqaraAppCapability, rates);
   const travelFee = rates.travelFee;
   const longDistanceFee = Math.max(0, input.longDistanceAmount ?? 0);
+  const extraClaimFee = Math.max(0, input.extraClaimAmount ?? 0);
   const eligible = isSurchargeEligible(input.firstSubmittedAt);
   const night = eligible && isNight(input.installEndAt, rates.nightStartHour, rates.nightEndHour);
   const weekend = eligible && isWeekend(input.installEndAt);
   const nightWeekendFee = (night ? rates.nightSurcharge : 0) + (weekend ? rates.weekendSurcharge : 0);
   const wallpadAmount = Math.max(0, input.wallpadAmount ?? 0);
 
-  const totalAmount = linkageFee + travelFee + longDistanceFee + nightWeekendFee;
+  const totalAmount = linkageFee + travelFee + longDistanceFee + nightWeekendFee + extraClaimFee;
 
   return {
     items: {
@@ -87,6 +91,7 @@ export function computeInstallLineItems(input: {
       longDistanceFee,
       nightWeekendFee,
       serviceFee: 0,
+      extraClaimFee,
       wallpadAmount,
       totalAmount,
     },
@@ -107,6 +112,7 @@ export function computeAsLineItems(serviceFee: number | null): SettlementLineIte
     longDistanceFee: 0,
     nightWeekendFee: 0,
     serviceFee: fee,
+    extraClaimFee: 0,
     wallpadAmount: 0,
     totalAmount: fee,
   };

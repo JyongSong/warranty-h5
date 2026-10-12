@@ -25,6 +25,10 @@ export type QueuedCompletionInput = {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
   longDistanceAmount: number | null;
+  // 기타 청구. 이 항목이 생기기 전에 대기열에 들어간 건에는 없으므로 선택 필드다.
+  extraClaimAmount?: number | null;
+  extraClaimReason?: string | null;
+  extraClaimPhotos?: Blob[];
   installEndAt: string;
   photos: Blob[];
 };
@@ -166,12 +170,40 @@ export async function uploadAndSubmitCompletion(
       paths.push(target.path);
     }
 
+    // 기타 청구 증빙 사진. 금액이 없으면 올리지 않는다(서버도 버린다).
+    const extraClaimPhotos = entry.extraClaimAmount ? (entry.extraClaimPhotos ?? []) : [];
+    const extraClaimPaths: string[] = [];
+    if (extraClaimPhotos.length > 0) {
+      const extraTargets = await getCompletionUploadTargetsAction(
+        entry.orderId,
+        extraClaimPhotos.length,
+      );
+      if (!extraTargets.ok) {
+        return {
+          ok: false,
+          retriable: extraTargets.error === "UNAUTHORIZED",
+          error: extraTargets.error,
+        };
+      }
+      for (let i = 0; i < extraClaimPhotos.length; i++) {
+        const target = extraTargets.targets[i];
+        const up = await supabase.storage
+          .from(extraTargets.bucket)
+          .uploadToSignedUrl(target.path, target.token, extraClaimPhotos[i]);
+        if (up.error) throw up.error;
+        extraClaimPaths.push(target.path);
+      }
+    }
+
     const res = await submitCompletionAction({
       orderId: entry.orderId,
       capability: entry.capability,
       wallpadLinked: entry.wallpadLinked,
       wallpadAmount: entry.wallpadAmount,
       longDistanceAmount: entry.longDistanceAmount,
+      extraClaimAmount: entry.extraClaimAmount ?? null,
+      extraClaimReason: entry.extraClaimReason ?? null,
+      extraClaimPhotoPaths: extraClaimPaths,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });

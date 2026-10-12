@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       장거리: l.longDistanceFee,
       ...(hasNightWeekend ? { "야간/주말": l.nightWeekendFee } : {}),
       용역비: l.serviceFee,
+      "기타 청구": l.extraClaimFee,
       "합계(정산)": l.totalAmount,
       "월패드(현장·참고)": l.wallpadAmount,
       주문ID: l.sourceOrderId,
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
       장거리: s.longDistanceFee,
       ...(hasNightWeekend ? { "야간/주말": s.nightWeekendFee } : {}),
       용역비: s.serviceFee,
+      "기타 청구": s.extraClaimFee,
       합계: s.totalAmount,
     }));
 

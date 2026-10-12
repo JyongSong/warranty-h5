@@ -44,6 +44,10 @@ export default function CompletionReviewPanel({
     completion.longDistanceAmount != null ? String(completion.longDistanceAmount) : "",
   );
 
+  const [extraClaim, setExtraClaim] = useState(
+    completion.extraClaimAmount != null ? String(completion.extraClaimAmount) : "",
+  );
+
   const canReview = orderStatus === "WAITING_HQ_REVIEW";
 
   // 승인 버튼을 누르면 확정될 금액. 장거리 입력에 따라 즉시 바뀌므로
@@ -54,6 +58,7 @@ export default function CompletionReviewPanel({
       ? computeInstallLineItems({
           achievedAqaraAppCapability: completion.achievedAqaraAppCapability,
           longDistanceAmount: Number(longDistance.replace(/[^\d]/g, "") || 0),
+          extraClaimAmount: Number(extraClaim.replace(/[^\d]/g, "") || 0),
           wallpadAmount: completion.wallpadAmount,
           installEndAt: new Date(completion.installEndAt),
           firstSubmittedAt: new Date(completion.firstSubmittedAt),
@@ -66,9 +71,11 @@ export default function CompletionReviewPanel({
   async function approve() {
     const digits = longDistance.replace(/[^\d]/g, "");
     const amount = digits === "" ? null : Number(digits);
+    const extraDigits = extraClaim.replace(/[^\d]/g, "");
+    const extraAmount = extraDigits === "" ? null : Number(extraDigits);
     setBusy(true);
     setError(null);
-    const res = await approveInstallationCompletionAction(orderId, amount);
+    const res = await approveInstallationCompletionAction(orderId, amount, extraAmount);
     setBusy(false);
     if (res.ok) router.refresh();
     else setError(res.error);
@@ -117,6 +124,41 @@ export default function CompletionReviewPanel({
         <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
       </div>
 
+      {completion.extraClaimAmount != null || completion.extraClaimReason ? (
+        <div style={extraClaimBox}>
+          <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>기타 청구 (기사 신고)</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+            {completion.extraClaimAmount != null
+              ? `${completion.extraClaimAmount.toLocaleString()}원`
+              : "인정하지 않음"}
+          </div>
+          {completion.extraClaimReason ? (
+            <div style={{ fontSize: 13, marginTop: 6, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              사유: {completion.extraClaimReason}
+            </div>
+          ) : null}
+          {completion.extraClaimPhotos.length > 0 ? (
+            <div style={{ ...photoRow, marginTop: 8 }}>
+              {completion.extraClaimPhotos.map((p, i) =>
+                p.url ? (
+                  <a key={p.path} href={p.url} target="_blank" rel="noreferrer" style={{ display: "block" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt={`증빙-${i + 1}`} style={photo} />
+                  </a>
+                ) : (
+                  <div key={p.path} style={photoMissing} title={p.path}>
+                    ⚠<br />
+                    불러오지 못함
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 6 }}>증빙 사진 없음</div>
+          )}
+        </div>
+      ) : null}
+
       {completion.photos.length > 0 ? (
         <div style={photoRow}>
           {completion.photos.map((p, i) =>
@@ -159,6 +201,7 @@ export default function CompletionReviewPanel({
             <AmountLine label="연동비" value={preview.items.linkageFee} />
             <AmountLine label="출장비" value={preview.items.travelFee} />
             <AmountLine label="장거리" value={preview.items.longDistanceFee} />
+            <AmountLine label="기타 청구" value={preview.items.extraClaimFee} />
             {/* 할증 폐지 전에 제출된 건에만 남아 있는 항목. */}
             {preview.items.nightWeekendFee > 0 ? (
               <AmountLine label="야간/휴일" value={preview.items.nightWeekendFee} />
@@ -193,6 +236,20 @@ export default function CompletionReviewPanel({
               inputMode="numeric"
               placeholder="0"
             />
+            {completion.extraClaimAmount != null ? (
+              <>
+                <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
+                  기타 청구 금액 (원, 승인 시 확정 · 정산 반영 — 인정하지 않으면 0)
+                </label>
+                <input
+                  style={longDistanceInput}
+                  value={extraClaim}
+                  onChange={(e) => setExtraClaim(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="0"
+                />
+              </>
+            ) : null}
             <div style={btnRow}>
               <button style={approveBtn} disabled={busy} onClick={approve}>
                 {busy ? "처리 중…" : "승인 (완료 처리)"}
@@ -268,6 +325,13 @@ const panel: CSSProperties = {
 const headerRow: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 };
 const title: CSSProperties = { fontSize: 16, fontWeight: 800, margin: 0 };
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
+const extraClaimBox: CSSProperties = {
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+  borderRadius: 10,
+  padding: "10px 12px",
+  margin: "0 0 14px",
+};
 const photoRow: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8 };
 const photo: CSSProperties = { width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #e4e4e7" };
 

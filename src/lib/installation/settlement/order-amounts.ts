@@ -37,6 +37,7 @@ export async function getInstallOrderAmounts(
         installationOrderId: true,
         achievedAqaraAppCapability: true,
         longDistanceAmount: true,
+        extraClaimAmount: true,
         wallpadAmount: true,
         installEndAt: true,
         createdAt: true,
@@ -64,6 +65,7 @@ export async function getInstallOrderAmounts(
     const { items } = computeInstallLineItems({
       achievedAqaraAppCapability: completion.achievedAqaraAppCapability,
       longDistanceAmount: completion.longDistanceAmount,
+      extraClaimAmount: completion.extraClaimAmount,
       wallpadAmount: completion.wallpadAmount,
       installEndAt: completion.installEndAt,
       firstSubmittedAt: completion.createdAt,
