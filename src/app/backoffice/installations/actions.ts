@@ -496,6 +496,7 @@ export async function resolveInstallationIssueAction(
 export async function approveInstallationCompletionAction(
   orderId: string,
   longDistanceAmount?: number | null,
+  extraClaimAmount?: number | null,
 ): Promise<InstallationActionResult> {
   const auth = await requireInstallationAdmin();
   if (!auth.ok) return auth;
@@ -514,11 +515,23 @@ export async function approveInstallationCompletionAction(
     return { ok: false, error: "INVALID_LONG_DISTANCE_AMOUNT" };
   }
 
+  let normalizedExtraClaim: number | null | undefined;
+  if (extraClaimAmount === undefined) {
+    normalizedExtraClaim = undefined;
+  } else if (extraClaimAmount === null || extraClaimAmount === 0) {
+    normalizedExtraClaim = null;
+  } else if (Number.isInteger(extraClaimAmount) && extraClaimAmount > 0) {
+    normalizedExtraClaim = extraClaimAmount;
+  } else {
+    return { ok: false, error: "INVALID_EXTRA_CLAIM_AMOUNT" };
+  }
+
   try {
     await approveInstallerCompletion({
       adminId: auth.admin.id,
       orderId: normalizedOrderId,
       longDistanceAmount: normalizedLongDistance,
+      extraClaimAmount: normalizedExtraClaim,
     });
     return { ok: true, status: "COMPLETED" };
   } catch (error) {

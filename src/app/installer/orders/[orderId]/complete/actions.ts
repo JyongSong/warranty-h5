@@ -14,6 +14,7 @@ import {
   findMissingPhotos,
 } from "@/lib/installer/storage";
 import {
+  EXTRA_CLAIM_PHOTO_MAX,
   InstallationCompletionError,
   submitInstallerCompletion,
 } from "@/lib/installation/completion/service";
@@ -78,6 +79,9 @@ export async function submitCompletionAction(input: {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
   longDistanceAmount: number | null;
+  extraClaimAmount?: number | null;
+  extraClaimReason?: string | null;
+  extraClaimPhotoPaths?: string[];
   installEndAt?: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
@@ -97,8 +101,21 @@ export async function submitCompletionAction(input: {
     return { ok: false, error: "INVALID_PHOTO_PATHS" };
   }
 
+  // 기타 청구 증빙 사진. 설치 사진과 같은 주문 폴더에 올라온다.
+  const extraClaimPhotoPaths = Array.isArray(input.extraClaimPhotoPaths)
+    ? input.extraClaimPhotoPaths
+    : [];
+  if (extraClaimPhotoPaths.length > EXTRA_CLAIM_PHOTO_MAX) {
+    return { ok: false, error: "EXTRA_CLAIM_PHOTO_COUNT_INVALID" };
+  }
+  if (
+    !extraClaimPhotoPaths.every((p) => typeof p === "string" && p.startsWith(`orders/${orderId}/`))
+  ) {
+    return { ok: false, error: "INVALID_PHOTO_PATHS" };
+  }
+
   // 경로 문자열만 믿으면 업로드가 깨진 채로도 "완료" 가 된다. 실물을 확인한다.
-  const missing = await findMissingPhotos(photoPaths);
+  const missing = await findMissingPhotos([...photoPaths, ...extraClaimPhotoPaths]);
   if (missing.length > 0) {
     console.error("[installer/completion/submit] 업로드되지 않은 사진", { orderId, missing });
     return { ok: false, error: "PHOTO_MISSING" };
@@ -112,6 +129,9 @@ export async function submitCompletionAction(input: {
       wallpadLinked: Boolean(input.wallpadLinked),
       wallpadAmount: input.wallpadAmount ?? null,
       longDistanceAmount: input.longDistanceAmount ?? null,
+      extraClaimAmount: input.extraClaimAmount ?? null,
+      extraClaimReason: input.extraClaimReason ?? null,
+      extraClaimPhotoPaths,
       installEndAt,
       photoPaths,
     });
@@ -130,6 +150,7 @@ export type SettlementPreview =
       travelFee: number;
       longDistanceFee: number;
       nightWeekendFee: number;
+      extraClaimFee: number;
       wallpadAmount: number;
       totalAmount: number;
       night: boolean;
@@ -150,6 +171,7 @@ export async function previewInstallSettlementAction(input: {
   orderId: string;
   capability: string;
   longDistanceAmount: number | null;
+  extraClaimAmount?: number | null;
   wallpadAmount: number | null;
 }): Promise<SettlementPreview> {
   try {
@@ -172,6 +194,7 @@ export async function previewInstallSettlementAction(input: {
     const { items, breakdown } = computeInstallLineItems({
       achievedAqaraAppCapability: input.capability,
       longDistanceAmount: input.longDistanceAmount,
+      extraClaimAmount: input.extraClaimAmount ?? null,
       wallpadAmount: input.wallpadAmount,
       installEndAt: existing?.installEndAt ?? now,
       firstSubmittedAt: existing?.createdAt ?? now,
@@ -184,6 +207,7 @@ export async function previewInstallSettlementAction(input: {
       travelFee: items.travelFee,
       longDistanceFee: items.longDistanceFee,
       nightWeekendFee: items.nightWeekendFee,
+      extraClaimFee: items.extraClaimFee,
       wallpadAmount: items.wallpadAmount,
       totalAmount: items.totalAmount,
       night: breakdown.night,

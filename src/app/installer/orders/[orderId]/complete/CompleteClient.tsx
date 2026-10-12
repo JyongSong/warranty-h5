@@ -25,6 +25,10 @@ const ERR: Record<string, string> = {
   PHOTO_COUNT_INVALID: "사진을 1~4장 첨부해 주세요.",
   PHOTO_MISSING: "사진 업로드가 완료되지 않았습니다. 사진을 다시 첨부해 주세요.",
   INVALID_CAPABILITY: "연동 등급을 확인해 주세요.",
+  EXTRA_CLAIM_REASON_REQUIRED: "기타 청구 금액의 사유를 입력해 주세요.",
+  EXTRA_CLAIM_REASON_TOO_LONG: "기타 청구 사유는 500자 이내로 입력해 주세요.",
+  EXTRA_CLAIM_AMOUNT_INVALID: "기타 청구 금액을 확인해 주세요.",
+  EXTRA_CLAIM_PHOTO_COUNT_INVALID: "증빙 사진은 최대 4장까지 첨부할 수 있습니다.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
@@ -43,6 +47,9 @@ export default function CompleteClient({
   const [wallpadLinked, setWallpadLinked] = useState(false);
   const [wallpadAmount, setWallpadAmount] = useState("");
   const [longDistanceAmount, setLongDistanceAmount] = useState("");
+  const [extraClaimAmount, setExtraClaimAmount] = useState("");
+  const [extraClaimReason, setExtraClaimReason] = useState("");
+  const [extraClaimPhotos, setExtraClaimPhotos] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -51,7 +58,15 @@ export default function CompleteClient({
   const [preview, setPreview] = useState<SettlementPreview | null>(null);
 
   const hasLinkage = capability !== "NONE";
-  const canSubmit = photos.length >= 1 && photos.length <= 4 && !busy && !compressing;
+  // 0 은 청구가 없는 것으로 본다(서버도 같은 기준).
+  const hasExtraClaim = (toNumberOrNull(extraClaimAmount) ?? 0) > 0;
+  const extraClaimReasonMissing = hasExtraClaim && !extraClaimReason.trim();
+  const canSubmit =
+    photos.length >= 1 &&
+    photos.length <= 4 &&
+    !extraClaimReasonMissing &&
+    !busy &&
+    !compressing;
 
   async function addPhotos(list: FileList | null) {
     if (!list) return;
@@ -59,6 +74,15 @@ export default function CompleteClient({
     const incoming = Array.from(list).slice(0, 4 - photos.length);
     const compressed = await Promise.all(incoming.map(compressImage));
     setPhotos((prev) => [...prev, ...compressed].slice(0, 4));
+    setCompressing(false);
+  }
+
+  async function addExtraClaimPhotos(list: FileList | null) {
+    if (!list) return;
+    setCompressing(true);
+    const incoming = Array.from(list).slice(0, 4 - extraClaimPhotos.length);
+    const compressed = await Promise.all(incoming.map(compressImage));
+    setExtraClaimPhotos((prev) => [...prev, ...compressed].slice(0, 4));
     setCompressing(false);
   }
 
@@ -74,6 +98,7 @@ export default function CompleteClient({
           orderId,
           capability,
           longDistanceAmount: toNumberOrNull(longDistanceAmount),
+          extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
           wallpadAmount: toNumberOrNull(wallpadAmount),
         });
 
@@ -94,6 +119,10 @@ export default function CompleteClient({
       wallpadLinked,
       wallpadAmount: amount ? Number(amount) : null,
       longDistanceAmount: longDistance ? Number(longDistance) : null,
+      // 금액이 없으면 사유·증빙도 보내지 않는다. 적다 만 내용이 딸려 가지 않게.
+      extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
+      extraClaimReason: hasExtraClaim ? extraClaimReason.trim() : null,
+      extraClaimPhotos: hasExtraClaim ? extraClaimPhotos : [],
       // 설치 종료 시각 = 지금 제출을 누른 시각. 오프라인 대기열에 들어가도
       // 나중에 전송된 시각이 아니라 이 시각이 남는다.
       installEndAt: new Date().toISOString(),
@@ -193,6 +222,47 @@ export default function CompleteClient({
           />
         </div>
 
+        <div style={ui.card}>
+          <label style={ui.label}>기타 청구 금액 (선택)</label>
+          <div style={helpText}>
+            이 주문과 관련해 본사에 청구할 다른 금액이 있으면 입력해 주세요. 본사 확인 후
+            승인되면 정산 금액에 포함되어 지급됩니다.
+          </div>
+          <input
+            style={ui.input}
+            value={extraClaimAmount}
+            onChange={(e) => setExtraClaimAmount(e.target.value)}
+            inputMode="numeric"
+            placeholder="청구 금액 (원)"
+          />
+          {hasExtraClaim ? (
+            <>
+              <textarea
+                style={{ ...ui.input, marginTop: 10, minHeight: 84, resize: "vertical" }}
+                value={extraClaimReason}
+                onChange={(e) => setExtraClaimReason(e.target.value)}
+                maxLength={500}
+                placeholder="청구 사유 (필수) — 무엇에 든 비용인지 적어 주세요"
+              />
+              {extraClaimReasonMissing ? (
+                <div style={{ fontSize: 12, color: "#b42318", marginTop: 6 }}>
+                  청구 사유를 입력해야 제출할 수 있습니다.
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        {hasExtraClaim ? (
+          <PhotoPicker
+            label="기타 청구 증빙 사진 (선택, 최대 4장)"
+            photos={extraClaimPhotos}
+            busy={compressing}
+            onAdd={(files) => void addExtraClaimPhotos(files)}
+            onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
+          />
+        ) : null}
+
         <PhotoPicker
           label="사진 (1~4장)"
           photos={photos}
@@ -235,6 +305,7 @@ function previewLines(preview: SettlementPreview | null): AmountLine[] {
     { label: "연동비", value: preview.linkageFee },
     { label: "출장비", value: preview.travelFee },
     { label: "장거리", value: preview.longDistanceFee },
+    { label: "기타 청구", value: preview.extraClaimFee },
     // 할증 폐지 전에 처음 제출했던 건을 다시 올릴 때만 남아 있는 항목.
     ...(preview.nightWeekendFee > 0 ? [{ label: "야간/휴일", value: preview.nightWeekendFee }] : []),
   ];
@@ -251,6 +322,9 @@ function previewNote(preview: SettlementPreview | null) {
           월패드 현장 수금 {preview.wallpadAmount.toLocaleString()}원은 정산 금액에 포함되지 않습니다.
         </div>
       ) : null}
+      {preview.extraClaimFee > 0 ? (
+        <div>기타 청구 금액은 본사 확인 후 승인된 금액만 지급됩니다.</div>
+      ) : null}
       <div>본사 승인 후 확정됩니다.</div>
     </>
   );
@@ -266,6 +340,8 @@ const backLink: CSSProperties = {
   marginBottom: 8,
   cursor: "pointer",
 };
+
+const helpText: CSSProperties = { fontSize: 12, color: "#71717a", lineHeight: 1.5, margin: "0 0 10px" };
 
 const radioRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", fontSize: 15 };
 const checkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, fontSize: 15 };

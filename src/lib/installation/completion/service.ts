@@ -25,9 +25,50 @@ export type SubmitCompletionInput = {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
   longDistanceAmount: number | null;
+  /** 기타 청구. 금액이 없으면 사유·증빙은 무시된다. */
+  extraClaimAmount?: number | null;
+  extraClaimReason?: string | null;
+  extraClaimPhotoPaths?: string[];
   installEndAt: Date;
   photoPaths: string[];
 };
+
+export const EXTRA_CLAIM_REASON_MAX_LENGTH = 500;
+export const EXTRA_CLAIM_PHOTO_MAX = 4;
+
+/**
+ * 기타 청구 입력을 저장할 값으로 다듬는다.
+ *
+ * 금액이 없으면(0 포함) 청구 자체가 없는 것이므로 사유와 증빙을 버린다 — 금액 없는
+ * 사유만 남으면 본사가 "얼마를 청구한 건지" 알 수 없다. 금액이 있으면 사유가
+ * 반드시 있어야 한다. 증빙 사진은 선택이다.
+ */
+function normalizeExtraClaim(input: SubmitCompletionInput): {
+  extraClaimAmount: number | null;
+  extraClaimReason: string | null;
+  extraClaimPhotoPaths: string[];
+} {
+  const amount = input.extraClaimAmount ?? null;
+  if (amount === null || amount === 0) {
+    return { extraClaimAmount: null, extraClaimReason: null, extraClaimPhotoPaths: [] };
+  }
+  if (!Number.isInteger(amount) || amount < 0) {
+    throw new InstallationCompletionError("EXTRA_CLAIM_AMOUNT_INVALID");
+  }
+
+  const reason = input.extraClaimReason?.trim() ?? "";
+  if (!reason) throw new InstallationCompletionError("EXTRA_CLAIM_REASON_REQUIRED");
+  if (reason.length > EXTRA_CLAIM_REASON_MAX_LENGTH) {
+    throw new InstallationCompletionError("EXTRA_CLAIM_REASON_TOO_LONG");
+  }
+
+  const photoPaths = input.extraClaimPhotoPaths ?? [];
+  if (photoPaths.length > EXTRA_CLAIM_PHOTO_MAX) {
+    throw new InstallationCompletionError("EXTRA_CLAIM_PHOTO_COUNT_INVALID");
+  }
+
+  return { extraClaimAmount: amount, extraClaimReason: reason, extraClaimPhotoPaths: photoPaths };
+}
 
 export async function submitInstallerCompletion(input: SubmitCompletionInput): Promise<void> {
   const order = await prisma.installationOrder.findUnique({
@@ -49,6 +90,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
   if (input.photoPaths.length < 1 || input.photoPaths.length > 4) {
     throw new InstallationCompletionError("PHOTO_COUNT_INVALID");
   }
+  const extraClaim = normalizeExtraClaim(input);
 
   await prisma.$transaction(async (tx) => {
     await tx.installationCompletion.upsert({
@@ -60,6 +102,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         wallpadLinked: input.wallpadLinked,
         wallpadAmount: input.wallpadAmount,
         longDistanceAmount: input.longDistanceAmount,
+        ...extraClaim,
         installEndAt: input.installEndAt,
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
@@ -71,6 +114,8 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         wallpadLinked: input.wallpadLinked,
         wallpadAmount: input.wallpadAmount,
         longDistanceAmount: input.longDistanceAmount,
+        // 재제출은 기타 청구도 통째로 바꾼다. 이번에 비워서 올렸으면 청구를 철회한 것이다.
+        ...extraClaim,
         // installEndAt 은 덮어쓰지 않는다. 이제 기사가 입력하는 값이 아니라 제출
         // 시각이라, 반려 후 재제출 때 바꾸면 설치일과 정산 월이 재제출일로 밀린다.
         photoPaths: input.photoPaths,
@@ -106,6 +151,9 @@ export async function approveInstallerCompletion(input: {
   // Admin may set/adjust the installer-declared long-distance fee at review
   // time (§6.4 장거리: installer fills → admin confirms). Frozen into snapshot.
   longDistanceAmount?: number | null;
+  // 기타 청구도 같은 방식이다: 기사가 올린 금액을 본사가 승인 시점에 확정한다.
+  // 0 이나 null 로 승인하면 그 청구는 인정하지 않은 것이다.
+  extraClaimAmount?: number | null;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
@@ -134,6 +182,9 @@ export async function approveInstallerCompletion(input: {
         ...(input.longDistanceAmount === undefined
           ? {}
           : { longDistanceAmount: input.longDistanceAmount }),
+        ...(input.extraClaimAmount === undefined
+          ? {}
+          : { extraClaimAmount: input.extraClaimAmount }),
       },
     });
 
@@ -247,6 +298,9 @@ export type InstallationCompletionView = {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
   longDistanceAmount: number | null;
+  extraClaimAmount: number | null;
+  extraClaimReason: string | null;
+  extraClaimPhotos: CompletionPhoto[];
   installEndAt: string;
   reviewStatus: string;
   rejectionReason: string | null;
@@ -268,6 +322,9 @@ export async function getInstallationCompletionForOrder(
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
     longDistanceAmount: c.longDistanceAmount,
+    extraClaimAmount: c.extraClaimAmount,
+    extraClaimReason: c.extraClaimReason,
+    extraClaimPhotos: await getCompletionPhotoSignedUrls(c.extraClaimPhotoPaths),
     installEndAt: c.installEndAt.toISOString(),
     reviewStatus: c.reviewStatus,
     rejectionReason: c.rejectionReason,

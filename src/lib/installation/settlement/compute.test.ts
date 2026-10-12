@@ -160,6 +160,37 @@ describe("computeInstallLineItems", () => {
     expect(items.linkageFee).toBe(0);
     expect(items.totalAmount).toBe(15000); // travel only
   });
+
+  it("extra claim is added to the payable total", () => {
+    const { items } = computeInstallLineItems({
+      achievedAqaraAppCapability: "DOORLOCK_AND_APP",
+      longDistanceAmount: 30000,
+      extraClaimAmount: 12000,
+      wallpadAmount: null,
+      installEndAt: kst("2026-10-12", 14),
+      firstSubmittedAt: NIGHT_WEEKEND_SURCHARGE_ENDED_AT,
+      rates: RATES,
+    });
+    expect(items.extraClaimFee).toBe(12000);
+    expect(items.totalAmount).toBe(67000); // 10000+15000+30000+12000
+  });
+
+  // 본사가 인정하지 않은 청구는 null(또는 0)로 승인되고, 금액에 들어가지 않는다.
+  it("no extra claim when absent, null or negative", () => {
+    const base = {
+      achievedAqaraAppCapability: "NONE",
+      longDistanceAmount: null,
+      wallpadAmount: null,
+      installEndAt: kst("2026-10-12", 14),
+      firstSubmittedAt: NIGHT_WEEKEND_SURCHARGE_ENDED_AT,
+      rates: RATES,
+    };
+    for (const extraClaimAmount of [undefined, null, 0, -5000]) {
+      const { items } = computeInstallLineItems({ ...base, extraClaimAmount });
+      expect(items.extraClaimFee).toBe(0);
+      expect(items.totalAmount).toBe(15000);
+    }
+  });
 });
 
 describe("computeAsLineItems", () => {
@@ -167,5 +198,6 @@ describe("computeAsLineItems", () => {
     expect(computeAsLineItems(40000).totalAmount).toBe(40000);
     expect(computeAsLineItems(null).totalAmount).toBe(0);
     expect(computeAsLineItems(-5).totalAmount).toBe(0);
+    expect(computeAsLineItems(40000).extraClaimFee).toBe(0);
   });
 });

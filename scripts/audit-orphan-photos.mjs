@@ -92,9 +92,11 @@ async function listReferencedPaths() {
   const referenced = new Set();
 
   const completions = await prisma.installationCompletion.findMany({
-    select: { photoPaths: true },
+    select: { photoPaths: true, extraClaimPhotoPaths: true },
   });
   for (const row of completions) for (const path of row.photoPaths) referenced.add(path);
+  // 기타 청구 증빙 사진도 같은 버킷·같은 주문 폴더에 있다.
+  for (const row of completions) for (const path of row.extraClaimPhotoPaths) referenced.add(path);
 
   const asOrders = await prisma.asOrder.findMany({
     select: { completionPhotoPaths: true },
