@@ -20,11 +20,18 @@ const CAPABILITIES = [
   { value: "DOORLOCK_AND_APP_AND_HUB", label: "허브 연동 (APP 포함)" },
 ] as const;
 
+// 장거리 구간. 기사 등록 주소와 고객 설치 주소 사이의 거리로 고른다.
+const LONG_DISTANCE_OPTIONS = [
+  { amount: 0, label: "해당 없음 (20km 이하)" },
+  { amount: 20000, label: "20km 초과 ~ 40km 이하" },
+  { amount: 40000, label: "40km 초과" },
+] as const;
+
 const ERR: Record<string, string> = {
   ORDER_NOT_SUBMITTABLE: "완료 등록할 수 없는 상태입니다.",
   PHOTO_COUNT_INVALID: "사진을 1~4장 첨부해 주세요.",
   PHOTO_MISSING: "사진 업로드가 완료되지 않았습니다. 사진을 다시 첨부해 주세요.",
-  INVALID_CAPABILITY: "연동 등급을 확인해 주세요.",
+  INVALID_CAPABILITY: "앱/허브 연동 항목을 확인해 주세요.",
   EXTRA_CLAIM_REASON_REQUIRED: "기타 청구 금액의 사유를 입력해 주세요.",
   EXTRA_CLAIM_REASON_TOO_LONG: "기타 청구 사유는 500자 이내로 입력해 주세요.",
   EXTRA_CLAIM_AMOUNT_INVALID: "기타 청구 금액을 확인해 주세요.",
@@ -37,16 +44,21 @@ export default function CompleteClient({
   orderId,
   erpOrderNo,
   address,
+  linkageAppFee,
+  linkageHubFee,
 }: {
   orderId: string;
   erpOrderNo: string;
   address: string;
+  /** 이 기사에게 적용되는 연동비. 선택지 옆에 그대로 보여 준다. */
+  linkageAppFee: number;
+  linkageHubFee: number;
 }) {
   const router = useRouter();
   const [capability, setCapability] = useState<string>("NONE");
   const [wallpadLinked, setWallpadLinked] = useState(false);
   const [wallpadAmount, setWallpadAmount] = useState("");
-  const [longDistanceAmount, setLongDistanceAmount] = useState("");
+  const [longDistanceAmount, setLongDistanceAmount] = useState(0);
   const [extraClaimAmount, setExtraClaimAmount] = useState("");
   const [extraClaimReason, setExtraClaimReason] = useState("");
   const [extraClaimPhotos, setExtraClaimPhotos] = useState<File[]>([]);
@@ -58,6 +70,11 @@ export default function CompleteClient({
   const [preview, setPreview] = useState<SettlementPreview | null>(null);
 
   const hasLinkage = capability !== "NONE";
+  const linkageFees: Record<string, number> = {
+    NONE: 0,
+    DOORLOCK_AND_APP: linkageAppFee,
+    DOORLOCK_AND_APP_AND_HUB: linkageHubFee,
+  };
   // 0 은 청구가 없는 것으로 본다(서버도 같은 기준).
   const hasExtraClaim = (toNumberOrNull(extraClaimAmount) ?? 0) > 0;
   const extraClaimReasonMissing = hasExtraClaim && !extraClaimReason.trim();
@@ -97,7 +114,7 @@ export default function CompleteClient({
       : await previewInstallSettlementAction({
           orderId,
           capability,
-          longDistanceAmount: toNumberOrNull(longDistanceAmount),
+          longDistanceAmount: longDistanceAmount > 0 ? longDistanceAmount : null,
           extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
           wallpadAmount: toNumberOrNull(wallpadAmount),
         });
@@ -112,13 +129,12 @@ export default function CompleteClient({
     setError(null);
 
     const amount = wallpadAmount.replace(/[^\d]/g, "");
-    const longDistance = longDistanceAmount.replace(/[^\d]/g, "");
     const entry: QueuedCompletionInput = {
       orderId,
       capability,
       wallpadLinked,
       wallpadAmount: amount ? Number(amount) : null,
-      longDistanceAmount: longDistance ? Number(longDistance) : null,
+      longDistanceAmount: longDistanceAmount > 0 ? longDistanceAmount : null,
       // 금액이 없으면 사유·증빙도 보내지 않는다. 적다 만 내용이 딸려 가지 않게.
       extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
       extraClaimReason: hasExtraClaim ? extraClaimReason.trim() : null,
@@ -176,7 +192,7 @@ export default function CompleteClient({
         </p>
 
         <div style={ui.card}>
-          <div style={ui.label}>연동 등급</div>
+          <div style={ui.label}>앱/허브 연동</div>
           {CAPABILITIES.map((c) => (
             <label key={c.value} style={radioRow}>
               <input
@@ -185,7 +201,8 @@ export default function CompleteClient({
                 checked={capability === c.value}
                 onChange={() => setCapability(c.value)}
               />
-              <span>{c.label}</span>
+              <span style={optionLabel}>{c.label}</span>
+              <OptionAmount amount={linkageFees[c.value]} />
             </label>
           ))}
           {hasLinkage ? (
@@ -201,25 +218,30 @@ export default function CompleteClient({
             <span>월패드 연동함 (현장 결제)</span>
           </label>
           {wallpadLinked ? (
-            <input
-              style={{ ...ui.input, marginTop: 10 }}
-              value={wallpadAmount}
-              onChange={(e) => setWallpadAmount(e.target.value)}
-              inputMode="numeric"
-              placeholder="현장 금액 (원, 선택)"
-            />
+            <div style={{ marginTop: 10 }}>
+              <MoneyInput value={wallpadAmount} onChange={setWallpadAmount} placeholder="현장 금액 (선택)" />
+            </div>
           ) : null}
         </div>
 
         <div style={ui.card}>
-          <label style={ui.label}>장거리 비용 (선택)</label>
-          <input
-            style={ui.input}
-            value={longDistanceAmount}
-            onChange={(e) => setLongDistanceAmount(e.target.value)}
-            inputMode="numeric"
-            placeholder="장거리 금액 (원, 관리자 확인 후 정산)"
-          />
+          <div style={ui.label}>장거리 비용</div>
+          {LONG_DISTANCE_OPTIONS.map((o) => (
+            <label key={o.amount} style={radioRow}>
+              <input
+                type="radio"
+                name="longDistance"
+                checked={longDistanceAmount === o.amount}
+                onChange={() => setLongDistanceAmount(o.amount)}
+              />
+              <span style={optionLabel}>{o.label}</span>
+              <OptionAmount amount={o.amount} />
+            </label>
+          ))}
+          <div style={{ ...helpText, margin: "6px 0 0" }}>
+            장거리 기준은 기사님 등록 주소와 고객 설치 주소 사이의 네이버 지도 최단 거리입니다.
+            본사에서 거리를 확인한 뒤 승인된 건에 한해 지급됩니다.
+          </div>
         </div>
 
         <div style={ui.card}>
@@ -228,13 +250,7 @@ export default function CompleteClient({
             이 주문과 관련해 본사에 청구할 다른 금액이 있으면 입력해 주세요. 본사 확인 후
             승인되면 정산 금액에 포함되어 지급됩니다.
           </div>
-          <input
-            style={ui.input}
-            value={extraClaimAmount}
-            onChange={(e) => setExtraClaimAmount(e.target.value)}
-            inputMode="numeric"
-            placeholder="청구 금액 (원)"
-          />
+          <MoneyInput value={extraClaimAmount} onChange={setExtraClaimAmount} placeholder="청구 금액" />
           {hasExtraClaim ? (
             <>
               <textarea
@@ -294,6 +310,38 @@ export default function CompleteClient({
   );
 }
 
+// 선택지 오른쪽에 붙는 "+20,000원". 0원이면 아무것도 보여 주지 않는다.
+function OptionAmount({ amount }: { amount: number }) {
+  if (amount <= 0) return null;
+  return <span style={optionAmount}>+{amount.toLocaleString()}원</span>;
+}
+
+// 금액 입력란. 숫자만 받아 천 단위로 끊어 보여 주고 "원" 은 오른쪽에 붙박아 둔다.
+// value 는 숫자만 담은 문자열이다.
+function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (digits: string) => void;
+  placeholder: string;
+}) {
+  const digits = value.replace(/[^\d]/g, "");
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        style={{ ...ui.input, paddingRight: 40 }}
+        value={digits ? Number(digits).toLocaleString() : ""}
+        onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "").slice(0, 9))}
+        inputMode="numeric"
+        placeholder={placeholder}
+      />
+      <span style={{ ...moneySuffix, color: digits ? "#18181b" : "#a1a1aa" }}>원</span>
+    </div>
+  );
+}
+
 function toNumberOrNull(value: string): number | null {
   const digits = value.replace(/[^\d]/g, "");
   return digits ? Number(digits) : null;
@@ -345,5 +393,13 @@ const helpText: CSSProperties = { fontSize: 12, color: "#71717a", lineHeight: 1.
 
 const radioRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", fontSize: 15 };
 const checkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, fontSize: 15 };
-
-
+const optionLabel: CSSProperties = { flex: 1, minWidth: 0 };
+const optionAmount: CSSProperties = { fontSize: 14, fontWeight: 600, color: "#52525b", whiteSpace: "nowrap" };
+const moneySuffix: CSSProperties = {
+  position: "absolute",
+  right: 14,
+  top: "50%",
+  transform: "translateY(-50%)",
+  fontSize: 16,
+  pointerEvents: "none",
+};
