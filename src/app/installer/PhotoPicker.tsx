@@ -7,6 +7,9 @@ import * as ui from "./ui";
 /**
  * 완료 등록용 사진 첨부. 설치·A/S 양쪽이 같은 UI 를 쓴다.
  *
+ * embedded 는 다른 카드 안에 딸린 첨부(예: 기타 청구 증빙)에 쓴다. 테두리 버튼으로
+ * 그려서 화면의 주 사진 첨부와 한눈에 구분되게 한다.
+ *
  * 촬영과 앨범을 버튼으로 나눈 이유: 하나의 input 에 capture 를 걸면 카메라만
  * 열리고, capture 를 빼면 기기·안드로이드 버전마다 선택창에 카메라가 있을
  * 때도 없을 때도 있다. 두 경로를 각각 보장하려면 input 을 나누는 편이 확실하다.
@@ -15,6 +18,7 @@ export default function PhotoPicker({
   label,
   photos,
   max = 4,
+  embedded = false,
   busy,
   onAdd,
   onRemove,
@@ -22,6 +26,7 @@ export default function PhotoPicker({
   label: string;
   photos: File[];
   max?: number;
+  embedded?: boolean;
   busy: boolean;
   onAdd: (files: FileList | null) => void;
   onRemove: (index: number) => void;
@@ -30,13 +35,14 @@ export default function PhotoPicker({
   const disabled = busy || full;
 
   return (
-    <div style={ui.card}>
-      <div style={ui.label}>{label}</div>
+    <div style={embedded ? embeddedWrap : ui.card}>
+      <div style={embedded ? embeddedLabel : ui.label}>{label}</div>
 
       <div style={buttonRow}>
         <PickButton
           text="📷 촬영"
           capture
+          outline={embedded}
           disabled={disabled}
           busy={busy}
           onPick={onAdd}
@@ -44,6 +50,7 @@ export default function PhotoPicker({
         <PickButton
           text="🖼 앨범에서 선택"
           capture={false}
+          outline={embedded}
           disabled={disabled}
           busy={busy}
           onPick={onAdd}
@@ -69,18 +76,26 @@ export default function PhotoPicker({
 function PickButton({
   text,
   capture,
+  outline,
   disabled,
   busy,
   onPick,
 }: {
   text: string;
   capture: boolean;
+  outline: boolean;
   disabled: boolean;
   busy: boolean;
   onPick: (files: FileList | null) => void;
 }) {
   return (
-    <label style={{ ...pickButton, ...(disabled ? pickButtonDisabled : null) }}>
+    <label
+      style={{
+        ...pickButton,
+        ...(outline ? pickButtonOutline : null),
+        ...(disabled ? (outline ? pickButtonOutlineDisabled : pickButtonDisabled) : null),
+      }}
+    >
       {busy ? "처리 중…" : text}
       <input
         type="file"
@@ -140,6 +155,19 @@ const pickButtonDisabled: CSSProperties = {
   borderColor: "#a1a1aa",
   cursor: "not-allowed",
 };
+
+const pickButtonOutline: CSSProperties = {
+  minHeight: 44,
+  background: "#fff",
+  color: "#111",
+  borderColor: "#d4d4d8",
+  fontWeight: 600,
+};
+
+const pickButtonOutlineDisabled: CSSProperties = { color: "#a1a1aa", cursor: "not-allowed" };
+
+const embeddedWrap: CSSProperties = { marginTop: 14, paddingTop: 14, borderTop: "1px dashed #e4e4e7" };
+const embeddedLabel: CSSProperties = { fontSize: 13, fontWeight: 600, color: "#52525b", marginBottom: 8 };
 
 const thumbRow: CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 };
 
