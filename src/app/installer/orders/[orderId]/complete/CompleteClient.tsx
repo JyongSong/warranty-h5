@@ -265,22 +265,20 @@ export default function CompleteClient({
                   청구 사유를 입력해야 제출할 수 있습니다.
                 </div>
               ) : null}
+              <PhotoPicker
+                embedded
+                label="청구 증빙 사진 (선택, 최대 4장)"
+                photos={extraClaimPhotos}
+                busy={compressing}
+                onAdd={(files) => void addExtraClaimPhotos(files)}
+                onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
+              />
             </>
           ) : null}
         </div>
 
-        {hasExtraClaim ? (
-          <PhotoPicker
-            label="기타 청구 증빙 사진 (선택, 최대 4장)"
-            photos={extraClaimPhotos}
-            busy={compressing}
-            onAdd={(files) => void addExtraClaimPhotos(files)}
-            onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
-          />
-        ) : null}
-
         <PhotoPicker
-          label="사진 (1~4장)"
+          label="설치 사진 (필수, 1~4장)"
           photos={photos}
           busy={compressing}
           onAdd={(files) => void addPhotos(files)}
