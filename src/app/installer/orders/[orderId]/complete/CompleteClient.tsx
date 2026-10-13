@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import {
@@ -63,13 +63,15 @@ export default function CompleteClient({
   const [extraClaimReason, setExtraClaimReason] = useState("");
   const [extraClaimPhotos, setExtraClaimPhotos] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
+  // 입력 → 설치 사진, 두 화면으로 나눈다. 입력한 값과 고른 사진이 화면을 오가도
+  // 남아 있어야 해서 경로를 나누지 않고 한 컴포넌트 안에서 바꾼다.
+  const [step, setStep] = useState<"form" | "photos">("form");
   const [busy, setBusy] = useState(false);
   const [compressing, setCompressing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [preview, setPreview] = useState<SettlementPreview | null>(null);
 
-  const hasLinkage = capability !== "NONE";
   const linkageFees: Record<string, number> = {
     NONE: 0,
     DOORLOCK_AND_APP: linkageAppFee,
@@ -78,12 +80,29 @@ export default function CompleteClient({
   // 0 은 청구가 없는 것으로 본다(서버도 같은 기준).
   const hasExtraClaim = (toNumberOrNull(extraClaimAmount) ?? 0) > 0;
   const extraClaimReasonMissing = hasExtraClaim && !extraClaimReason.trim();
-  const canSubmit =
-    photos.length >= 1 &&
-    photos.length <= 4 &&
-    !extraClaimReasonMissing &&
-    !busy &&
-    !compressing;
+  const canGoToPhotos = !extraClaimReasonMissing && !busy && !compressing;
+  const canSubmit = photos.length >= 1 && photos.length <= 4 && canGoToPhotos;
+
+  // 사진 화면은 히스토리에 한 칸을 쌓아 둔다. 기기의 뒤로 가기가 주문 화면으로
+  // 빠져나가 입력한 내용을 날리지 않고 입력 화면으로 돌아오게 하려는 것이다.
+  useEffect(() => {
+    const onPopState = () => {
+      setConfirming(false);
+      setStep("form");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step]);
+
+  function goToPhotos() {
+    setError(null);
+    window.history.pushState({ completeStep: "photos" }, "");
+    setStep("photos");
+  }
 
   async function addPhotos(list: FileList | null) {
     if (!list) return;
@@ -182,116 +201,156 @@ export default function CompleteClient({
   return (
     <main style={ui.page}>
       <div style={ui.panel}>
-        <button style={backLink} onClick={() => router.push(`/installer/orders/${orderId}`)}>
-          ← 취소
-        </button>
-        <h1 style={ui.h1}>완료 등록</h1>
-        <p style={ui.sub}>
-          {erpOrderNo}
-          {address ? ` · ${address}` : ""}
-        </p>
+        {step === "form" ? (
+          <>
+            <button style={backLink} onClick={() => router.push(`/installer/orders/${orderId}`)}>
+              ← 취소
+            </button>
+            <h1 style={ui.h1}>완료 등록</h1>
+            <p style={ui.sub}>
+              {erpOrderNo}
+              {address ? ` · ${address}` : ""}
+            </p>
 
-        <div style={ui.card}>
-          <div style={ui.label}>앱/허브 연동</div>
-          {CAPABILITIES.map((c) => (
-            <label key={c.value} style={radioRow}>
-              <input
-                type="radio"
-                name="capability"
-                checked={capability === c.value}
-                onChange={() => setCapability(c.value)}
-              />
-              <span style={optionLabel}>{c.label}</span>
-              <OptionAmount amount={linkageFees[c.value]} />
-            </label>
-          ))}
-          {hasLinkage ? (
-            <div style={{ fontSize: 12, color: "#92400e", marginTop: 6 }}>
-              연동 시 APP 화면 사진을 반드시 포함해 주세요.
+            <div style={ui.card}>
+              <div style={ui.label}>앱/허브 연동</div>
+              {CAPABILITIES.map((c) => (
+                <label key={c.value} style={radioRow}>
+                  <input
+                    type="radio"
+                    name="capability"
+                    checked={capability === c.value}
+                    onChange={() => setCapability(c.value)}
+                  />
+                  <span style={optionLabel}>{c.label}</span>
+                  <OptionAmount amount={linkageFees[c.value]} />
+                </label>
+              ))}
+              {/* 앱 화면 사진이 없으면 연동비가 승인되지 않는다. 놓치지 않게 경고색으로 둔다. */}
+              <div style={{ ...helpText, margin: "6px 0 0", color: "#b42318" }}>
+                연동하신 경우 반드시 앱 화면을 사진으로 올려 주세요. 본사에서 확인되어야 해당 비용이
+                승인됩니다.
+              </div>
             </div>
-          ) : null}
-        </div>
 
-        <div style={ui.card}>
-          <label style={checkRow}>
-            <input type="checkbox" checked={wallpadLinked} onChange={(e) => setWallpadLinked(e.target.checked)} />
-            <span>월패드 연동함 (현장 결제)</span>
-          </label>
-          {wallpadLinked ? (
-            <div style={{ marginTop: 10 }}>
-              <MoneyInput value={wallpadAmount} onChange={setWallpadAmount} placeholder="현장 금액 (선택)" />
-            </div>
-          ) : null}
-        </div>
-
-        <div style={ui.card}>
-          <div style={ui.label}>장거리 비용</div>
-          {LONG_DISTANCE_OPTIONS.map((o) => (
-            <label key={o.amount} style={radioRow}>
-              <input
-                type="radio"
-                name="longDistance"
-                checked={longDistanceAmount === o.amount}
-                onChange={() => setLongDistanceAmount(o.amount)}
-              />
-              <span style={optionLabel}>{o.label}</span>
-              <OptionAmount amount={o.amount} />
-            </label>
-          ))}
-          <div style={{ ...helpText, margin: "6px 0 0" }}>
-            장거리 기준은 기사님 등록 주소와 고객 설치 주소 사이의 네이버 지도 최단 거리입니다.
-            본사에서 거리를 확인한 뒤 승인된 건에 한해 지급됩니다.
-          </div>
-        </div>
-
-        <div style={ui.card}>
-          <label style={ui.label}>기타 청구 금액 (선택)</label>
-          <div style={helpText}>
-            이 주문과 관련해 본사에 청구할 다른 금액이 있으면 입력해 주세요. 본사 확인 후
-            승인되면 정산 금액에 포함되어 지급됩니다.
-          </div>
-          <MoneyInput value={extraClaimAmount} onChange={setExtraClaimAmount} placeholder="청구 금액" />
-          {hasExtraClaim ? (
-            <>
-              <textarea
-                style={{ ...ui.input, marginTop: 10, minHeight: 84, resize: "vertical" }}
-                value={extraClaimReason}
-                onChange={(e) => setExtraClaimReason(e.target.value)}
-                maxLength={500}
-                placeholder="청구 사유 (필수) — 무엇에 든 비용인지 적어 주세요"
-              />
-              {extraClaimReasonMissing ? (
-                <div style={{ fontSize: 12, color: "#b42318", marginTop: 6 }}>
-                  청구 사유를 입력해야 제출할 수 있습니다.
+            <div style={ui.card}>
+              <label style={checkRow}>
+                <input
+                  type="checkbox"
+                  checked={wallpadLinked}
+                  onChange={(e) => setWallpadLinked(e.target.checked)}
+                />
+                <span>월패드 연동함 (현장 결제)</span>
+              </label>
+              {wallpadLinked ? (
+                <div style={{ marginTop: 10 }}>
+                  <MoneyInput
+                    value={wallpadAmount}
+                    onChange={setWallpadAmount}
+                    placeholder="현장 금액 (선택)"
+                  />
                 </div>
               ) : null}
-              <PhotoPicker
-                embedded
-                label="청구 증빙 사진 (선택, 최대 4장)"
-                photos={extraClaimPhotos}
-                busy={compressing}
-                onAdd={(files) => void addExtraClaimPhotos(files)}
-                onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
-              />
-            </>
-          ) : null}
-        </div>
+            </div>
 
-        <PhotoPicker
-          label="설치 사진 (필수, 1~4장)"
-          photos={photos}
-          busy={compressing}
-          onAdd={(files) => void addPhotos(files)}
-          onRemove={(index) => setPhotos(photos.filter((_, i) => i !== index))}
-        />
+            <div style={ui.card}>
+              <div style={ui.label}>장거리 비용</div>
+              {LONG_DISTANCE_OPTIONS.map((o) => (
+                <label key={o.amount} style={radioRow}>
+                  <input
+                    type="radio"
+                    name="longDistance"
+                    checked={longDistanceAmount === o.amount}
+                    onChange={() => setLongDistanceAmount(o.amount)}
+                  />
+                  <span style={optionLabel}>{o.label}</span>
+                  <OptionAmount amount={o.amount} />
+                </label>
+              ))}
+              <div style={{ ...helpText, margin: "6px 0 0" }}>
+                장거리 기준은 기사님 등록 주소와 고객 설치 주소 사이의 네이버 지도 최단 거리입니다. 본사에서
+                거리를 확인한 뒤 승인된 건에 한해 지급됩니다.
+              </div>
+            </div>
 
-        {error ? <div style={ui.errorText}>{error}</div> : null}
+            <div style={ui.card}>
+              <label style={ui.label}>기타 청구 금액 (선택)</label>
+              <div style={helpText}>
+                이 주문과 관련해 본사에 청구할 다른 금액이 있으면 입력해 주세요. 본사 확인 후 승인되면 정산
+                금액에 포함되어 지급됩니다.
+              </div>
+              <MoneyInput value={extraClaimAmount} onChange={setExtraClaimAmount} placeholder="청구 금액" />
+              {hasExtraClaim ? (
+                <>
+                  <textarea
+                    style={{
+                      ...ui.input,
+                      marginTop: 10,
+                      minHeight: 84,
+                      resize: "vertical",
+                    }}
+                    value={extraClaimReason}
+                    onChange={(e) => setExtraClaimReason(e.target.value)}
+                    maxLength={500}
+                    placeholder="청구 사유 (필수) — 무엇에 든 비용인지 적어 주세요"
+                  />
+                  {extraClaimReasonMissing ? (
+                    <div style={{ fontSize: 12, color: "#b42318", marginTop: 6 }}>
+                      청구 사유를 입력해야 제출할 수 있습니다.
+                    </div>
+                  ) : null}
+                  <PhotoPicker
+                    embedded
+                    label="청구 증빙 사진 (선택, 최대 4장)"
+                    photos={extraClaimPhotos}
+                    busy={compressing}
+                    onAdd={(files) => void addExtraClaimPhotos(files)}
+                    onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
+                  />
+                </>
+              ) : null}
+            </div>
 
-        <div style={{ marginTop: 8 }}>
-          <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={askConfirm}>
-            {busy ? "제출 중…" : "완료 제출"}
-          </button>
-        </div>
+            <div style={{ marginTop: 8 }}>
+              <button style={ui.primaryButton(!canGoToPhotos)} disabled={!canGoToPhotos} onClick={goToPhotos}>
+                설치 사진 업로드
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <button style={backLink} onClick={() => window.history.back()}>
+              ← 이전
+            </button>
+            <h1 style={ui.h1}>설치 사진 업로드</h1>
+            <p style={ui.sub}>
+              {erpOrderNo}
+              {address ? ` · ${address}` : ""}
+            </p>
+
+            {capability !== "NONE" ? (
+              <div style={{ ...helpText, color: "#b42318" }}>
+                앱/허브 연동을 선택하셨습니다. 앱 화면 사진을 반드시 포함해 주세요.
+              </div>
+            ) : null}
+
+            <PhotoPicker
+              label="설치 사진 (필수, 1~4장)"
+              photos={photos}
+              busy={compressing}
+              onAdd={(files) => void addPhotos(files)}
+              onRemove={(index) => setPhotos(photos.filter((_, i) => i !== index))}
+            />
+
+            {error ? <div style={ui.errorText}>{error}</div> : null}
+
+            <div style={{ marginTop: 8 }}>
+              <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={askConfirm}>
+                {busy ? "제출 중…" : "완료 제출"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <ConfirmAmountDialog
@@ -331,7 +390,14 @@ function MoneyInput({
       <input
         style={{ ...ui.input, paddingRight: 40 }}
         value={digits ? Number(digits).toLocaleString() : ""}
-        onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "").slice(0, 9))}
+        onChange={(e) =>
+          onChange(
+            e.target.value
+              .replace(/[^\d]/g, "")
+              .replace(/^0+(?=\d)/, "")
+              .slice(0, 9),
+          )
+        }
         inputMode="numeric"
         placeholder={placeholder}
       />
@@ -368,9 +434,7 @@ function previewNote(preview: SettlementPreview | null) {
           월패드 현장 수금 {preview.wallpadAmount.toLocaleString()}원은 정산 금액에 포함되지 않습니다.
         </div>
       ) : null}
-      {preview.extraClaimFee > 0 ? (
-        <div>기타 청구 금액은 본사 확인 후 승인된 금액만 지급됩니다.</div>
-      ) : null}
+      {preview.extraClaimFee > 0 ? <div>기타 청구 금액은 본사 확인 후 승인된 금액만 지급됩니다.</div> : null}
       <div>본사 승인 후 확정됩니다.</div>
     </>
   );
@@ -387,12 +451,33 @@ const backLink: CSSProperties = {
   cursor: "pointer",
 };
 
-const helpText: CSSProperties = { fontSize: 12, color: "#71717a", lineHeight: 1.5, margin: "0 0 10px" };
+const helpText: CSSProperties = {
+  fontSize: 12,
+  color: "#71717a",
+  lineHeight: 1.5,
+  margin: "0 0 10px",
+};
 
-const radioRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", fontSize: 15 };
-const checkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 10, fontSize: 15 };
+const radioRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 0",
+  fontSize: 15,
+};
+const checkRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 15,
+};
 const optionLabel: CSSProperties = { flex: 1, minWidth: 0 };
-const optionAmount: CSSProperties = { fontSize: 14, fontWeight: 600, color: "#52525b", whiteSpace: "nowrap" };
+const optionAmount: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#52525b",
+  whiteSpace: "nowrap",
+};
 const moneySuffix: CSSProperties = {
   position: "absolute",
   right: 14,
