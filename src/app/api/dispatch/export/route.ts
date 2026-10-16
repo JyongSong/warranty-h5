@@ -9,6 +9,7 @@ import {
   formatDueDate,
   DISPATCH_CONST,
 } from "@/lib/dispatch";
+import { fetchCjDispatchRows } from "@/lib/installation/cj/dispatch-rows";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const from = sp.get("from");
   const to = sp.get("to") ?? from;
+  // channel=cj 면 ERP 대신 CJ 온스타일 접수 건(고객 접수일 기준)을 같은 양식으로 낸다.
+  const isCj = sp.get("channel") === "cj";
   if (!from || !to || !/^\d{8}$/.test(from) || !/^\d{8}$/.test(to)) {
     return NextResponse.json({ error: "from / to (YYYYMMDD) required" }, { status: 400 });
   }
@@ -27,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = assignDispatch(await fetchDispatchRows(from, to));
+    const rows = assignDispatch(await (isCj ? fetchCjDispatchRows(from, to) : fetchDispatchRows(from, to)));
 
     const templatePath = path.join(process.cwd(), "public/templates/dispatch-template.xlsx");
     const templateBuf = await fs.readFile(templatePath);
@@ -67,8 +70,9 @@ export async function GET(req: NextRequest) {
     ws["!ref"] = `A1:V${lastRow}`;
 
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellStyles: true });
+    const prefix = isCj ? "기사배정_CJ" : "기사배정";
     const filename =
-      from === to ? `기사배정_${from}.xlsx` : `기사배정_${from}-${to}.xlsx`;
+      from === to ? `${prefix}_${from}.xlsx` : `${prefix}_${from}-${to}.xlsx`;
 
     return new NextResponse(new Uint8Array(buf), {
       headers: {
