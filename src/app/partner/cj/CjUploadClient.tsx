@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { CSSProperties } from "react";
-import { partnerLogoutAction, uploadCjManifestAction } from "../actions";
+import type { CSSProperties, FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import {
+  deleteCjManifestAction,
+  partnerLogoutAction,
+  searchCjManifestAction,
+  uploadCjManifestAction,
+} from "../actions";
+import type { ManifestEntryView } from "../actions";
 
 type Upload = {
   id: string;
@@ -19,9 +26,11 @@ type Props = {
   partnerName: string;
   stats: { total: number; consumed: number; pending: number };
   uploads: Upload[];
+  recentEntries: ManifestEntryView[];
+  recentTruncated: boolean;
 };
 
-export default function CjUploadClient({ partnerName, stats, uploads }: Props) {
+export default function CjUploadClient({ partnerName, stats, uploads, recentEntries, recentTruncated }: Props) {
   const [fileName, setFileName] = useState("");
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<
@@ -114,6 +123,8 @@ export default function CjUploadClient({ partnerName, stats, uploads }: Props) {
           ) : null}
         </form>
 
+        <ManifestSearch initialEntries={recentEntries} initialTruncated={recentTruncated} />
+
         <section style={cardStyle}>
           <h2 style={cardTitleStyle}>최근 업로드 이력</h2>
           {uploads.length === 0 ? (
@@ -148,6 +159,152 @@ export default function CjUploadClient({ partnerName, stats, uploads }: Props) {
       </div>
     </div>
   );
+}
+
+// 올린 주문번호를 찾아 보고, 잘못 올린 번호는 지운다. 고객이 이미 접수한 번호는
+// 설치 건과 이어져 있어 지울 수 없다(서버에서도 막는다).
+function ManifestSearch({
+  initialEntries,
+  initialTruncated,
+}: {
+  initialEntries: ManifestEntryView[];
+  initialTruncated: boolean;
+}) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [searchedQuery, setSearchedQuery] = useState("");
+  const [entries, setEntries] = useState<ManifestEntryView[]>(initialEntries);
+  const [truncated, setTruncated] = useState(initialTruncated);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function runSearch(nextQuery: string) {
+    setLoading(true);
+    const response = await searchCjManifestAction(nextQuery);
+    setLoading(false);
+
+    if (!response.ok) {
+      setMessage({ ok: false, text: response.message });
+      return;
+    }
+    setSearchedQuery(nextQuery.trim());
+    setEntries(response.entries);
+    setTruncated(response.truncated);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+    void runSearch(query);
+  }
+
+  async function handleDelete(entry: ManifestEntryView) {
+    if (!window.confirm(`주문번호 ${entry.orderNo} 을(를) 명단에서 삭제할까요?\n삭제하면 고객이 이 번호로 접수할 수 없습니다.`)) {
+      return;
+    }
+
+    setDeletingId(entry.id);
+    setMessage(null);
+    const response = await deleteCjManifestAction(entry.id);
+    setDeletingId(null);
+
+    if (!response.ok) {
+      setMessage({ ok: false, text: response.message });
+      // 그사이 접수됐을 수 있으니 상태를 다시 받아온다.
+      void runSearch(searchedQuery);
+      return;
+    }
+
+    setEntries((current) => current.filter((item) => item.id !== entry.id));
+    setMessage({ ok: true, text: `${entry.orderNo} 을(를) 삭제했습니다.` });
+    // 위쪽 통계 숫자를 갱신한다.
+    router.refresh();
+  }
+
+  return (
+    <section style={cardStyle}>
+      <h2 style={cardTitleStyle}>주문번호 조회</h2>
+      <p style={cardHintStyle}>
+        주문번호 일부만 입력해도 찾을 수 있습니다. 비워 두고 조회하면 최근 등록한 20건을
+        보여 줍니다. 고객이 아직 접수하지 않은 번호만 삭제할 수 있습니다.
+      </p>
+
+      <form onSubmit={handleSubmit} style={searchRowStyle}>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="주문번호"
+          inputMode="numeric"
+          style={searchInputStyle}
+        />
+        <button type="submit" disabled={loading} style={searchButtonStyle(loading)}>
+          {loading ? "조회 중..." : "조회"}
+        </button>
+      </form>
+
+      {message ? <p style={message.ok ? successStyle : errorStyle}>{message.text}</p> : null}
+
+      {entries.length === 0 ? (
+        <p style={emptyStyle}>
+          {searchedQuery ? `'${searchedQuery}' 에 해당하는 주문번호가 없습니다.` : "아직 등록된 주문번호가 없습니다."}
+        </p>
+      ) : (
+        <>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>주문번호</th>
+                  <th style={thStyle}>주문일</th>
+                  <th style={thStyle}>등록일시</th>
+                  <th style={thStyle}>상태</th>
+                  <th style={thStyle} aria-label="삭제" />
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{entry.orderNo}</td>
+                    <td style={tdStyle}>{formatOrderDate(entry.orderDate)}</td>
+                    <td style={tdStyle}>{formatDateTime(entry.createdAt)}</td>
+                    <td style={tdStyle}>
+                      {entry.consumedAt ? (
+                        <span style={consumedBadgeStyle}>접수 완료 · {formatDateTime(entry.consumedAt)}</span>
+                      ) : (
+                        <span style={pendingBadgeStyle}>미접수</span>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      {entry.consumedAt ? null : (
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(entry)}
+                          disabled={deletingId !== null}
+                          style={deleteButtonStyle(deletingId !== null)}
+                        >
+                          {deletingId === entry.id ? "삭제 중..." : "삭제"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {truncated ? (
+            <p style={emptyStyle}>결과가 많아 일부만 보여 줍니다. 주문번호를 더 길게 입력해 주세요.</p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function formatOrderDate(value: string | null) {
+  if (!value) return "-";
+  return /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}` : value;
 }
 
 // 샘플 파일. 엑셀에서 열어도 주문번호가 망가지지 않도록 ="..." 로 감싸고,
@@ -388,3 +545,53 @@ const tdStyle: CSSProperties = {
 };
 
 const tdNumStyle: CSSProperties = { ...tdStyle, textAlign: "right" };
+
+const searchRowStyle: CSSProperties = { display: "flex", gap: 8 };
+
+const searchInputStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "11px 12px",
+  borderRadius: 9,
+  border: `1px solid ${BORDER}`,
+  fontSize: 14,
+};
+
+function searchButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    padding: "11px 18px",
+    borderRadius: 9,
+    border: "none",
+    background: disabled ? "#E5E7EB" : PURPLE,
+    color: disabled ? "#9CA3AF" : "#FFFFFF",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+const badgeBaseStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "3px 8px",
+  borderRadius: 6,
+  fontSize: 11.5,
+  fontWeight: 600,
+};
+
+const consumedBadgeStyle: CSSProperties = { ...badgeBaseStyle, background: "#ECFDF5", color: "#047857" };
+
+const pendingBadgeStyle: CSSProperties = { ...badgeBaseStyle, background: "#F3F4F6", color: MUTED };
+
+function deleteButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    padding: "6px 12px",
+    borderRadius: 7,
+    border: "1px solid #FECACA",
+    background: "#FFFFFF",
+    color: disabled ? "#FCA5A5" : "#DC2626",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}

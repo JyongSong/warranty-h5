@@ -2,6 +2,7 @@ import { requirePartner } from "@/lib/partnerAuth";
 import {
   getCjManifestStats,
   listRecentCjManifestUploads,
+  searchCjManifestEntries,
 } from "@/lib/installation/cj/manifest";
 import CjUploadClient from "./CjUploadClient";
 
@@ -9,15 +10,24 @@ export const dynamic = "force-dynamic";
 
 export default async function PartnerCjUploadPage() {
   const partner = await requirePartner();
-  const [uploads, stats] = await Promise.all([
+  const [uploads, stats, recent] = await Promise.all([
     listRecentCjManifestUploads(),
     getCjManifestStats(),
+    searchCjManifestEntries(""),
   ]);
 
   return (
     <CjUploadClient
       partnerName={partner.name}
       stats={stats}
+      recentTruncated={recent.truncated}
+      recentEntries={recent.entries.map((entry) => ({
+        id: entry.id,
+        orderNo: entry.orderNo,
+        orderDate: entry.orderDate,
+        createdAt: entry.createdAt.toISOString(),
+        consumedAt: entry.consumedAt?.toISOString() ?? null,
+      }))}
       uploads={uploads.map((upload) => ({
         id: upload.id,
         fileName: upload.fileName,

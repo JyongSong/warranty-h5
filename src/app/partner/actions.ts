@@ -9,7 +9,12 @@ import {
   requirePartner,
   verifyPartnerPassword,
 } from "@/lib/partnerAuth";
-import { CjManifestError, saveCjManifestUpload } from "@/lib/installation/cj/manifest";
+import {
+  CjManifestError,
+  deleteCjManifestEntry,
+  saveCjManifestUpload,
+  searchCjManifestEntries,
+} from "@/lib/installation/cj/manifest";
 
 export type PartnerLoginResult = { ok: false; message: string } | never;
 
@@ -91,5 +96,57 @@ export async function uploadCjManifestAction(formData: FormData): Promise<Upload
 
     console.error("[partner/upload]", error);
     return { ok: false, message: "업로드에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
+
+export type ManifestEntryView = {
+  id: string;
+  orderNo: string;
+  orderDate: string | null;
+  createdAt: string;
+  consumedAt: string | null;
+};
+
+export type SearchManifestResult =
+  | { ok: true; entries: ManifestEntryView[]; truncated: boolean }
+  | { ok: false; message: string };
+
+export async function searchCjManifestAction(query: string): Promise<SearchManifestResult> {
+  await requirePartner();
+
+  try {
+    const { entries, truncated } = await searchCjManifestEntries(query);
+    return {
+      ok: true,
+      truncated,
+      entries: entries.map((entry) => ({
+        id: entry.id,
+        orderNo: entry.orderNo,
+        orderDate: entry.orderDate,
+        createdAt: entry.createdAt.toISOString(),
+        consumedAt: entry.consumedAt?.toISOString() ?? null,
+      })),
+    };
+  } catch (error) {
+    console.error("[partner/search]", error);
+    return { ok: false, message: "조회에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
+
+export type DeleteManifestResult = { ok: true } | { ok: false; message: string };
+
+export async function deleteCjManifestAction(id: string): Promise<DeleteManifestResult> {
+  await requirePartner();
+
+  try {
+    const result = await deleteCjManifestEntry(id);
+    if (result === "DELETED") return { ok: true };
+    if (result === "ALREADY_USED") {
+      return { ok: false, message: "이미 고객이 접수한 주문번호는 삭제할 수 없습니다." };
+    }
+    return { ok: false, message: "이미 삭제되었거나 없는 주문번호입니다." };
+  } catch (error) {
+    console.error("[partner/delete]", error);
+    return { ok: false, message: "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요." };
   }
 }
