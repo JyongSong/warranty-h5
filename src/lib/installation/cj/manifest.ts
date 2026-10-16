@@ -137,3 +137,52 @@ export async function getCjManifestStats() {
 
   return { total, consumed, pending: total - consumed };
 }
+
+export type CjManifestEntry = {
+  id: string;
+  orderNo: string;
+  orderDate: string | null;
+  createdAt: Date;
+  consumedAt: Date | null;
+};
+
+const SEARCH_LIMIT = 50;
+const RECENT_LIMIT = 20;
+
+// 파트너 화면의 주문번호 조회. 검색어가 비어 있으면 최근 등록분을 보여 주고,
+// 있으면 일부만 쳐도 찾을 수 있게 포함 검색을 한다. 고객 입력과 같은 규칙으로
+// 정규화하므로 하이픈·공백을 섞어 쳐도 된다.
+export async function searchCjManifestEntries(
+  rawQuery: string,
+): Promise<{ entries: CjManifestEntry[]; truncated: boolean }> {
+  const query = normalizeCjOrderNo(rawQuery);
+  const limit = query ? SEARCH_LIMIT : RECENT_LIMIT;
+
+  const rows = await prisma.cjOrderManifest.findMany({
+    where: query ? { orderNo: { contains: query } } : undefined,
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    select: { id: true, orderNo: true, orderDate: true, createdAt: true, consumedAt: true },
+  });
+
+  return { entries: rows.slice(0, limit), truncated: rows.length > limit };
+}
+
+export type CjManifestDeleteResult = "DELETED" | "NOT_FOUND" | "ALREADY_USED";
+
+// 잘못 올린 주문번호를 지운다. 고객이 이미 제출한 번호는 설치 건과 이어져 있어
+// 지우지 않는다(지우면 같은 번호로 다시 올려 두 번째 제출이 가능해진다).
+// 조회와 삭제 사이에 고객이 제출하는 경우를 막으려고 consumedAt 조건을 삭제
+// 쿼리 자체에 건다.
+export async function deleteCjManifestEntry(id: string): Promise<CjManifestDeleteResult> {
+  const deleted = await prisma.cjOrderManifest.deleteMany({
+    where: { id, consumedAt: null },
+  });
+  if (deleted.count > 0) return "DELETED";
+
+  const existing = await prisma.cjOrderManifest.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  return existing ? "ALREADY_USED" : "NOT_FOUND";
+}
