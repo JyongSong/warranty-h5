@@ -8,7 +8,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { cjOrderManifest: { findMany, findUnique, deleteMany } },
 }));
 
-const { searchCjManifestEntries, deleteCjManifestEntry } = await import(
+const { searchCjManifestEntries, deleteCjManifestEntry, lookupCjOrderNo } = await import(
   "@/lib/installation/cj/manifest"
 );
 
@@ -73,5 +73,74 @@ describe("deleteCjManifestEntry", () => {
     findUnique.mockResolvedValue(null);
 
     await expect(deleteCjManifestEntry("m1")).resolves.toBe("NOT_FOUND");
+  });
+});
+
+describe("lookupCjOrderNo", () => {
+  function row(orderNo: string, consumedAt: Date | null = null, orderDate: string | null = "2026-10-15") {
+    return { id: `id-${orderNo}`, orderNo, orderDate, consumedAt };
+  }
+
+  it("고객이 넣은 14자리로 명단의 시스템 번호를 찾는다", async () => {
+    findMany.mockResolvedValue([row("20261015098508002001001")]);
+
+    await expect(lookupCjOrderNo("20261015098508")).resolves.toEqual({
+      status: "OK",
+      manifestId: "id-20261015098508002001001",
+      manifestIds: ["id-20261015098508002001001"],
+      orderNo: "20261015098508002001001",
+      orderDate: "2026-10-15",
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderNo: { startsWith: "20261015098508" } } }),
+    );
+  });
+
+  it("같은 주문의 여러 행을 함께 돌려준다", async () => {
+    findMany.mockResolvedValue([row("20261015098508001001001"), row("20261015098508002001001")]);
+
+    const result = await lookupCjOrderNo("2026-1015-098508");
+
+    expect(result).toMatchObject({
+      status: "OK",
+      manifestIds: ["id-20261015098508001001001", "id-20261015098508002001001"],
+      orderNo: "20261015098508001001001",
+    });
+  });
+
+  it("같은 주문의 한 행이라도 쓰였으면 접수 완료다", async () => {
+    findMany.mockResolvedValue([row("20261015098508001001001"), row("20261015098508002001001", new Date())]);
+
+    await expect(lookupCjOrderNo("20261015098508")).resolves.toEqual({ status: "ALREADY_USED" });
+  });
+
+  it("시스템 번호 전체를 넣으면 그 행을 대표로 삼는다", async () => {
+    findMany.mockResolvedValue([row("20261015098508001001001"), row("20261015098508002001001")]);
+
+    await expect(lookupCjOrderNo("20261015098508002001001")).resolves.toMatchObject({
+      status: "OK",
+      orderNo: "20261015098508002001001",
+      manifestIds: ["id-20261015098508001001001", "id-20261015098508002001001"],
+    });
+  });
+
+  it("시스템 번호 뒷자리가 틀리면 찾지 못한다", async () => {
+    findMany.mockResolvedValue([row("20261015098508001001001")]);
+
+    await expect(lookupCjOrderNo("20261015098508009")).resolves.toEqual({ status: "NOT_FOUND" });
+  });
+
+  it("명단에 없으면 찾지 못한다", async () => {
+    findMany.mockResolvedValue([]);
+
+    await expect(lookupCjOrderNo("20261015098508")).resolves.toEqual({ status: "NOT_FOUND" });
+  });
+
+  it("14자리보다 짧으면 앞자리 일치 없이 정확히 일치할 때만 받는다", async () => {
+    findUnique.mockResolvedValue(null);
+
+    await expect(lookupCjOrderNo("2026101509")).resolves.toEqual({ status: "NOT_FOUND" });
+    expect(findMany).not.toHaveBeenCalled();
+    expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { orderNo: "2026101509" } }));
   });
 });
