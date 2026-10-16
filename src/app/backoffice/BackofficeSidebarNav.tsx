@@ -20,8 +20,11 @@ type MenuItem = {
     | "orders"
     | "dispatch"
     | "sms"
-    | "iot";
+    | "iot"
+    | "partner";
   subItems?: MenuItem[];
+  // 백오피스 밖(별도 로그인) 화면. 새 탭으로 연다.
+  external?: boolean;
 };
 
 const menuItems: MenuItem[] = [
@@ -122,6 +125,13 @@ const menuItems: MenuItem[] = [
         icon: "iot",
       },
     ],
+  },
+  {
+    // CJ 파트너 화면. 백오피스와 계정이 분리되어 있어 CJ 계정으로 로그인해야 한다.
+    href: "/partner/cj",
+    label: "CJ 주문번호 명단",
+    icon: "partner",
+    external: true,
   },
   {
     href: "/backoffice/registrations?tab=query",
@@ -351,6 +361,26 @@ function BackofficeSidebarNavItem({
             />
           </span>
         </button>
+      ) : item.external ? (
+        <a
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={collapsed ? item.label : undefined}
+          title={collapsed ? item.label : undefined}
+          className={itemClassName}
+          onClick={onNavigate}
+        >
+          <span className={collapsed ? "flex items-center" : "flex min-w-0 items-center gap-2"}>
+            <SidebarItemIcon icon={item.icon} />
+            <span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span>
+            {collapsed ? null : (
+              <span aria-hidden="true" className="shrink-0 text-xs text-slate-400">
+                ↗
+              </span>
+            )}
+          </span>
+        </a>
       ) : (
         <Link
           href={item.href}
@@ -424,6 +454,15 @@ function SidebarItemIcon({ icon }: { icon: MenuItem["icon"] }) {
     className: "size-4 shrink-0",
     "aria-hidden": true,
   } as const;
+
+  if (icon === "partner") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3 6.5 10 3l7 3.5M4.5 7.5V16h11V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M8 16v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      </svg>
+    );
+  }
 
   if (icon === "orders") {
     return (
