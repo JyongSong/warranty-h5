@@ -356,7 +356,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
         number="02"
         label="주문자 휴대폰 번호"
         required
-        hint="주문하신 분의 번호입니다. 배정 결과를 이 번호로 안내드립니다."
+        hint="주문하신 분의 번호입니다."
       >
         <div style={inlineRowStyle}>
           <input
@@ -428,7 +428,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
         />
         {customerPhoneError ? <p style={errorTextStyle}>{customerPhoneError}</p> : null}
         <p style={hintStyle}>
-          설치 당일 현장에 계실 분의 번호입니다. 기사님이 이 번호로 연락드립니다.
+          설치 당일 현장에 계실 분의 번호입니다. 기사님이 이 번호로 연락드립니다. 배정 결과를 이 번호로 안내드립니다.
         </p>
         <button
           type="button"
