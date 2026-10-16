@@ -23,6 +23,13 @@ function todayKST(): string {
 }
 
 const stripDash = (d: string) => d.replace(/-/g, "");
+type Channel = "erp" | "cj";
+
+const CHANNELS: Array<{ value: Channel; label: string }> = [
+  { value: "erp", label: "자사 (ERP)" },
+  { value: "cj", label: "CJ 온스타일" },
+];
+
 const formatYmd = (yyyymmdd: string | null | undefined) =>
   yyyymmdd ? `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}` : "";
 
@@ -34,6 +41,22 @@ export default function DispatchClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  // CJ 건은 ERP 에 없어서 고객 접수일 기준으로 따로 조회한다. 엑셀 양식은 같다.
+  const [channel, setChannel] = useState<Channel>("erp");
+  const dateLabel = channel === "cj" ? "접수일자" : "납기일자";
+
+  const changeChannel = (next: Channel) => {
+    if (next === channel) return;
+    setChannel(next);
+    setRows([]);
+    setSearched(false);
+    setError(null);
+  };
+
+  const buildQuery = () => {
+    const qs = `from=${stripDash(dateFrom)}&to=${stripDash(dateTo)}`;
+    return channel === "cj" ? `${qs}&channel=cj` : qs;
+  };
 
   const isValidRange = dateFrom && dateTo && dateFrom <= dateTo;
 
@@ -41,10 +64,9 @@ export default function DispatchClient() {
     setLoading(true);
     setError(null);
     try {
-      const qs = `from=${stripDash(dateFrom)}&to=${stripDash(dateTo)}`;
-      const res = await fetch(`/api/dispatch?${qs}`);
+      const res = await fetch(`/api/dispatch?${buildQuery()}`);
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "ERP 조회 실패");
+      if (!res.ok) throw new Error(json.error || "조회 실패");
       setRows(json.data);
       setSearched(true);
     } catch (e: unknown) {
@@ -55,8 +77,7 @@ export default function DispatchClient() {
   };
 
   const downloadExcel = () => {
-    const qs = `from=${stripDash(dateFrom)}&to=${stripDash(dateTo)}`;
-    window.location.href = `/api/dispatch/export?${qs}`;
+    window.location.href = `/api/dispatch/export?${buildQuery()}`;
   };
 
   const branchStats = rows.reduce<Record<string, number>>((acc, r) => {
@@ -72,14 +93,34 @@ export default function DispatchClient() {
         <div className="mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">기사배정</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            납기일자 기준 출장/설치 대상 자동 분배 및 Excel 다운로드
+            {channel === "cj"
+              ? "CJ 온스타일 고객 접수일자 기준 설치 대상 자동 분배 및 Excel 다운로드"
+              : "납기일자 기준 출장/설치 대상 자동 분배 및 Excel 다운로드"}
           </p>
+        </div>
+
+        <div className="mb-4 inline-flex rounded-lg border border-black/10 bg-white p-1" role="tablist" aria-label="주문 채널">
+          {CHANNELS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={channel === item.value}
+              onClick={() => changeChannel(item.value)}
+              className={[
+                "rounded-md px-4 py-1.5 text-sm font-medium transition",
+                channel === item.value ? "bg-zinc-900 text-white" : "text-zinc-600 hover:text-zinc-900",
+              ].join(" ")}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         <div className="bg-white rounded-xl border border-black/10 p-4 mb-6 flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs font-medium text-zinc-500 mb-1">
-              납기일자 (시작)
+              {dateLabel} (시작)
             </label>
             <input
               type="date"
@@ -92,7 +133,7 @@ export default function DispatchClient() {
           <div className="text-zinc-400 pb-2">~</div>
           <div>
             <label className="block text-xs font-medium text-zinc-500 mb-1">
-              납기일자 (종료)
+              {dateLabel} (종료)
             </label>
             <input
               type="date"
@@ -121,7 +162,7 @@ export default function DispatchClient() {
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">
-            ERP 연결 오류: {error}
+            {channel === "cj" ? "조회 오류" : "ERP 연결 오류"}: {error}
           </div>
         )}
 
@@ -149,7 +190,7 @@ export default function DispatchClient() {
         <div className="bg-white rounded-xl border border-black/10">
           {!searched ? (
             <div className="px-6 py-12 text-center text-zinc-400 text-sm">
-              납기일자 범위를 선택하고 조회 버튼을 눌러주세요.
+              {dateLabel} 범위를 선택하고 조회 버튼을 눌러주세요.
             </div>
           ) : rows.length === 0 ? (
             <div className="px-6 py-12 text-center text-zinc-400 text-sm">
@@ -161,7 +202,7 @@ export default function DispatchClient() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-zinc-100 text-xs font-medium text-zinc-500">
-                      <th className="px-3 py-3 text-left">납기일자</th>
+                      <th className="px-3 py-3 text-left">{dateLabel}</th>
                       <th className="px-3 py-3 text-left">지점</th>
                       <th className="px-3 py-3 text-left">고객명</th>
                       <th className="px-3 py-3 text-left">연락처</th>
