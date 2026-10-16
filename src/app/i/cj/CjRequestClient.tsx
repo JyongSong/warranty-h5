@@ -308,6 +308,16 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
       <div style={dividerStyle} />
 
       <Field number="01" label="주문번호" required hint="CJ 온스타일 주문번호를 입력한 뒤 확인을 눌러주세요.">
+        {/* 주문번호는 CJ 가 출고 확정 후 명단으로 올려 줘야 조회된다. */}
+        <div style={orderNoNoticeStyle}>
+          <span aria-hidden="true" style={orderNoNoticeIconStyle}>
+            i
+          </span>
+          <p style={orderNoNoticeTextStyle}>
+            주문하신 상품이 <strong>출고 확정된 후</strong>에 입력 가능합니다. 출고 전이라면 출고 완료 안내를
+            받으신 뒤 다시 접속해 주세요.
+          </p>
+        </div>
         <div style={inlineRowStyle}>
           <input
             style={{
@@ -1086,6 +1096,40 @@ function submitButtonStyle(disabled: boolean): CSSProperties {
     cursor: disabled ? "not-allowed" : "pointer",
   };
 }
+
+const orderNoNoticeStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  marginBottom: 12,
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: PURPLE_SOFT,
+};
+
+const orderNoNoticeIconStyle: CSSProperties = {
+  flexShrink: 0,
+  width: 18,
+  height: 18,
+  marginTop: 1,
+  borderRadius: "50%",
+  background: PURPLE,
+  color: "#FFFFFF",
+  fontSize: 11,
+  fontWeight: 700,
+  fontStyle: "italic",
+  fontFamily: "Georgia, serif",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const orderNoNoticeTextStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "#5B21B6",
+};
 
 const footerNoticeStyle: CSSProperties = {
   margin: "16px 0 0",
