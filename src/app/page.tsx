@@ -136,6 +136,29 @@ export default async function HomePage() {
                 도어락 및 스마트 디바이스의 최신 BLE 펌웨어 업데이트 및 진단 도구입니다.
               </p>
             </Link>
+
+            {/* Card 4: CJ 온스타일 고객 설치 정보 입력 */}
+            <Link
+              href="/i/cj"
+              className="group relative rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-md hover:border-violet-500/50 hover:bg-slate-900/90 transition-all hover:-translate-y-1 shadow-lg"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400 group-hover:bg-violet-500 group-hover:text-slate-950 transition-colors">
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                </span>
+                <span className="text-xs font-semibold text-violet-400 group-hover:translate-x-1 transition-transform">
+                  이동하기 →
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-white group-hover:text-violet-300 transition-colors">
+                CJ 온스타일 설치 정보 입력
+              </h3>
+              <p className="mt-2 text-sm text-slate-400 leading-relaxed">
+                CJ 온스타일에서 구매하신 고객님이 주문번호로 설치 주소와 희망 일정을 입력하는 페이지입니다.
+              </p>
+            </Link>
           </div>
         </section>
       </main>
