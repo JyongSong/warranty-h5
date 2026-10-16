@@ -68,14 +68,16 @@ const VALID_INPUT = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 고객은 14자리를 넣고, 명단에는 시스템 번호 두 행(같은 주문)이 있는 상황.
   lookupCjOrderNo.mockResolvedValue({
     status: "OK",
     manifestId: "manifest-1",
-    orderNo: "20260620034905",
+    manifestIds: ["manifest-1", "manifest-2"],
+    orderNo: "20260620034905001001001",
     orderDate: "2026-06-20",
   });
   consumeVerifiedCustomerPhone.mockResolvedValue(undefined);
-  manifestUpdateMany.mockResolvedValue({ count: 1 });
+  manifestUpdateMany.mockResolvedValue({ count: 2 });
   sourceCreate.mockResolvedValue({ id: "source-1" });
   orderCreate.mockResolvedValue({ id: "order-1" });
   requestCreate.mockResolvedValue({ id: "request-1" });
@@ -89,9 +91,10 @@ describe("submitCjCustomerRequest", () => {
     expect(result).toEqual({ installationOrderId: "order-1", customerRequestId: "request-1" });
 
     expect(sourceCreate.mock.calls[0][0].data).toMatchObject({
-      sourceKey: "CJ-20260620034905",
+      // 고객 입력(14자리)이 아니라 명단의 시스템 번호를 남긴다.
+      sourceKey: "CJ-20260620034905001001001",
       channel: "CJ",
-      externalOrderNo: "20260620034905",
+      externalOrderNo: "20260620034905001001001",
       externalOrderDate: "2026-06-20",
       // 배정 정규식이 K100 을 읽어 DOORLOCK 능력을 뽑아낸다.
       memo: "스마트 도어락 K100 x1",
@@ -103,6 +106,28 @@ describe("submitCjCustomerRequest", () => {
       sourceId: "source-1",
       status: "READY_FOR_CANDIDATE_SELECTION",
     });
+  });
+
+  it("같은 주문의 명단 행을 한꺼번에 소진하고 설치 건에 잇는다", async () => {
+    await submitCjCustomerRequest(VALID_INPUT);
+
+    expect(manifestUpdateMany).toHaveBeenNthCalledWith(1, {
+      where: { id: { in: ["manifest-1", "manifest-2"] }, consumedAt: null },
+      data: { consumedAt: VALID_INPUT.now },
+    });
+    expect(manifestUpdateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: { in: ["manifest-1", "manifest-2"] } },
+      data: { installationOrderId: "order-1" },
+    });
+  });
+
+  it("같은 주문의 일부 행이 먼저 쓰였으면 막는다", async () => {
+    manifestUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+    await expect(submitCjCustomerRequest(VALID_INPUT)).rejects.toThrow(
+      new InstallationCustomerRequestError("CJ_ORDER_NO_ALREADY_USED"),
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 
   it("월패드·허브는 memo 에 적지 않는다(도어락 조건으로만 배정)", async () => {

@@ -53,6 +53,9 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
   if (lookup.status === "ALREADY_USED") {
     throw new InstallationCustomerRequestError("CJ_ORDER_NO_ALREADY_USED");
   }
+  // 고객은 14자리 주문번호를 넣지만 설치 건에는 CJ 명단의 시스템 번호를 남긴다.
+  // 그래야 CJ 대조와 백오피스·엑셀 표기가 한 번호로 맞는다.
+  const manifestOrderNo = lookup.orderNo;
 
   if (!input.ordererPhone?.trim()) {
     throw new InstallationCustomerRequestError("ORDERER_PHONE_REQUIRED");
@@ -92,25 +95,27 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
   const submitted = await prisma.$transaction(async (tx) => {
     // 명단 소진을 조건부로 잡아 같은 주문번호의 동시 제출을 막는다.
     // 여기서 0건이면 그 사이 다른 요청이 먼저 가져간 것이다.
+    // 같은 주문의 행을 한꺼번에 소진한다. 일부라도 먼저 쓰였으면 트랜잭션을
+    // 되돌린다.
     const claimed = await tx.cjOrderManifest.updateMany({
-      where: { id: lookup.manifestId, consumedAt: null },
+      where: { id: { in: lookup.manifestIds }, consumedAt: null },
       data: { consumedAt: now },
     });
-    if (claimed.count === 0) {
+    if (claimed.count !== lookup.manifestIds.length) {
       throw new InstallationCustomerRequestError("CJ_ORDER_NO_ALREADY_USED");
     }
 
     const source = await tx.installationOrderSource.create({
       data: {
-        sourceKey: `CJ-${orderNo}`,
+        sourceKey: `CJ-${manifestOrderNo}`,
         channel: CJ_CHANNEL,
-        externalOrderNo: orderNo,
+        externalOrderNo: manifestOrderNo,
         externalOrderDate: lookup.orderDate,
         memo: CJ_ORDER_MEMO,
         // dueDate 는 백오피스에서 "주문일"로 표시된다(ERP 의 DT_DUEDATE 자리).
         // 설치 희망일이 아니라 CJ 명단에 실린 주문일을 넣어야 한다.
         dueDate: lookup.orderDate?.replace(/-/g, "") ?? null,
-        orderNumbers: orderNo,
+        orderNumbers: manifestOrderNo,
       },
       select: { id: true },
     });
@@ -147,7 +152,7 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
         // 이 채널은 1:1 링크를 쓰지 않는다. 토큰 칼럼이 NOT NULL/UNIQUE 이라
         // 아무도 알 수 없는 값을 채워 스키마 제약만 만족시킨다.
         customerTokenHash: hashInstallationCustomerToken(
-          `cj:${orderNo}:${randomBytes(24).toString("hex")}`,
+          `cj:${manifestOrderNo}:${randomBytes(24).toString("hex")}`,
         ),
         customerTokenExpiresAt: now,
       },
@@ -159,8 +164,8 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
       data: { activeCustomerRequestId: request.id },
     });
 
-    await tx.cjOrderManifest.update({
-      where: { id: lookup.manifestId },
+    await tx.cjOrderManifest.updateMany({
+      where: { id: { in: lookup.manifestIds } },
       data: { installationOrderId: order.id },
     });
 
@@ -175,7 +180,7 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
         metadata: {
           customerRequestId: request.id,
           channel: CJ_CHANNEL,
-          externalOrderNo: orderNo,
+          externalOrderNo: manifestOrderNo,
         },
         createdAt: now,
       },

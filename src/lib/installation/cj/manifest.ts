@@ -26,29 +26,73 @@ export class CjManifestError extends Error {
 }
 
 export type CjManifestLookup =
-  | { status: "OK"; manifestId: string; orderNo: string; orderDate: string | null }
+  | {
+      status: "OK";
+      // 대표 행(설치 건에 남기는 주문번호의 출처)
+      manifestId: string;
+      // 같은 주문의 모든 행. 제출하면 한꺼번에 소진한다.
+      manifestIds: string[];
+      orderNo: string;
+      orderDate: string | null;
+    }
   | { status: "NOT_FOUND" }
   | { status: "ALREADY_USED" };
 
+// 고객이 아는 CJ 주문번호는 14자리(주문일 8 + 일련 6)다. CJ 가 올리는 명단에는
+// 여기에 상품 순번 등이 붙은 시스템 번호(예: 20261015098508 + 002001001)가
+// 실리므로, 앞 14자리를 주문 키로 보고 앞자리 일치로 찾는다.
+// 한 주문이 여러 행으로 올라와도 설치는 한 번이다(CJ 는 K100 단품만 판다).
+export const CJ_ORDER_KEY_LENGTH = 14;
+
 export async function lookupCjOrderNo(rawOrderNo: string): Promise<CjManifestLookup> {
-  const orderNo = normalizeCjOrderNo(rawOrderNo);
-  if (!orderNo || !isValidCjOrderNoFormat(orderNo)) {
+  const input = normalizeCjOrderNo(rawOrderNo);
+  if (!input || !isValidCjOrderNoFormat(input)) {
     return { status: "NOT_FOUND" };
   }
 
-  const manifest = await prisma.cjOrderManifest.findUnique({
-    where: { orderNo },
+  // 14자리보다 짧으면 앞자리 일치로 남의 주문까지 잡힐 수 있어 정확히 일치할
+  // 때만 받는다.
+  if (input.length < CJ_ORDER_KEY_LENGTH) {
+    const manifest = await prisma.cjOrderManifest.findUnique({
+      where: { orderNo: input },
+      select: { id: true, orderNo: true, orderDate: true, consumedAt: true },
+    });
+
+    if (!manifest) return { status: "NOT_FOUND" };
+    if (manifest.consumedAt) return { status: "ALREADY_USED" };
+
+    return {
+      status: "OK",
+      manifestId: manifest.id,
+      manifestIds: [manifest.id],
+      orderNo: manifest.orderNo,
+      orderDate: manifest.orderDate,
+    };
+  }
+
+  const orderKey = input.slice(0, CJ_ORDER_KEY_LENGTH);
+  const rows = await prisma.cjOrderManifest.findMany({
+    where: { orderNo: { startsWith: orderKey } },
+    orderBy: { orderNo: "asc" },
     select: { id: true, orderNo: true, orderDate: true, consumedAt: true },
   });
 
-  if (!manifest) return { status: "NOT_FOUND" };
-  if (manifest.consumedAt) return { status: "ALREADY_USED" };
+  // 시스템 번호 전체를 넣었다면 그 번호가 실제로 있어야 한다.
+  const matched = input.length > CJ_ORDER_KEY_LENGTH
+    ? rows.filter((row) => row.orderNo.startsWith(input))
+    : rows;
+  if (matched.length === 0) return { status: "NOT_FOUND" };
 
+  // 같은 주문의 어느 행이든 이미 쓰였으면 그 주문은 접수가 끝난 것이다.
+  if (rows.some((row) => row.consumedAt)) return { status: "ALREADY_USED" };
+
+  const primary = matched[0];
   return {
     status: "OK",
-    manifestId: manifest.id,
-    orderNo: manifest.orderNo,
-    orderDate: manifest.orderDate,
+    manifestId: primary.id,
+    manifestIds: rows.map((row) => row.id),
+    orderNo: primary.orderNo,
+    orderDate: primary.orderDate ?? rows.find((row) => row.orderDate)?.orderDate ?? null,
   };
 }
 
