@@ -69,7 +69,7 @@ export const ALIMTALK_TEMPLATES = {
   },
   // 5번(엑셀 일괄) / 10번(신규 배차 플로우) 공용
   assignment_completed: {
-    templateId: "KA01TP260917014330329y9obgbLbjTg",
+    templateId: "KA01TP2610190722464531Yh4C8u19pl",
     name: "기사배정 완료 안내문_260917",
     variables: ["branchName", "installerPhone"],
   },
