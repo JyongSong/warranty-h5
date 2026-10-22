@@ -208,13 +208,20 @@ describe("submitCjCustomerRequest", () => {
     ).rejects.toThrow(new InstallationCustomerRequestError("INSTALL_DATE_OUT_OF_RANGE"));
   });
 
-  it("설치일이 주말이면 거절한다", async () => {
+  it("설치일이 일요일이면 거절한다", async () => {
     await expect(
-      // 2026-09-12 = 토요일
-      submitCjCustomerRequest({ ...VALID_INPUT, installDate: "2026-09-12" }),
-    ).rejects.toThrow(new InstallationCustomerRequestError("INSTALL_DATE_WEEKEND"));
+      // 2026-09-13 = 일요일
+      submitCjCustomerRequest({ ...VALID_INPUT, installDate: "2026-09-13" }),
+    ).rejects.toThrow(new InstallationCustomerRequestError("INSTALL_DATE_SUNDAY"));
 
     expect(consumeVerifiedCustomerPhone).not.toHaveBeenCalled();
+  });
+
+  it("토요일은 받는다", async () => {
+    // 2026-09-12 = 토요일
+    await expect(
+      submitCjCustomerRequest({ ...VALID_INPUT, installDate: "2026-09-12" }),
+    ).resolves.toMatchObject({ installationOrderId: "order-1" });
   });
 
   it("배정이 실패해도 제출은 확정으로 남긴다", async () => {

@@ -34,8 +34,7 @@ declare global {
 const INSTALL_TIME_SLOT = "상담 후 조율";
 
 const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
-const WEEKEND_NOTICE =
-  "주말·공휴일 설치를 원하시면 설치 전 기사님이 확인 전화(해피콜)를 드릴 때 말씀해 주세요. 기사님 일정에 따라 조율해 드립니다.";
+const SUNDAY_NOTICE = "일요일 설치를 원하시면 해피콜 시 기사님과 협의하시거나 고객센터로 문의해 주세요.";
 const CJ_SUPPORT_NOTICE =
   "주문번호 확인이나 인증번호 수신에 문제가 있으시면 CJ 고객센터로 문의해 주세요.";
 
@@ -468,9 +467,9 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
         />
         <p style={hintStyle}>
           오늘 기준 {INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 {INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지
-          평일만 선택할 수 있습니다.
+          선택할 수 있습니다. (일요일 제외)
         </p>
-        <p style={hintStyle}>{WEEKEND_NOTICE}</p>
+        <p style={hintStyle}>{SUNDAY_NOTICE}</p>
         <p style={hintStyle}>{SCHEDULE_ADJUST_NOTICE}</p>
       </Field>
 
@@ -660,7 +659,7 @@ function Calendar({
 
           // 앞쪽 빈 칸까지 포함한 인덱스라 7로 나눈 나머지가 곧 요일이다.
           const weekday = index % 7;
-          const disabled = date < minDate || date > maxDate || weekday === 0 || weekday === 6;
+          const disabled = date < minDate || date > maxDate || weekday === 0;
           const selected = date === value;
 
           return (
