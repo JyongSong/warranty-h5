@@ -34,7 +34,7 @@ declare global {
 const INSTALL_TIME_SLOT = "상담 후 조율";
 
 const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
-const SUNDAY_NOTICE = "일요일 설치를 원하시면 고객센터로 문의해 주세요.";
+const SUNDAY_NOTICE = "일요일 설치를 원하시면 해피콜 시 기사님과 협의하시거나 고객센터로 문의해 주세요.";
 const CJ_SUPPORT_NOTICE =
   "주문번호 확인이나 인증번호 수신에 문제가 있으시면 CJ 고객센터로 문의해 주세요.";
 
