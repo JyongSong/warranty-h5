@@ -22,6 +22,7 @@ const CUSTOMER_REQUEST_ERROR_MESSAGES: Record<string, string> = {
   INSTALL_ADDRESS_UNPARSEABLE: "설치 주소에 시/도와 시/군/구를 포함해 입력해 주세요.",
   INSTALL_DATE_INVALID: "설치일을 올바른 날짜로 입력해 주세요.",
   INSTALL_DATE_OUT_OF_RANGE: `설치일은 오늘 기준 ${INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 ${INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지만 선택할 수 있습니다.`,
+  INSTALL_DATE_WEEKEND: "주말은 설치 희망일로 선택할 수 없습니다. 평일 중에서 선택해 주세요.",
   CUSTOMER_PHONE_REQUIRED: "연락처를 입력해 주세요.",
   CUSTOMER_PHONE_IS_SAFE_NUMBER: SAFE_NUMBER_MESSAGE,
   CUSTOMER_PHONE_NOT_MOBILE: NOT_MOBILE_MESSAGE,

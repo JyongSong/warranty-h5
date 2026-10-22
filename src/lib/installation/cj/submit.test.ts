@@ -208,6 +208,15 @@ describe("submitCjCustomerRequest", () => {
     ).rejects.toThrow(new InstallationCustomerRequestError("INSTALL_DATE_OUT_OF_RANGE"));
   });
 
+  it("설치일이 주말이면 거절한다", async () => {
+    await expect(
+      // 2026-09-12 = 토요일
+      submitCjCustomerRequest({ ...VALID_INPUT, installDate: "2026-09-12" }),
+    ).rejects.toThrow(new InstallationCustomerRequestError("INSTALL_DATE_WEEKEND"));
+
+    expect(consumeVerifiedCustomerPhone).not.toHaveBeenCalled();
+  });
+
   it("배정이 실패해도 제출은 확정으로 남긴다", async () => {
     dispatchReadyInstallationOrders.mockRejectedValue(new Error("dispatch boom"));
 
