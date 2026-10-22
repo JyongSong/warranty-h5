@@ -84,9 +84,9 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
     now,
   );
 
-  // CJ 채널은 평일만 받는다. 주말·휴일 설치는 기사님 해피콜에서 따로 조율한다.
-  if (isWeekendYmd(normalized.installDate)) {
-    throw new InstallationCustomerRequestError("INSTALL_DATE_WEEKEND");
+  // CJ 채널은 일요일을 받지 않는다. 일요일 설치는 CJ 고객센터를 통해 따로 조율한다.
+  if (isSundayYmd(normalized.installDate)) {
+    throw new InstallationCustomerRequestError("INSTALL_DATE_SUNDAY");
   }
 
   if (!isKoreanMobileNumber(ordererPhone) || isSafeVirtualNumber(ordererPhone)) {
@@ -211,7 +211,6 @@ export async function submitCjCustomerRequest(input: SubmitCjRequestInput) {
   return submitted;
 }
 
-function isWeekendYmd(ymd: string) {
-  const weekday = new Date(`${ymd}T00:00:00Z`).getUTCDay();
-  return weekday === 0 || weekday === 6;
+function isSundayYmd(ymd: string) {
+  return new Date(`${ymd}T00:00:00Z`).getUTCDay() === 0;
 }
