@@ -29,14 +29,13 @@ declare global {
   }
 }
 
-const TIME_SLOTS = [
-  "오전 09:00 - 12:00",
-  "오후 12:00 - 15:00",
-  "오후 15:00 - 18:00",
-  "상담 후 조율",
-] as const;
+// 시간대 선택은 당분간 숨기고 모두 "상담 후 조율"로 접수한다. 실제 방문 시간은
+// 기사님 해피콜에서 정한다.
+const INSTALL_TIME_SLOT = "상담 후 조율";
 
 const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
+const WEEKEND_NOTICE =
+  "주말·공휴일 설치를 원하시면 설치 전 기사님이 확인 전화(해피콜)를 드릴 때 말씀해 주세요. 기사님 일정에 따라 조율해 드립니다.";
 const CJ_SUPPORT_NOTICE =
   "주문번호 확인이나 인증번호 수신에 문제가 있으시면 CJ 고객센터로 문의해 주세요.";
 
@@ -82,7 +81,6 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
   const [addressDetail, setAddressDetail] = useState("");
 
   const [installDate, setInstallDate] = useState("");
-  const [timeSlot, setTimeSlot] = useState<(typeof TIME_SLOTS)[number] | "">("");
   const [note, setNote] = useState("");
   const [agreed, setAgreed] = useState(false);
 
@@ -115,11 +113,10 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
     customerPhoneNormalized.length > 0 && !customerPhoneError,
     address.trim().length > 0 && addressDetail.trim().length > 0,
     installDate.length > 0,
-    timeSlot.length > 0,
     agreed,
   ].filter(Boolean).length;
 
-  const canSubmit = completedCount === 7 && !submitting;
+  const canSubmit = completedCount === 6 && !submitting;
 
   // 인증 후 번호를 고치면 인증이 무효가 된다. 서버도 토큰과 번호가 같은지 다시
   // 확인하지만, 사용자가 "인증 완료" 표시를 보고 오해하지 않도록 입력 시점에
@@ -242,7 +239,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
       address,
       addressDetail: addressDetail.trim(),
       installDate,
-      installTimeSlot: timeSlot || null,
+      installTimeSlot: INSTALL_TIME_SLOT,
       customerNote: note.trim() || null,
     });
 
@@ -281,7 +278,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
           <div style={successSummaryStyle}>
             <SummaryRow label="주문번호" value={orderNo.trim()} />
             <SummaryRow label="설치 주소" value={`${address} ${addressDetail}`.trim()} />
-            <SummaryRow label="설치 희망일" value={`${formatDateLabel(submittedAt)} · ${timeSlot}`} />
+            <SummaryRow label="설치 희망일" value={`${formatDateLabel(submittedAt)} · ${INSTALL_TIME_SLOT}`} />
             <SummaryRow label="설치 받으실 분" value={formatKrPhone(customerPhoneNormalized)} />
           </div>
           <p style={successNoticeStyle}>{SCHEDULE_ADJUST_NOTICE}</p>
@@ -300,7 +297,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
             <p style={eyebrowStyle}>INSTALLATION REQUEST</p>
             <h1 style={pageTitleStyle}>설치 정보 등록</h1>
           </div>
-          <span style={counterBadgeStyle}>{completedCount}/7 항목 완료</span>
+          <span style={counterBadgeStyle}>{completedCount}/6 항목 완료</span>
         </div>
         <p style={pageSubtitleStyle}>표시된 모든 항목을 빠짐없이 입력해주세요.</p>
       </header>
@@ -462,37 +459,22 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
         />
       </Field>
 
-      <Field
-        number="05"
-        label="설치 희망일"
-        required
-        hint={`오늘 기준 ${INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 ${INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지 선택할 수 있습니다.`}
-      >
+      <Field number="05" label="설치 희망일" required>
         <Calendar
           value={installDate}
           minDate={dateBounds.min}
           maxDate={dateBounds.max}
           onSelect={setInstallDate}
         />
-      </Field>
-
-      <Field number="06" label="희망 시간대" required>
-        <div style={slotGridStyle}>
-          {TIME_SLOTS.map((slot) => (
-            <button
-              key={slot}
-              type="button"
-              onClick={() => setTimeSlot(slot)}
-              style={slotButtonStyle(timeSlot === slot)}
-            >
-              {slot}
-            </button>
-          ))}
-        </div>
+        <p style={hintStyle}>
+          오늘 기준 {INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 {INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지
+          평일만 선택할 수 있습니다.
+        </p>
+        <p style={hintStyle}>{WEEKEND_NOTICE}</p>
         <p style={hintStyle}>{SCHEDULE_ADJUST_NOTICE}</p>
       </Field>
 
-      <Field number="07" label="요청사항" hint="현관문 종류, 주차 안내 등 미리 알려주실 내용이 있다면 적어주세요.">
+      <Field number="06" label="요청사항" hint="현관문 종류, 주차 안내 등 미리 알려주실 내용이 있다면 적어주세요.">
         <textarea
           style={textareaStyle}
           rows={3}
@@ -676,7 +658,9 @@ function Calendar({
         {cells.map((date, index) => {
           if (!date) return <span key={`empty-${index}`} />;
 
-          const disabled = date < minDate || date > maxDate;
+          // 앞쪽 빈 칸까지 포함한 인덱스라 7로 나눈 나머지가 곧 요일이다.
+          const weekday = index % 7;
+          const disabled = date < minDate || date > maxDate || weekday === 0 || weekday === 6;
           const selected = date === value;
 
           return (
@@ -991,25 +975,6 @@ function calendarDayStyle(disabled: boolean, selected: boolean): CSSProperties {
     fontSize: 13,
     fontWeight: selected ? 700 : 500,
     cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
-
-const slotGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: 8,
-};
-
-function slotButtonStyle(selected: boolean): CSSProperties {
-  return {
-    padding: "14px 12px",
-    borderRadius: 10,
-    border: `1px solid ${selected ? PURPLE : BORDER}`,
-    background: selected ? PURPLE_SOFT : "#FFFFFF",
-    color: selected ? PURPLE : TEXT,
-    fontSize: 14,
-    fontWeight: selected ? 700 : 500,
-    cursor: "pointer",
   };
 }
 
