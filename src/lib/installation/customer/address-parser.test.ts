@@ -23,6 +23,26 @@ describe("parseInstallationAddress", () => {
     });
   });
 
+  it("통합특별시 주소를 옛 광주/전남으로 해석한다", () => {
+    expect(parseInstallationAddress("전남광주통합특별시 북구 첨단과기로 123")).toEqual({
+      sido: "광주",
+      sigungu: "북구",
+    });
+    expect(parseInstallationAddress("전남광주통합특별시 광산구 하남대로 1")).toEqual({
+      sido: "광주",
+      sigungu: "광산구",
+    });
+    expect(parseInstallationAddress("전남광주통합특별시 화순군 화순읍 1")).toEqual({
+      sido: "전남",
+      sigungu: "화순군",
+    });
+    expect(parseInstallationAddress("전남광주통합특별시 순천시 중앙로 1")).toEqual({
+      sido: "전남",
+      sigungu: "순천시",
+    });
+    expect(parseInstallationAddress("전남광주통합특별시")).toBeNull();
+  });
+
   it("returns null for unparseable addresses", () => {
     expect(parseInstallationAddress("주소 모름")).toBeNull();
     expect(parseInstallationAddress("서울 테헤란로 1")).toBeNull();
@@ -30,6 +50,13 @@ describe("parseInstallationAddress", () => {
 });
 
 describe("splitInstallationSourceAddress", () => {
+  it("통합특별시 주소도 시/도·시군구를 나눈다", () => {
+    expect(splitInstallationSourceAddress("전남광주통합특별시 북구 첨단과기로 123 101동")).toMatchObject({
+      address1: "전남광주통합특별시 북구",
+      address2: "첨단과기로 123 101동",
+    });
+  });
+
   it("splits source address into full, main, detail, region, and remainder fields", () => {
     expect(splitInstallationSourceAddress("서울시 강남구 테헤란로 123 101동 202호")).toEqual({
       address: "서울시 강남구 테헤란로 123 101동 202호",

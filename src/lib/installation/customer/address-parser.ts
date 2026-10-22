@@ -1,3 +1,5 @@
+import { isMergedSidoToken, toLegacySidoAddress } from "@/lib/installation/merged-region";
+
 export type ParsedInstallationAddress = {
   sido: string;
   sigungu: string;
@@ -32,7 +34,7 @@ const SIDO_ALIASES: Array<{ pattern: RegExp; sido: string }> = [
 ];
 
 export function parseInstallationAddress(address: string): ParsedInstallationAddress | null {
-  const tokens = address
+  const tokens = toLegacySidoAddress(address)
     .trim()
     .replace(/\([^)]*\)/g, " ")
     .split(/\s+/)
@@ -96,8 +98,8 @@ function parseSigungu(tokens: string[]) {
 }
 
 function getAddress1TokenCount(tokens: string[]) {
-  const sido = normalizeSido(tokens[0] ?? "");
-  if (!sido) return 0;
+  const first = tokens[0] ?? "";
+  if (!normalizeSido(first) && !isMergedSidoToken(first)) return 0;
 
   const firstRegion = tokens[1];
   const secondRegion = tokens[2];
