@@ -61,7 +61,6 @@ const INSTALLERS: readonly Installer[] = [
   { businessNumber: '519-19-02649', branchName: '키플레이',                phone: '010-8220-3336', installationRegion: '경기도',     possibleRegion: '하남시, 성남시, 용인시, 수원시, 안성시, 평택시',            impossibleRegion: '' },
   { businessNumber: '110-17-24326', branchName: '용인/24시출장열쇠',            phone: '010-2084-5500', installationRegion: '경기도',   possibleRegion: '용인시, 수원시',                       impossibleRegion: '수원시 영통구' },
   { businessNumber: '124-28-81512', branchName: '화성/신영통열쇠',              phone: '010-3602-3477', installationRegion: '경기도',   possibleRegion: '화성시, 동탄시, 수원 영통구',         impossibleRegion: '' },
-  { businessNumber: '134-24-54294', branchName: '안산/24시열쇠나라',            phone: '010-4733-5445', installationRegion: '경기도',   possibleRegion: '안산시',     impossibleRegion: '' },
   { businessNumber: '126-12-75562', branchName: '경기광주/청도열쇠상사e',       phone: '010-3364-8385', installationRegion: '경기도',   possibleRegion: '광주시',                               impossibleRegion: '' },
   { businessNumber: '130-14-95576', branchName: '경기열쇠상사',                 phone: '010-2245-2222', installationRegion: '전국',     possibleRegion: '인천, 부천, 전지역',                  impossibleRegion: '연천군, 가장군' },  // 기본/Fallback
   { businessNumber: '136-46-00419', branchName: '의정부/롯데마트 장암점',       phone: '010-4819-4568', installationRegion: '경기도',   possibleRegion: '의정부시',                             impossibleRegion: '' },
