@@ -1,3 +1,5 @@
+import { toLegacySidoAddress } from "@/lib/installation/merged-region"
+
 export type InstallationOrderInstaller = {
   businessNumber: string
   branchName: string
@@ -54,7 +56,8 @@ const REGION_ALIASES: ReadonlyArray<readonly [string, string]> = ([
 
 /** 맨 앞의 시/도 표기만 정식 명칭으로 바꾼다. 뒤쪽 시·군·구는 건드리지 않는다. */
 function canonicalizeRegion(value: unknown): string {
-  const text = toText(value)
+  // 통합특별시는 "전남"/"광주" 별칭과 앞부분이 겹치므로 별칭보다 먼저 옛 이름으로 푼다.
+  const text = toLegacySidoAddress(toText(value))
   if (!text) return text
   for (const [alias, canonical] of REGION_ALIASES) {
     // 별칭 뒤에 공백이 없어도 된다("서울강남구"). 정렬 덕분에 더 긴 별칭이 먼저 걸린다.

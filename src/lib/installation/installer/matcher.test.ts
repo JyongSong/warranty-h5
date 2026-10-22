@@ -324,4 +324,26 @@ describe("시/도 표기가 달라도 매칭된다", () => {
     // 자기 지역에서는 정상으로 잡힌다.
     expect(findBestMatchingInstallers("광주 북구 중앙로 1", [광주광역시기사])).toHaveLength(1);
   });
+
+  it("전남광주통합특별시 주소를 옛 광주/전남 기사와 매칭한다", () => {
+    const 광주기사 = { ...baseInstaller, businessNumber: "gwangju", branchName: "광주기사", installationRegion: "광주", possibleRegion: "광주 북구" };
+    const 전남기사 = { ...baseInstaller, businessNumber: "jeonnam", branchName: "전남기사", installationRegion: "전라남도", possibleRegion: "전라남도 화순군" };
+
+    const 북구 = findBestMatchingInstallers("전남광주통합특별시 북구 첨단과기로 1", [광주기사, 전남기사]);
+    expect(북구.map((r) => r.businessNumber)).toEqual(["gwangju"]);
+    expect(북구[0].matchTier).toBe("EXACT_DISTRICT");
+
+    const 화순군 = findBestMatchingInstallers("전남광주통합특별시 화순군 화순읍 1", [광주기사, 전남기사]);
+    expect(화순군.map((r) => r.businessNumber)).toEqual(["jeonnam"]);
+    expect(화순군[0].matchTier).toBe("EXACT_DISTRICT");
+  });
+
+  it("기사 지역을 통합특별시로 적어도 같은 주소와 매칭한다", () => {
+    const installer = installerWith("전남광주통합특별시 북구", "전남광주통합특별시 북구");
+
+    for (const address of ["광주 북구 1", "전남광주통합특별시 북구 1"]) {
+      const result = findBestMatchingInstallers(address, [installer]);
+      expect(result, address).toHaveLength(1);
+    }
+  });
 });
