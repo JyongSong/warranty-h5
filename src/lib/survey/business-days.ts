@@ -49,29 +49,23 @@ export function isKstBusinessDay(value: Date): boolean {
 }
 
 /**
- * 확정일 다음 날부터 오늘까지 센 영업일이 목표치에 닿았는가.
- * 확정일 당일은 세지 않고, 오늘은 센다(기존 판정과 같은 셈법).
+ * 설문 발송일(한국 날짜). 확정일에 days 를 더한 날이 주말·공휴일이면 그다음
+ * 첫 영업일로 미룬다. 예: 금요일 확정 + 7일 = 다음 주 금요일, 토요일 확정 +
+ * 7일 = 다음 주 토요일 → 그다음 월요일.
  */
-export function hasPassedKstBusinessDays(
+export function getKstSurveySendDate(confirmedAt: Date, days: number): string {
+  let cursor = addKstDays(getKstDateString(confirmedAt), days);
+  while (isKstHolidayDate(cursor)) {
+    cursor = addKstDays(cursor, 1);
+  }
+  return cursor;
+}
+
+/** 오늘(한국 날짜)이 설문 발송일에 닿았는가. 지난 건도 발송 대상이다. */
+export function hasReachedKstSurveySendDate(
   confirmedAt: Date,
-  targetBusinessDays: number,
+  days: number,
   now: Date = new Date(),
 ): boolean {
-  const start = getKstDateString(confirmedAt);
-  const today = getKstDateString(now);
-
-  if (start >= today) return false;
-
-  let businessDays = 0;
-  let cursor = start;
-
-  while (cursor < today) {
-    cursor = addKstDays(cursor, 1);
-    if (!isKstHolidayDate(cursor)) {
-      businessDays++;
-      if (businessDays >= targetBusinessDays) return true;
-    }
-  }
-
-  return businessDays >= targetBusinessDays;
+  return getKstDateString(now) >= getKstSurveySendDate(confirmedAt, days);
 }

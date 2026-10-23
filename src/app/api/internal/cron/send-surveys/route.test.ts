@@ -123,10 +123,10 @@ describe("GET /api/internal/cron/send-surveys", () => {
     expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
-  it("7영업일이 지난 건만 보내고 발송 시각을 남긴다", async () => {
+  it("확정 7일 뒤 첫 영업일이 된 건만 보내고 발송 시각을 남긴다", async () => {
     registrationFindMany.mockResolvedValue([
-      registration("due", "2026-09-02T01:00:00.000Z"), // 7영업일 경과
-      registration("early", "2026-09-04T01:00:00.000Z"), // 6영업일
+      registration("due", "2026-09-02T01:00:00.000Z"), // 발송일 09-09 지남
+      registration("early", "2026-09-08T01:00:00.000Z"), // 발송일 09-15
     ] as never);
 
     const response = await GET(cronRequest());

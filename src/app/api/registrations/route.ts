@@ -3,8 +3,8 @@ import { requireAdminApi } from "@/lib/adminAuth";
 import { getErrorMessage } from "@/lib/error";
 import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
-import { hasPassedKstBusinessDays } from "@/lib/survey/business-days";
-import { SURVEY_SEND_BUSINESS_DAYS } from "@/lib/survey/send";
+import { hasReachedKstSurveySendDate } from "@/lib/survey/business-days";
+import { SURVEY_SEND_DELAY_DAYS } from "@/lib/survey/send";
 
 export async function GET(req: Request) {
   try {
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
         if (row.surveySentAt) {
           surveyStatus = row.survey ? "COMPLETED" : "SENT";
         } else if (row.confirmedAt) {
-          const reached = hasPassedKstBusinessDays(row.confirmedAt, SURVEY_SEND_BUSINESS_DAYS);
+          const reached = hasReachedKstSurveySendDate(row.confirmedAt, SURVEY_SEND_DELAY_DAYS);
           surveyStatus = reached ? "READY" : "WAITING";
         }
       }
