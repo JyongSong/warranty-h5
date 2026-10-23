@@ -5,10 +5,10 @@ import { getBaseUrl } from "@/lib/getBaseUrl";
 import { prisma } from "@/lib/prisma";
 import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
 import { sendSms } from "@/lib/sms";
-import { hasPassedKstBusinessDays } from "@/lib/survey/business-days";
+import { hasReachedKstSurveySendDate } from "@/lib/survey/business-days";
 
-/** 설치 확정 후 이만큼의 영업일이 지나야 설문을 보낸다. */
-export const SURVEY_SEND_BUSINESS_DAYS = 7;
+/** 설치 확정일로부터 이만큼 지난 뒤 첫 영업일에 설문을 보낸다. */
+export const SURVEY_SEND_DELAY_DAYS = 7;
 
 const SURVEY_SMS_SUBJECT = "[Aqara]";
 
@@ -64,7 +64,7 @@ export type SendDueSurveysResult = {
 };
 
 /**
- * 발송 대기(설치 기사 설치 · 확정 · 미발송 · 7영업일 경과) 건에 설문 문자를 보낸다.
+ * 발송 대기(설치 기사 설치 · 확정 · 미발송 · 확정 7일 뒤 첫 영업일 도달) 건에 설문 문자를 보낸다.
  * 한 번에 너무 많이 보내다 함수가 끊기지 않도록 limit 로 끊고, 남은 건수는 돌려준다.
  */
 export async function sendDueSatisfactionSurveys({
@@ -86,7 +86,7 @@ export async function sendDueSatisfactionSurveys({
   });
 
   const due = registrations.filter(
-    (reg) => reg.confirmedAt && hasPassedKstBusinessDays(reg.confirmedAt, SURVEY_SEND_BUSINESS_DAYS, now),
+    (reg) => reg.confirmedAt && hasReachedKstSurveySendDate(reg.confirmedAt, SURVEY_SEND_DELAY_DAYS, now),
   );
   const targets = due.slice(0, limit);
 

@@ -3,8 +3,8 @@ import { requireAdminApi } from "@/lib/adminAuth";
 import { getErrorMessage } from "@/lib/error";
 import { normalizePhone, formatKrPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
-import { hasPassedKstBusinessDays } from "@/lib/survey/business-days";
-import { SURVEY_SEND_BUSINESS_DAYS } from "@/lib/survey/send";
+import { hasReachedKstSurveySendDate } from "@/lib/survey/business-days";
+import { SURVEY_SEND_DELAY_DAYS } from "@/lib/survey/send";
 import * as XLSX from "xlsx";
 import { formatBackofficeDateTime } from "@/lib/backoffice/table-formatting";
 
@@ -32,7 +32,7 @@ function surveyStatusLabel(status: string) {
     case "READY":
       return "발송 대기";
     case "WAITING":
-      return "7영업일 대기 중";
+      return "발송일 대기 중";
     default:
       return "대상 아님";
   }
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
         if (row.surveySentAt) {
           surveyStatus = row.survey ? "COMPLETED" : "SENT";
         } else if (row.confirmedAt) {
-          const reached = hasPassedKstBusinessDays(row.confirmedAt, SURVEY_SEND_BUSINESS_DAYS);
+          const reached = hasReachedKstSurveySendDate(row.confirmedAt, SURVEY_SEND_DELAY_DAYS);
           surveyStatus = reached ? "READY" : "WAITING";
         }
       }

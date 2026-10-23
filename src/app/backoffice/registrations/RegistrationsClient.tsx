@@ -72,7 +72,7 @@ function surveyStatusLabel(status: string) {
     case "READY":
       return "발송 대기";
     case "WAITING":
-      return "7영업일 대기 중";
+      return "발송일 대기 중";
     default:
       return "대상 아님";
   }
@@ -536,7 +536,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
             <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <MetricCard title="총 설문 대상" value={stats.total} description="기사 확정 건수" />
               <MetricCard
-                title="7영업일 대기"
+                title="발송일 대기"
                 value={stats.waiting}
                 description="아직 발송일 미도달"
                 type="warning"
@@ -859,7 +859,7 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                               ? "설문 알림톡 전송 완료"
                               : selectedItem.surveyStatus === "READY"
                               ? "설문 발송 대기 중"
-                              : "7영업일 미달 대기 중"}
+                              : "발송일 미도달 대기 중"}
                           </h3>
                           <p className="text-xs text-zinc-400 mt-1">
                             {selectedItem.surveyStatus === "SENT"
@@ -871,8 +871,8 @@ export default function RegistrationsClient({ admin }: { admin: AuthAdmin }) {
                           {selectedItem.surveyStatus === "SENT"
                             ? "고객에게 카카오 알림톡/SMS를 통해 만족도 조사 전용 링크가 전송되었습니다. 고객이 설문에 참여하면 여기에 실시간으로 평점과 응답 피드백이 표시됩니다."
                             : selectedItem.surveyStatus === "READY"
-                            ? "설치 확정 후 7영업일이 경과하여 발송 대기 중인 상태입니다. 영업일(주말·공휴일 제외) 오후 3시에 시스템이 자동으로 발송 링크를 보냅니다. 그 전에 보내려면 아래 버튼을 누르세요."
-                            : "설치 확인 완료 후 영업일 기준 7일이 경과해야 설문조사 링크가 자동으로 발송됩니다. 주말 및 국가 공휴일은 발송 대기 일수 계산에서 자동 제외됩니다."}
+                            ? "설치 확정 후 7일이 지나 발송일에 도달한 상태입니다. 영업일(주말·공휴일 제외) 오후 3시에 시스템이 자동으로 발송 링크를 보냅니다. 그 전에 보내려면 아래 버튼을 누르세요."
+                            : "설치 확정일로부터 7일 뒤 첫 영업일 오후 3시에 설문조사 링크가 자동으로 발송됩니다. 7일째 되는 날이 주말이나 국가 공휴일이면 다음 영업일로 미뤄집니다."}
                         </p>
                         {(selectedItem.surveyStatus === "READY" || selectedItem.surveyStatus === "SENT") && (
                           <div className="pt-2">

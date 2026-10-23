@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   addKstDays,
   getKstDateString,
-  hasPassedKstBusinessDays,
+  getKstSurveySendDate,
+  hasReachedKstSurveySendDate,
   isKstBusinessDay,
   isKstHolidayDate,
 } from "./business-days";
@@ -35,27 +36,45 @@ describe("영업일 판정", () => {
   });
 });
 
-describe("hasPassedKstBusinessDays", () => {
+describe("getKstSurveySendDate", () => {
+  it("확정일 + 7일이 영업일이면 그날이다", () => {
+    // 09-07(월) 확정 → 09-14(월)
+    expect(getKstSurveySendDate(new Date("2026-09-07T01:00:00.000Z"), 7)).toBe("2026-09-14");
+  });
+
+  it("확정일 + 7일이 주말이면 다음 첫 영업일로 미룬다", () => {
+    // 09-05(토) 확정 → 09-12(토) → 09-14(월)
+    expect(getKstSurveySendDate(new Date("2026-09-05T01:00:00.000Z"), 7)).toBe("2026-09-14");
+  });
+
+  it("공휴일과 이어지는 주말을 모두 건너뛴다", () => {
+    // 09-17(목) 확정 → 09-24(추석) → 25(추석), 26(토), 27(일) → 09-28(월)
+    expect(getKstSurveySendDate(new Date("2026-09-17T01:00:00.000Z"), 7)).toBe("2026-09-28");
+  });
+
+  it("확정 시각은 한국 날짜로 끊는다", () => {
+    // 09-08 00:30 KST = 09-07 15:30 UTC. 한국 날짜 09-08 → 09-15
+    expect(getKstSurveySendDate(new Date("2026-09-07T15:30:00.000Z"), 7)).toBe("2026-09-15");
+  });
+});
+
+describe("hasReachedKstSurveySendDate", () => {
   const now = new Date("2026-09-14T06:00:00.000Z"); // 09-14(월) 15:00 KST
 
-  it("확정 당일은 세지 않는다", () => {
-    expect(hasPassedKstBusinessDays(new Date("2026-09-14T01:00:00.000Z"), 7, now)).toBe(false);
+  it("발송일 당일이면 보낸다", () => {
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-07T01:00:00.000Z"), 7, now)).toBe(true);
   });
 
-  it("주말을 건너뛰고 영업일만 센다", () => {
-    // 09-02(수) 확정 → 03,04,07,08,09,10,11 = 7영업일 (14일 시점)
-    expect(hasPassedKstBusinessDays(new Date("2026-09-02T01:00:00.000Z"), 7, now)).toBe(true);
-    // 09-03(목) 확정 → 04,07,08,09,10,11,14 = 7영업일
-    expect(hasPassedKstBusinessDays(new Date("2026-09-03T01:00:00.000Z"), 7, now)).toBe(true);
-    // 09-04(금) 확정 → 07,08,09,10,11,14 = 6영업일. 아직 이르다.
-    expect(hasPassedKstBusinessDays(new Date("2026-09-04T01:00:00.000Z"), 7, now)).toBe(false);
+  it("발송일이 지난 건도 보낸다", () => {
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-02T01:00:00.000Z"), 7, now)).toBe(true);
+    // 주말로 밀린 건: 09-05(토) → 09-14(월)
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-05T01:00:00.000Z"), 7, now)).toBe(true);
   });
 
-  it("확정 시각이 한국 기준 자정 직전이어도 그 날짜로 센다", () => {
-    // 09-03 23:30 KST = 09-03 14:30 UTC. UTC 로 끊으면 09-03, 한국으로도 09-03.
-    expect(hasPassedKstBusinessDays(new Date("2026-09-03T14:30:00.000Z"), 7, now)).toBe(true);
-    // 09-04 00:30 KST = 09-03 15:30 UTC. UTC 로 끊으면 09-03(7영업일)이지만
-    // 한국 날짜로는 09-04 라서 아직 6영업일이다.
-    expect(hasPassedKstBusinessDays(new Date("2026-09-03T15:30:00.000Z"), 7, now)).toBe(false);
+  it("발송일 전이면 기다린다", () => {
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-08T01:00:00.000Z"), 7, now)).toBe(false);
+    // 09-07 23:30 KST 는 09-07 확정, 09-08 00:30 KST 는 09-08 확정
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-07T14:30:00.000Z"), 7, now)).toBe(true);
+    expect(hasReachedKstSurveySendDate(new Date("2026-09-07T15:30:00.000Z"), 7, now)).toBe(false);
   });
 });
