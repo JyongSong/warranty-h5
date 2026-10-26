@@ -15,12 +15,15 @@ import {
   SAFE_NUMBER_MESSAGE,
 } from "@/lib/installation/customer/error-message";
 import {
-  INSTALL_DATE_RANGE_NOTICE,
   INSTALL_DATE_SUNDAY_NOTICE,
   INSTALL_SCHEDULE_ADJUST_NOTICE,
   InstallDateCalendar,
   getInstallDateBounds,
 } from "../../_components/InstallDateCalendar";
+import {
+  INSTALL_DATE_MAX_DAYS_AHEAD,
+  INSTALL_DATE_MIN_DAYS_AHEAD,
+} from "@/lib/installation/customer/timing";
 import { splitInstallationSourceAddress } from "@/lib/installation/customer/address-parser";
 import { submitCustomerRequestAction } from "./actions";
 import {
@@ -107,6 +110,10 @@ const CONTROL_RADIUS = 12;
 const TEXT_COLOR = "#18181b";
 const PRIMARY_COLOR = "#111";
 const BORDER_COLOR = "#ddd";
+
+// 자사 주문은 출고 당일 링크가 나가므로 고객에게는 출고일 기준으로 안내한다.
+// 실제 선택 범위는 CJ 와 같이 오늘 기준으로 계산한다.
+const INSTALL_DATE_RANGE_NOTICE_FROM_SHIPPING = `출고일 기준 ${INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 ${INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지 선택할 수 있습니다. (일요일 제외)`;
 
 // 이전에 저장된 희망일이 지금 고를 수 없는 날(기간 밖·일요일)이면 비워서 다시 고르게 한다.
 function getSelectableInstallDate(value: string | null, minDate: string, maxDate: string) {
@@ -344,7 +351,7 @@ export default function CustomerRequestClient({
               onSelect={setInstallDate}
               accentColor={PRIMARY_COLOR}
             />
-            <span style={helperTextStyle}>{INSTALL_DATE_RANGE_NOTICE}</span>
+            <span style={helperTextStyle}>{INSTALL_DATE_RANGE_NOTICE_FROM_SHIPPING}</span>
             <span style={helperTextStyle}>{INSTALL_DATE_SUNDAY_NOTICE}</span>
           </div>
 
