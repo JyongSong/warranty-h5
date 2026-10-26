@@ -137,7 +137,7 @@ describe("installation SMS content", () => {
     expect(content.text).not.toContain("홍길동");
     expect(content.text).toBe(
       "설치 요청 수락이 완료되었습니다.\n" +
-        "48시간 이내 고객에게 확인 전화를 진행해 주세요.\n" +
+        "24시간 이내 고객에게 확인 전화를 진행해 주세요.\n" +
         "\n" +
         "주문 상품:\n" +
         "Aqara 스마트 도어락 K100 x1\n" +

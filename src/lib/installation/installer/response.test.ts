@@ -242,6 +242,27 @@ describe("installation installer response", () => {
     );
   });
 
+  it("skips the installer happycall SMS when the installer accepted in the app", async () => {
+    const now = new Date("2026-06-11T02:00:00.000Z");
+    findUniqueAssignment.mockResolvedValue(assignment);
+    updateAssignment.mockResolvedValue({ id: "assignment-1", status: "INSTALLER_ACCEPTED" });
+    findUniqueInstaller.mockResolvedValue({ id: "installer-1", phone: "010-1111-2222" });
+    upsertNotification.mockResolvedValue({ id: "notification-1" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "WAITING_INSTALLER_RESPONSE" });
+    updateOrder.mockResolvedValue({ id: "order-1", status: "INSTALLER_ASSIGNED" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    await respondInstallerAssignment("installer-token", {
+      response: "ACCEPT",
+      acceptedInApp: true,
+      now,
+    });
+
+    const smsTypes = upsertNotification.mock.calls.map(([arg]) => arg.create.smsType);
+    expect(smsTypes).toContain("CUSTOMER_ASSIGNMENT_CONFIRMED");
+    expect(smsTypes).not.toContain("INSTALLER_HAPPYCALL_GUIDE");
+  });
+
   it("accepts a dispatched assignment and creates customer and installer SMS notifications", async () => {
     const now = new Date("2026-06-11T02:00:00.000Z");
     findUniqueAssignment.mockResolvedValue(assignment);

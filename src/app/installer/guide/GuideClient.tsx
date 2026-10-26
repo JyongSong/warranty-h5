@@ -107,7 +107,7 @@ const SLIDES: Slide[] = [
           작업 상세의 연락처 옆 <strong>통화</strong> 버튼을 누르면 바로 전화가
           걸립니다.
         </p>
-        <p style={warnLine}>수락 후 48시간 안에 확인 전화를 부탁드립니다.</p>
+        <p style={warnLine}>수락 후 24시간 안에 확인 전화를 부탁드립니다.</p>
       </>
     ),
   },

@@ -122,7 +122,7 @@ describe("public installation routes", () => {
     );
     expect(element.props.responseConfig.dispatchNotes).toEqual(
       expect.arrayContaining([
-        "수락 후 48시간 이내 고객에게 확인 전화를 진행해 주세요.",
+        "수락 후 24시간 이내 고객에게 확인 전화를 진행해 주세요.",
       ]),
     );
   });

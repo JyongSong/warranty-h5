@@ -157,7 +157,7 @@ function getStatusHeader(status: ResponseStatus): StatusHeader | null {
       mark: "✓",
       title: "배정을 수락했습니다",
       description: [
-        "48시간 이내 고객에게 확인 전화를 진행해 주세요.",
+        "24시간 이내 고객에게 확인 전화를 진행해 주세요.",
         "설치 시간은 고객과 확인 전화에서 최종 조율할 수 있습니다.",
       ],
       tone: "green",
