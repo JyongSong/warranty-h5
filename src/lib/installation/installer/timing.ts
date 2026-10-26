@@ -11,8 +11,8 @@
  * 폴백 문자가 나가도 마감 시각은 늘어나지 않는다. 문자 문안이 남은 시간이
  * 아니라 마감 "시각"을 안내하는 이유다.
  */
-export const INSTALLER_RESPONSE_TIMEOUT_HOURS = 24;
-export const INSTALLER_PUSH_SMS_FALLBACK_HOURS = 5;
+export const INSTALLER_RESPONSE_TIMEOUT_HOURS = 5;
+export const INSTALLER_PUSH_SMS_FALLBACK_HOURS = 3;
 
 export function getInstallerResponseExpiresAt(now: Date) {
   return new Date(now.getTime() + INSTALLER_RESPONSE_TIMEOUT_HOURS * 60 * 60 * 1000);

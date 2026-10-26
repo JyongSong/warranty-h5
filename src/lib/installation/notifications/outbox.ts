@@ -689,7 +689,7 @@ async function tryPushInsteadOfSms(
   // 이미 푸시를 보낸 건이면 이번이 폴백 문자 차례다.
   if (notification.pushSentAt) return false;
   // FCM 자격증명이 없으면 sendAssignmentPushToInstaller 가 조용히 no-op 한다.
-  // 그걸 보낸 것으로 치면 기사는 5시간 동안 아무것도 못 받는다.
+  // 그걸 보낸 것으로 치면 기사는 폴백 시각까지 아무것도 못 받는다.
   if (!isFcmConfigured()) return false;
 
   const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({

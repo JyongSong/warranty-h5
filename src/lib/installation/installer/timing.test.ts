@@ -15,13 +15,13 @@ describe("installer response timeline", () => {
 
   it("computes the deadline from the first notification", () => {
     expect(getInstallerResponseExpiresAt(new Date("2026-06-11T00:00:00.000Z"))).toEqual(
-      new Date("2026-06-12T00:00:00.000Z"),
+      new Date("2026-06-11T05:00:00.000Z"),
     );
   });
 
   it("computes the fallback cutoff backwards from now", () => {
     expect(getInstallerPushSmsFallbackCutoff(new Date("2026-06-11T05:00:00.000Z"))).toEqual(
-      new Date("2026-06-11T00:00:00.000Z"),
+      new Date("2026-06-11T02:00:00.000Z"),
     );
   });
 

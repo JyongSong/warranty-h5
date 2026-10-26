@@ -166,12 +166,12 @@ describe("sendPendingInstallationNotifications", () => {
       where: { id: "notification-1" },
       data: { pushSentAt: now },
     });
-    // 마감 시각은 첫 알림인 푸시 시점부터 24시간.
+    // 마감 시각은 첫 알림인 푸시 시점부터 INSTALLER_RESPONSE_TIMEOUT_HOURS(5시간).
     expect(updateAssignment).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           installerNotifiedAt: now,
-          installerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
+          installerTokenExpiresAt: new Date("2026-06-11T05:00:00.000Z"),
         }),
       }),
     );
@@ -234,7 +234,7 @@ describe("sendPendingInstallationNotifications", () => {
     const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
 
     expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
-    // 푸시 시점에 정해진 마감을 그대로 두어야 총 24시간이 유지된다.
+    // 푸시 시점에 정해진 마감을 그대로 두어야 전체 응답 시간이 늘어나지 않는다.
     const assignmentData = updateAssignment.mock.calls[0]?.[0].data;
     expect(assignmentData).not.toHaveProperty("installerTokenExpiresAt");
     expect(assignmentData).not.toHaveProperty("installerNotifiedAt");

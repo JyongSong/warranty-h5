@@ -7,6 +7,7 @@ import { markInstallerGuideSeen } from "../guideSeen";
 import { TabPointer } from "../InstallerNav";
 import GuideArrow, { guideRing } from "./GuideArrow";
 import * as ui from "../ui";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 
 /**
  * 기사 앱 사용 안내.
@@ -88,7 +89,8 @@ const SLIDES: Slide[] = [
       <>
         <p>새 배정이 오면 앱 알림 또는 문자로 안내드립니다.</p>
         <p style={warnLine}>
-          24시간 안에 수락 또는 거절하지 않으면 다른 기사님께 배정됩니다.
+          알림을 받은 뒤 {INSTALLER_RESPONSE_TIMEOUT_HOURS}시간 안에 수락 또는 거절하지 않으면 다른
+          기사님께 배정됩니다.
         </p>
         <p>탭 아이콘의 빨간 숫자가 지금 처리할 건수입니다.</p>
       </>
