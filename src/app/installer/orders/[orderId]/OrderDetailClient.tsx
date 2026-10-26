@@ -28,6 +28,7 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState<string>("");
   const [customReason, setCustomReason] = useState("");
+  const [acceptedNoticeOpen, setAcceptedNoticeOpen] = useState(false);
 
   const actionable = item.status === "PENDING" && !!item.attemptId;
 
@@ -37,8 +38,12 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
     setError(null);
     const res = await respondToAssignmentAction({ attemptId: item.attemptId, response: "ACCEPT" });
     setBusy(false);
-    if (res.ok) router.push("/installer");
-    else setError(ERR[res.error] ?? ERR.DEFAULT);
+    if (res.ok) {
+      // 앱 수락은 해피콜 안내 문자를 보내지 않는다. 대신 이 화면에 머물며
+      // 고객 연락처를 열고, 해피콜 기한을 팝업으로 알린다.
+      setAcceptedNoticeOpen(true);
+      router.refresh();
+    } else setError(ERR[res.error] ?? ERR.DEFAULT);
   }
 
   async function reject() {
@@ -162,6 +167,23 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           )
         ) : null}
       </div>
+
+      {acceptedNoticeOpen ? (
+        <div style={backdrop} role="dialog" aria-modal="true" aria-label="수락 완료">
+          <div style={sheet}>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>수락이 완료되었습니다</div>
+            <div style={happycallNotice}>수락 후 24시간 안에 고객에게 해피콜 전화를 부탁드립니다.</div>
+            <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.6 }}>
+              고객 연락처는 이 화면의 <strong>통화</strong> 버튼으로 바로 걸 수 있습니다.
+            </div>
+            <div style={{ marginTop: 18 }}>
+              <button style={ui.primaryButton(false)} onClick={() => setAcceptedNoticeOpen(false)}>
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -227,4 +249,34 @@ const rejectAlert: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.55,
   marginBottom: 14,
+};
+
+const backdrop: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  zIndex: 100,
+};
+
+const sheet: CSSProperties = {
+  width: "100%",
+  maxWidth: 460,
+  background: "#fff",
+  borderRadius: "16px 16px 0 0",
+  padding: "22px 18px calc(22px + env(safe-area-inset-bottom))",
+  boxSizing: "border-box",
+};
+
+const happycallNotice: CSSProperties = {
+  background: "#fef3c7",
+  color: "#92400e",
+  borderRadius: 10,
+  padding: "12px 14px",
+  fontSize: 15,
+  fontWeight: 700,
+  lineHeight: 1.5,
+  margin: "12px 0 10px",
 };
