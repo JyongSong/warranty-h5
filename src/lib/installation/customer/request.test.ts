@@ -446,6 +446,18 @@ describe("installation customer request", () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
+  it("rejects Sunday install dates", async () => {
+    await expect(
+      submitInstallationCustomerRequest("raw-token", {
+        installAddress: "서울 강남구 봉은사로 10",
+        installDate: "2026-06-14",
+        customerPhone: "010-9999-0000",
+        now: new Date("2026-06-10T15:00:00.000Z"),
+      }),
+    ).rejects.toThrow("INSTALL_DATE_SUNDAY");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it("accepts install dates from KST today plus two through today plus thirty", async () => {
     const now = new Date("2026-06-10T15:00:00.000Z");
     findUniqueRequest.mockResolvedValue({

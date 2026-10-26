@@ -79,7 +79,7 @@ function getPublicCustomerRequestErrorCode(error: string) {
   if (["INSTALL_ADDRESS_REQUIRED", "INSTALL_ADDRESS_UNPARSEABLE"].includes(error)) {
     return "INVALID_INSTALL_ADDRESS";
   }
-  if (["INSTALL_DATE_INVALID", "INSTALL_DATE_OUT_OF_RANGE"].includes(error)) {
+  if (["INSTALL_DATE_INVALID", "INSTALL_DATE_OUT_OF_RANGE", "INSTALL_DATE_SUNDAY"].includes(error)) {
     return "INVALID_INSTALL_DATE";
   }
   if (error === "CUSTOMER_PHONE_REQUIRED") {

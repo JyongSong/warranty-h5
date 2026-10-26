@@ -42,6 +42,10 @@ export function normalizeCustomerRequestSubmitInput(input: CustomerSubmitInput, 
     throw new InstallationCustomerRequestError("INSTALL_DATE_INVALID");
   }
   validateInstallDateRange(installDate, now);
+  // 일요일은 받지 않는다. 일요일 설치는 기사님 해피콜이나 고객센터를 통해 따로 조율한다.
+  if (isSundayYmd(installDate)) {
+    throw new InstallationCustomerRequestError("INSTALL_DATE_SUNDAY");
+  }
   if (!customerPhone) {
     throw new InstallationCustomerRequestError("CUSTOMER_PHONE_REQUIRED");
   }
@@ -80,6 +84,10 @@ function validateInstallDateRange(installDate: string, now: Date) {
   if (targetDay < minDay || targetDay > maxDay) {
     throw new InstallationCustomerRequestError("INSTALL_DATE_OUT_OF_RANGE");
   }
+}
+
+function isSundayYmd(ymd: string) {
+  return new Date(`${ymd}T00:00:00Z`).getUTCDay() === 0;
 }
 
 export function isInstallDateWithinDispatchWindow(installDate: string, now: Date) {

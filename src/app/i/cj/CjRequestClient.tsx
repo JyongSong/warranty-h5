@@ -14,9 +14,12 @@ import {
   SAFE_NUMBER_MESSAGE,
 } from "@/lib/installation/customer/error-message";
 import {
-  INSTALL_DATE_MAX_DAYS_AHEAD,
-  INSTALL_DATE_MIN_DAYS_AHEAD,
-} from "@/lib/installation/customer/timing";
+  INSTALL_DATE_RANGE_NOTICE,
+  INSTALL_DATE_SUNDAY_NOTICE,
+  INSTALL_SCHEDULE_ADJUST_NOTICE,
+  InstallDateCalendar,
+  getInstallDateBounds,
+} from "../_components/InstallDateCalendar";
 import { checkCjOrderNoAction, submitCjRequestAction } from "./actions";
 
 declare global {
@@ -33,8 +36,6 @@ declare global {
 // 기사님 해피콜에서 정한다.
 const INSTALL_TIME_SLOT = "상담 후 조율";
 
-const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
-const SUNDAY_NOTICE = "일요일 설치를 원하시면 해피콜 시 기사님과 협의하시거나 고객센터로 문의해 주세요.";
 const CJ_SUPPORT_NOTICE =
   "주문번호 확인이나 인증번호 수신에 문제가 있으시면 CJ 고객센터로 문의해 주세요.";
 
@@ -89,7 +90,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
 
   const detailInputRef = useRef<HTMLInputElement>(null);
 
-  const dateBounds = useMemo(() => getDateBounds(initialToday), [initialToday]);
+  const dateBounds = useMemo(() => getInstallDateBounds(initialToday), [initialToday]);
 
   useEffect(() => {
     if (otpSecondsLeft <= 0) return;
@@ -280,7 +281,7 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
             <SummaryRow label="설치 희망일" value={`${formatDateLabel(submittedAt)} · ${INSTALL_TIME_SLOT}`} />
             <SummaryRow label="설치 받으실 분" value={formatKrPhone(customerPhoneNormalized)} />
           </div>
-          <p style={successNoticeStyle}>{SCHEDULE_ADJUST_NOTICE}</p>
+          <p style={successNoticeStyle}>{INSTALL_SCHEDULE_ADJUST_NOTICE}</p>
         </div>
       </Shell>
     );
@@ -459,18 +460,16 @@ export default function CjRequestClient({ initialToday, privacyPolicy }: Props) 
       </Field>
 
       <Field number="05" label="설치 희망일" required>
-        <Calendar
+        <InstallDateCalendar
           value={installDate}
           minDate={dateBounds.min}
           maxDate={dateBounds.max}
           onSelect={setInstallDate}
+          accentColor={PURPLE}
         />
-        <p style={hintStyle}>
-          오늘 기준 {INSTALL_DATE_MIN_DAYS_AHEAD}일 뒤부터 {INSTALL_DATE_MAX_DAYS_AHEAD}일 뒤까지
-          선택할 수 있습니다. (일요일 제외)
-        </p>
-        <p style={hintStyle}>{SUNDAY_NOTICE}</p>
-        <p style={hintStyle}>{SCHEDULE_ADJUST_NOTICE}</p>
+        <p style={hintStyle}>{INSTALL_DATE_RANGE_NOTICE}</p>
+        <p style={hintStyle}>{INSTALL_DATE_SUNDAY_NOTICE}</p>
+        <p style={hintStyle}>{INSTALL_SCHEDULE_ADJUST_NOTICE}</p>
       </Field>
 
       <Field number="06" label="요청사항" hint="현관문 종류, 주차 안내 등 미리 알려주실 내용이 있다면 적어주세요.">
@@ -595,90 +594,6 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Calendar({
-  value,
-  minDate,
-  maxDate,
-  onSelect,
-}: {
-  value: string;
-  minDate: string;
-  maxDate: string;
-  onSelect: (date: string) => void;
-}) {
-  const [cursor, setCursor] = useState(() => value || minDate);
-  const cursorDate = new Date(`${cursor}T00:00:00Z`);
-  const year = cursorDate.getUTCFullYear();
-  const month = cursorDate.getUTCMonth();
-
-  const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay();
-  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-
-  const cells: (string | null)[] = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, index) => toYmd(year, month, index + 1)),
-  ];
-
-  const canGoPrev = toYmd(year, month, 1) > minDate;
-  const canGoNext = toYmd(year, month + 1, 1) <= maxDate;
-
-  return (
-    <div style={calendarStyle}>
-      <div style={calendarHeadStyle}>
-        <button
-          type="button"
-          style={calendarNavStyle(!canGoPrev)}
-          disabled={!canGoPrev}
-          onClick={() => setCursor(toYmd(year, month - 1, 1))}
-          aria-label="이전 달"
-        >
-          ‹
-        </button>
-        <span style={calendarTitleStyle}>
-          {year}년 {month + 1}월
-        </span>
-        <button
-          type="button"
-          style={calendarNavStyle(!canGoNext)}
-          disabled={!canGoNext}
-          onClick={() => setCursor(toYmd(year, month + 1, 1))}
-          aria-label="다음 달"
-        >
-          ›
-        </button>
-      </div>
-
-      <div style={calendarGridStyle}>
-        {["일", "월", "화", "수", "목", "금", "토"].map((label) => (
-          <span key={label} style={calendarWeekdayStyle}>
-            {label}
-          </span>
-        ))}
-        {cells.map((date, index) => {
-          if (!date) return <span key={`empty-${index}`} />;
-
-          // 앞쪽 빈 칸까지 포함한 인덱스라 7로 나눈 나머지가 곧 요일이다.
-          const weekday = index % 7;
-          const disabled = date < minDate || date > maxDate || weekday === 0;
-          const selected = date === value;
-
-          return (
-            <button
-              key={date}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSelect(date)}
-              style={calendarDayStyle(disabled, selected)}
-            >
-              {Number(date.slice(8, 10))}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ─── 헬퍼 ──────────────────────────────────────────────────────────────── */
 
 function getPhoneError(normalized: string) {
@@ -687,23 +602,6 @@ function getPhoneError(normalized: string) {
   if (isSafeVirtualNumber(normalized)) return SAFE_NUMBER_MESSAGE;
   if (!isKoreanMobileNumber(normalized)) return NOT_MOBILE_MESSAGE;
   return null;
-}
-
-function getDateBounds(today: string) {
-  const base = new Date(`${today}T00:00:00Z`);
-  return {
-    min: shiftYmd(base, INSTALL_DATE_MIN_DAYS_AHEAD),
-    max: shiftYmd(base, INSTALL_DATE_MAX_DAYS_AHEAD),
-  };
-}
-
-function shiftYmd(base: Date, days: number) {
-  const next = new Date(base.getTime() + days * 86_400_000);
-  return next.toISOString().slice(0, 10);
-}
-
-function toYmd(year: number, month: number, day: number) {
-  return new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10);
 }
 
 function formatDateLabel(ymd: string) {
@@ -920,62 +818,6 @@ const successTextStyle: CSSProperties = {
   color: SUCCESS,
   fontWeight: 600,
 };
-
-const calendarStyle: CSSProperties = {
-  border: `1px solid ${BORDER}`,
-  borderRadius: 12,
-  padding: 16,
-};
-
-const calendarHeadStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: 12,
-};
-
-const calendarTitleStyle: CSSProperties = { fontSize: 15, fontWeight: 700 };
-
-function calendarNavStyle(disabled: boolean): CSSProperties {
-  return {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    border: "none",
-    background: "none",
-    color: disabled ? "#D1D5DB" : TEXT,
-    fontSize: 20,
-    lineHeight: 1,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
-
-const calendarGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(7, 1fr)",
-  gap: 2,
-  textAlign: "center",
-};
-
-const calendarWeekdayStyle: CSSProperties = {
-  padding: "8px 0",
-  fontSize: 11,
-  fontWeight: 600,
-  color: MUTED,
-};
-
-function calendarDayStyle(disabled: boolean, selected: boolean): CSSProperties {
-  return {
-    height: 40,
-    border: "none",
-    borderRadius: 8,
-    background: selected ? PURPLE : "transparent",
-    color: selected ? "#FFFFFF" : disabled ? "#D1D5DB" : TEXT,
-    fontSize: 13,
-    fontWeight: selected ? 700 : 500,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
 
 const textareaStyle: CSSProperties = {
   ...inputStyle,

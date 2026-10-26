@@ -15,9 +15,12 @@ import {
   SAFE_NUMBER_MESSAGE,
 } from "@/lib/installation/customer/error-message";
 import {
-  INSTALL_DATE_MAX_DAYS_AHEAD,
-  INSTALL_DATE_MIN_DAYS_AHEAD,
-} from "@/lib/installation/customer/timing";
+  INSTALL_DATE_RANGE_NOTICE,
+  INSTALL_DATE_SUNDAY_NOTICE,
+  INSTALL_SCHEDULE_ADJUST_NOTICE,
+  InstallDateCalendar,
+  getInstallDateBounds,
+} from "../../_components/InstallDateCalendar";
 import { splitInstallationSourceAddress } from "@/lib/installation/customer/address-parser";
 import { submitCustomerRequestAction } from "./actions";
 import {
@@ -40,7 +43,6 @@ declare global {
 
 // 폼과 확인 모달이 같은 문구를 쓴다. 접수 시점에 확정이 아니라는 것을
 // 두 번 알려야 나중에 "말이 다르다"는 문의를 줄일 수 있다.
-const SCHEDULE_ADJUST_NOTICE = "설치 날짜와 시간은 기사님 일정에 따라 조정될 수 있습니다.";
 
 const TIME_SLOTS = [
   "오전 09:00 - 12:00",
@@ -106,10 +108,11 @@ const TEXT_COLOR = "#18181b";
 const PRIMARY_COLOR = "#111";
 const BORDER_COLOR = "#ddd";
 
-function addDays(dateStr: string, days: number) {
-  const date = new Date(`${dateStr}T00:00:00+09:00`);
-  date.setDate(date.getDate() + days);
-  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+// 이전에 저장된 희망일이 지금 고를 수 없는 날(기간 밖·일요일)이면 비워서 다시 고르게 한다.
+function getSelectableInstallDate(value: string | null, minDate: string, maxDate: string) {
+  if (!value || value < minDate || value > maxDate) return "";
+  if (new Date(`${value}T00:00:00Z`).getUTCDay() === 0) return "";
+  return value;
 }
 
 export default function CustomerRequestClient({
@@ -121,12 +124,8 @@ export default function CustomerRequestClient({
   privacyPolicy,
 }: Props) {
   const request = initialInfo?.request ?? null;
-  const minDate = useMemo(
-    () => addDays(initialToday, INSTALL_DATE_MIN_DAYS_AHEAD),
-    [initialToday],
-  );
-  const maxDate = useMemo(
-    () => addDays(initialToday, INSTALL_DATE_MAX_DAYS_AHEAD),
+  const { min: minDate, max: maxDate } = useMemo(
+    () => getInstallDateBounds(initialToday),
     [initialToday],
   );
   const [info, setInfo] = useState<ApiInfo | null>(initialInfo);
@@ -134,7 +133,9 @@ export default function CustomerRequestClient({
   const [zonecode, setZonecode] = useState("");
   const [address, setAddress] = useState(initialInputValues.address);
   const [addressDetail, setAddressDetail] = useState("");
-  const [installDate, setInstallDate] = useState(request?.installDate ?? "");
+  const [installDate, setInstallDate] = useState(() =>
+    getSelectableInstallDate(request?.installDate ?? null, minDate, maxDate),
+  );
   const [timeSlot, setTimeSlot] = useState<(typeof TIME_SLOTS)[number] | "">(
     "",
   );
@@ -331,22 +332,21 @@ export default function CustomerRequestClient({
             onAddressDetailChange={setAddressDetail}
           />
 
-          <label style={fieldGapStyle}>
+          {/* 달력 안에 버튼이 여러 개라 label 로 감싸면 글자를 눌렀을 때 첫 버튼(이전 달)이 눌린다. */}
+          <div style={fieldGapStyle}>
             <span style={labelStyle}>
               설치 희망 날짜 <span style={requiredStyle}>(필수)</span>
             </span>
-            <input
-              type="date"
-              min={minDate}
-              max={maxDate}
+            <InstallDateCalendar
               value={installDate}
-              onChange={(event) => setInstallDate(event.target.value)}
-              style={inputStyle}
+              minDate={minDate}
+              maxDate={maxDate}
+              onSelect={setInstallDate}
+              accentColor={PRIMARY_COLOR}
             />
-            <span style={helperTextStyle}>
-              모레부터 {INSTALL_DATE_MAX_DAYS_AHEAD}일 이내 날짜를 선택해 주세요.
-            </span>
-          </label>
+            <span style={helperTextStyle}>{INSTALL_DATE_RANGE_NOTICE}</span>
+            <span style={helperTextStyle}>{INSTALL_DATE_SUNDAY_NOTICE}</span>
+          </div>
 
           <label style={fieldGapStyle}>
             <span style={labelStyle}>
@@ -366,7 +366,7 @@ export default function CustomerRequestClient({
                 </option>
               ))}
             </select>
-            <span style={helperTextStyle}>{SCHEDULE_ADJUST_NOTICE}</span>
+            <span style={helperTextStyle}>{INSTALL_SCHEDULE_ADJUST_NOTICE}</span>
           </label>
 
           <label style={consentStyle}>
@@ -531,7 +531,7 @@ function ConfirmReservationModal({
         <p style={modalDescriptionStyle}>접수 후 담당자가 확인하여 안내드립니다.</p>
         <SummaryList summary={summary} />
         <div style={modalNoticeStyle}>
-          <div>※ {SCHEDULE_ADJUST_NOTICE}</div>
+          <div>※ {INSTALL_SCHEDULE_ADJUST_NOTICE}</div>
           <div style={{ marginTop: 6 }}>
             ※ 설치 기사님이 <strong>{formatKrPhone(summary.normalizedPhone)}</strong> 로
             연락드립니다. 번호가 맞는지 확인해 주세요.
