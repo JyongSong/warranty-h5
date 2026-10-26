@@ -147,6 +147,30 @@ describe("sendPendingInstallationNotifications", () => {
     });
   });
 
+  it("leaves first installer assignment notifications out of the batch while they are held", async () => {
+    findMany.mockResolvedValue([]);
+
+    await sendPendingInstallationNotifications({
+      limit: 10,
+      now: new Date("2026-06-11T07:00:00.000Z"),
+      sendSms: vi.fn(),
+      holdInstallerFirstNotifications: true,
+    });
+
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      status: "PENDING",
+      NOT: { smsType: "INSTALLER_ASSIGNMENT_REQUEST", pushSentAt: null },
+    });
+  });
+
+  it("does not hold installer assignment notifications by default", async () => {
+    findMany.mockResolvedValue([]);
+
+    await sendPendingInstallationNotifications({ limit: 10, now: new Date(), sendSms: vi.fn() });
+
+    expect(findMany.mock.calls[0][0].where).not.toHaveProperty("NOT");
+  });
+
   it("pushes instead of texting when the installer has a registered device", async () => {
     const sendSms = vi.fn();
     const now = new Date("2026-06-11T00:00:00.000Z");

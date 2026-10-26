@@ -44,6 +44,12 @@ type SendPendingInstallationNotificationsOptions = {
   limit?: number;
   now?: Date;
   sendSms?: SendSms;
+  /**
+   * true 면 기사 배정 요청의 첫 알림(푸시·문자)을 보내지 않고 남겨 둔다.
+   * 이미 푸시가 나간 건의 폴백 문자와 다른 알림은 그대로 보낸다.
+   * 판정은 isInstallerAssignmentFirstNotificationOpen 참고.
+   */
+  holdInstallerFirstNotifications?: boolean;
 };
 
 export type SendPendingInstallationNotificationsResult = {
@@ -129,10 +135,15 @@ export async function sendPendingInstallationNotifications({
   limit = 25,
   now = new Date(),
   sendSms = defaultSendSms,
+  holdInstallerFirstNotifications = false,
 }: SendPendingInstallationNotificationsOptions = {}): Promise<SendPendingInstallationNotificationsResult> {
   const notifications = await prisma.installationNotification.findMany({
     where: {
       status: "PENDING",
+      // 남겨 둘 건은 조회에서 빼야 limit 을 차지해 다른 알림을 막지 않는다.
+      ...(holdInstallerFirstNotifications
+        ? { NOT: { smsType: "INSTALLER_ASSIGNMENT_REQUEST", pushSentAt: null } }
+        : {}),
       // 푸시를 보낸 건은 폴백 시간이 지나기 전까지 다시 집지 않는다.
       OR: [
         { pushSentAt: null },

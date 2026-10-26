@@ -25,7 +25,11 @@ import {
 } from "@/lib/installation/notifications/outbox";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
-import { isInstallationSmsSendWindowOpen } from "@/lib/installation/notifications/sms-send-window";
+import {
+  isInstallationSmsSendWindowOpen,
+  isInstallerAssignmentFirstNotificationOpen,
+} from "@/lib/installation/notifications/sms-send-window";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 import { remindUnrespondedAsAssignments } from "@/lib/installation/as/service";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +80,11 @@ export async function GET(request: Request) {
       const smsSendWindowOpen = isInstallationSmsSendWindowOpen(
         startedAt,
         config.smsSendWindow,
+      );
+      const installerFirstNotificationOpen = isInstallerAssignmentFirstNotificationOpen(
+        startedAt,
+        config.smsSendWindow,
+        INSTALLER_RESPONSE_TIMEOUT_HOURS,
       );
       const metrics: Record<string, { durationMs: number }> = {};
       const results = {
@@ -135,6 +144,7 @@ export async function GET(request: Request) {
             smsSendWindowOpen
               ? sendPendingInstallationNotifications({
                   limit: config.limits.sendInstallationNotifications,
+                  holdInstallerFirstNotifications: !installerFirstNotificationOpen,
                 })
               : Promise.resolve({
                   sentCount: 0,

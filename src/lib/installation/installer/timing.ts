@@ -10,6 +10,9 @@
  *
  * 폴백 문자가 나가도 마감 시각은 늘어나지 않는다. 문자 문안이 남은 시간이
  * 아니라 마감 "시각"을 안내하는 이유다.
+ *
+ * 마감이 밤(발송 시간대 밖)에 걸리지 않도록, 늦은 오후 배정은 첫 알림을 다음
+ * 날 발송 시간대 시작까지 미룬다. isInstallerAssignmentFirstNotificationOpen 참고.
  */
 export const INSTALLER_RESPONSE_TIMEOUT_HOURS = 5;
 export const INSTALLER_PUSH_SMS_FALLBACK_HOURS = 3;
