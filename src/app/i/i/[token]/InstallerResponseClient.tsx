@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { getErrorMessage } from "@/lib/error";
 import { submitInstallerResponseAction } from "./actions";
+import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 import {
   getInitialInstallerResponseStatus,
   INSTALLER_RESPONSE_UNAVAILABLE_STATUS,
@@ -111,11 +112,15 @@ function getDDay(date: string) {
   return diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
 }
 
+// 마감은 첫 알림(앱 푸시) 시점부터 센다. 폴백 문자는 그보다 늦게 오므로
+// "문자 수신 후 N시간" 이 아니라 마감 시각을 그대로 보여 준다.
+const RESPONSE_DEADLINE_FALLBACK = `알림 수신 후 ${INSTALLER_RESPONSE_TIMEOUT_HOURS}시간`;
+
 function formatResponseDeadline(expiresAt: string | null | undefined) {
-  if (!expiresAt) return "문자 수신 후 24시간";
+  if (!expiresAt) return RESPONSE_DEADLINE_FALLBACK;
 
   const date = new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return "문자 수신 후 24시간";
+  if (Number.isNaN(date.getTime())) return RESPONSE_DEADLINE_FALLBACK;
 
   const parts = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
@@ -134,16 +139,16 @@ function formatResponseDeadline(expiresAt: string | null | undefined) {
   const minute = valueByType.get("minute");
 
   if (!year || !month || !day || !hour || !minute) {
-    return "문자 수신 후 24시간";
+    return RESPONSE_DEADLINE_FALLBACK;
   }
 
   const numericHour = Number(hour);
-  if (!Number.isFinite(numericHour)) return "문자 수신 후 24시간";
+  if (!Number.isFinite(numericHour)) return RESPONSE_DEADLINE_FALLBACK;
 
   const dayPeriod = numericHour < 12 ? "오전" : "오후";
   const displayHour = String(numericHour % 12 || 12).padStart(2, "0");
 
-  return `문자 수신 후 24시간 (${year}.${month}.${day} ${dayPeriod} ${displayHour}:${minute})`;
+  return `${year}.${month}.${day} ${dayPeriod} ${displayHour}:${minute}`;
 }
 
 function getStatusHeader(status: ResponseStatus): StatusHeader | null {
@@ -152,7 +157,7 @@ function getStatusHeader(status: ResponseStatus): StatusHeader | null {
       mark: "✓",
       title: "배정을 수락했습니다",
       description: [
-        "48시간 이내 고객에게 확인 전화를 진행해 주세요.",
+        "24시간 이내 고객에게 확인 전화를 진행해 주세요.",
         "설치 시간은 고객과 확인 전화에서 최종 조율할 수 있습니다.",
       ],
       tone: "green",

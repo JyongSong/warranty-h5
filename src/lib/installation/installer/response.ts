@@ -49,6 +49,8 @@ type ResponseInput = {
   rejectReason?: string | null;
   now?: Date;
   tokenIsHash?: boolean;
+  // 앱에서 수락했으면 고객 정보가 이미 앱 화면에 열려 있으므로 해피콜 안내 문자를 보내지 않는다.
+  acceptedInApp?: boolean;
   baseUrl?: string;
   tokenFactory?: () => string;
 };
@@ -191,7 +193,9 @@ export async function respondInstallerAssignment(token: string, input: ResponseI
     }
 
     if (input.response === "ACCEPT") {
-      await acceptAssignment(tx as unknown as InstallerResponseTransaction, typedAssignment, now);
+      await acceptAssignment(tx as unknown as InstallerResponseTransaction, typedAssignment, now, {
+        sendHappycallSms: !input.acceptedInApp,
+      });
       return;
     }
 
@@ -263,7 +267,12 @@ const assignmentSelect = {
   },
 } as const;
 
-async function acceptAssignment(tx: InstallerResponseTransaction, assignment: AssignmentWithOrder, now: Date) {
+async function acceptAssignment(
+  tx: InstallerResponseTransaction,
+  assignment: AssignmentWithOrder,
+  now: Date,
+  { sendHappycallSms }: { sendHappycallSms: boolean },
+) {
   await tx.installationInstallerAssignmentAttempt.update({
     where: { id: assignment.id },
     data: {
@@ -311,7 +320,7 @@ async function acceptAssignment(tx: InstallerResponseTransaction, assignment: As
     });
   }
 
-  if (installer?.phone) {
+  if (sendHappycallSms && installer?.phone) {
     const customerRequest = assignment.installationOrder.customerRequests[0] ?? null;
     const normalizedInstallerPhone = normalizePhone11(installer.phone);
     const smsContent = buildInstallerHappycallGuideSmsContent({

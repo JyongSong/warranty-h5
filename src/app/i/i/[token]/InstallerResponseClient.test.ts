@@ -48,14 +48,14 @@ describe("InstallerResponseClient response UI", () => {
     expect(source).not.toContain("이 배정 요청은 현재 응답할 수 없는 상태입니다.");
   });
 
-  it("shows the 24-hour response deadline with date and minute precision", () => {
+  it("shows the response deadline with date and minute precision", () => {
     expect(source).toContain("function formatResponseDeadline");
     expect(source).toContain('timeZone: "Asia/Seoul"');
     expect(source).toContain('minute: "2-digit"');
     expect(source).not.toContain('second: "2-digit"');
     expect(source).toContain("const dayPeriod = numericHour < 12 ? \"오전\" : \"오후\";");
     expect(source).not.toContain("valueByType.get(\"dayPeriod\")");
-    expect(source).toContain("문자 수신 후 24시간 (${year}.${month}.${day} ${dayPeriod} ${displayHour}:${minute})");
+    expect(source).toContain("`${year}.${month}.${day} ${dayPeriod} ${displayHour}:${minute}`");
   });
 
   it("uses a stable unique product row key even when item names repeat", () => {
