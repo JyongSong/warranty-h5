@@ -2,6 +2,7 @@ import customerAssignmentConfirmedTemplate from "@/lib/installation/notification
 import customerReservationLinkTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-link.json";
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
+import partnerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-partner-assignment-request.json";
 
 type CustomerTemplateKey =
   | "customer_reservation_link"
@@ -20,6 +21,16 @@ export function renderInstallerInstallationSmsTemplate(
   vars: Record<string, string | null | undefined>,
 ) {
   return renderTemplate(getInstallerTemplateContent(key), vars);
+}
+
+export function renderPartnerInstallationSmsTemplate(
+  key: "partner_assignment_request",
+  vars: Record<string, string | null | undefined>,
+) {
+  switch (key) {
+    case "partner_assignment_request":
+      return renderTemplate(partnerAssignmentRequestTemplate.content, vars);
+  }
 }
 
 function getCustomerTemplateContent(key: CustomerTemplateKey) {

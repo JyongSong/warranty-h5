@@ -31,6 +31,7 @@ import {
 } from "@/lib/installation/notifications/sms-send-window";
 import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
 import { remindUnrespondedAsAssignments } from "@/lib/installation/as/service";
+import { assignReadyOrdersToPartner } from "@/lib/installation/partner/service";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,13 @@ export async function GET(request: Request) {
             limit: config.limits.fallbackCustomerRequests,
           }),
         ),
+        // 조명·월패드 설치 건은 자사 기사 자동배정보다 먼저 협력사(PL)로 넘긴다.
+        assignPartnerOrders: await runDispatcherStep("assignPartnerOrders", metrics, () =>
+          assignReadyOrdersToPartner({
+            baseUrl,
+            limit: config.limits.dispatchReadyOrders,
+          }),
+        ),
         dispatchReadyOrders: await runDispatcherStep("dispatchReadyOrders", metrics, () =>
           dispatchReadyInstallationOrders({
             baseUrl,
@@ -178,6 +186,7 @@ export async function GET(request: Request) {
       });
       const degraded =
         results.processInstallationOrders.failedCount > 0 ||
+        results.assignPartnerOrders.failedCount > 0 ||
         results.dispatchReadyOrders.failedCount > 0 ||
         results.timeoutInstallerAssignments.failedCount > 0 ||
         results.sendInstallationNotifications.failedCount > 0 ||

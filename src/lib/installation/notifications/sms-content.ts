@@ -1,6 +1,7 @@
 import {
   renderCustomerInstallationSmsTemplate,
   renderInstallerInstallationSmsTemplate,
+  renderPartnerInstallationSmsTemplate,
 } from "@/lib/installation/notifications/sms-template";
 import { formatKrPhone } from "@/lib/phone";
 import { type AlimtalkRequest } from "@/lib/notifications/alimtalk";
@@ -10,7 +11,8 @@ export type InstallationSmsTemplateKey =
   | "customer_reservation_link"
   | "installer_assignment_request"
   | "installer_happycall_guide"
-  | "customer_assignment_confirmed";
+  | "customer_assignment_confirmed"
+  | "partner_assignment_request";
 
 export type InstallationSmsContent = {
   templateKey: InstallationSmsTemplateKey;
@@ -30,6 +32,7 @@ const SUBJECT_BY_TEMPLATE_KEY: Record<InstallationSmsTemplateKey, string> = {
   customer_assignment_confirmed: "[아카라라이프] 설치 배정 완료",
   installer_assignment_request: "[아카라라이프] 설치 배정 요청",
   installer_happycall_guide: "[아카라라이프] 해피콜 안내",
+  partner_assignment_request: "[아카라라이프] 협력사 설치 배정",
 };
 
 /** outbox 는 DB 에 저장된 templateKey 만 갖고 있으므로 여기서 제목을 찾는다. */
@@ -89,6 +92,30 @@ export function buildInstallerAssignmentRequestSmsContent({
       // responseDeadline 은 여기서 채우지 않는다. 마감 시각은 알림이 실제로
       // 나가는 시점에 정해지고(발송 창 때문에 생성 시점과 몇 시간 차이날 수
       // 있다), outbox 가 applyInstallerResponseDeadline 으로 채운다.
+    }),
+  };
+}
+
+export function buildPartnerAssignmentRequestSmsContent({
+  addressMain,
+  installDate,
+  productSummary,
+  partnerUrl,
+}: {
+  addressMain?: string | null;
+  installDate?: string | null;
+  productSummary?: string | null;
+  partnerUrl: string;
+}): InstallationSmsContent {
+  const templateKey = "partner_assignment_request";
+  return {
+    templateKey,
+    subject: SUBJECT_BY_TEMPLATE_KEY[templateKey],
+    text: renderPartnerInstallationSmsTemplate(templateKey, {
+      addressMain: addressMain?.trim() || "미확인",
+      installDate: installDate?.trim() || "미확인",
+      productSummary: formatSmsProductSummary(productSummary),
+      partnerUrl,
     }),
   };
 }

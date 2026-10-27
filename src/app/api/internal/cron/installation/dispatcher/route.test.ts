@@ -13,6 +13,7 @@ import {
   syncInstallationSmsDeliveryReports,
 } from "@/lib/installation/notifications/outbox";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
+import { assignReadyOrdersToPartner } from "@/lib/installation/partner/service";
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
 import { prisma } from "@/lib/prisma";
 
@@ -55,12 +56,17 @@ vi.mock("@/lib/installation/installer/guards", () => ({
   timeoutExpiredInstallerAssignments: vi.fn(),
 }));
 
+vi.mock("@/lib/installation/partner/service", () => ({
+  assignReadyOrdersToPartner: vi.fn(),
+}));
+
 vi.mock("@/lib/installation/notifications/outbox", () => ({
   sendPendingInstallationNotifications: vi.fn(),
   syncInstallationSmsDeliveryReports: vi.fn(),
 }));
 
 const getSmsLinkBaseUrlMock = vi.mocked(getSmsLinkBaseUrl);
+const assignReadyOrdersToPartnerMock = vi.mocked(assignReadyOrdersToPartner);
 const processPendingInstallationOrdersMock = vi.mocked(processPendingInstallationOrders);
 const fallbackExpiredInstallationCustomerRequestsMock = vi.mocked(fallbackExpiredInstallationCustomerRequests);
 const dispatchReadyInstallationOrdersMock = vi.mocked(dispatchReadyInstallationOrders);
@@ -143,6 +149,7 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
       skippedCount: 5,
       failedCount: 0,
     });
+    assignReadyOrdersToPartnerMock.mockResolvedValue({ assignedCount: 0, failedCount: 0 });
     timeoutExpiredInstallerAssignmentsMock.mockResolvedValue({ timedOutCount: 6, failedCount: 0 });
     alertOrphanedInstallationOrdersMock.mockResolvedValue({ issueCount: 0 });
     alertDueSoonUnassignedOrdersMock.mockResolvedValue({ issueCount: 7 });

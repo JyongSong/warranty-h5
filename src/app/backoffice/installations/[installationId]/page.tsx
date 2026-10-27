@@ -18,6 +18,8 @@ import { getInstallationOrderStatusDetail } from "@/lib/installation/orders/view
 import { getInstallationCompletionForOrder } from "@/lib/installation/completion/service";
 import InstallationOrderDetail, { type InstallationOrderDetailItem } from "./InstallationOrderDetail";
 import CompletionReviewPanel from "./CompletionReviewPanel";
+import PartnerAssignmentPanel from "./PartnerAssignmentPanel";
+import { getBackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +65,10 @@ export async function renderInstallationOrderDetailPage({
     notFound();
   }
 
-  const completion = await getInstallationCompletionForOrder(installationId);
+  const [completion, partnerPanel] = await Promise.all([
+    getInstallationCompletionForOrder(installationId),
+    getBackofficePartnerPanelData(installationId),
+  ]);
 
   const requiredCapabilities = parseRequiredCapabilitiesText(order.requiredCapabilities);
   const requiredAqaraAppCapability = order.requiredAqaraAppCapability ?? "NONE";
@@ -193,6 +198,7 @@ export async function renderInstallationOrderDetailPage({
 
   return (
     <>
+      {partnerPanel ? <PartnerAssignmentPanel installationId={installationId} data={partnerPanel} /> : null}
       {completion ? (
         <CompletionReviewPanel
           orderId={installationId}

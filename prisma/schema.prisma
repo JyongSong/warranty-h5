@@ -455,6 +455,40 @@ model BackofficeUser {
   @@map("backoffice_users")
 }
 
+// 설치를 통째로 맡기는 외부 협력사 (조명·월패드 설치 → PL).
+// 협력사 관리자는 partner_accounts(partner_code = code) 로 /partner 에 로그인한다.
+model InstallationPartner {
+  id          String              @id @default(dbgenerated("(gen_random_uuid())::text"))
+  code        String              @unique
+  name        String
+  // 새 배정 알림 문자를 받을 협력사 관리자 번호 (업체 대표 연락처라 평문 보관)
+  notifyPhone String?             @map("notify_phone")
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  orders      InstallationOrder[]
+
+  @@map("installation_partners")
+}
+
+// 협력사 배정 건의 진행 기록: 협력사/본사 메모, 협력사 진행 상태 변경, 완료 등록, 본사 검수.
+model InstallationPartnerNote {
+  id                  String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installationOrderId String            @map("installation_order_id")
+  installationOrder   InstallationOrder @relation(fields: [installationOrderId], references: [id], onDelete: Cascade)
+  partnerId           String?           @map("partner_id")
+  authorUserId        String?           @map("author_user_id")
+  authorType          String            @map("author_type")
+  kind                String
+  partnerStatus       String?           @map("partner_status")
+  body                String?           @db.Text
+  photoPaths          String[]          @default([]) @map("photo_paths")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([installationOrderId, createdAt])
+  @@map("installation_partner_notes")
+}
+
 model InstallationOrder {
   id                      String                                   @id @default(dbgenerated("(gen_random_uuid())::text"))
   sourceId                String?                                  @unique @map("source_id")
@@ -481,9 +515,18 @@ model InstallationOrder {
   issues                  InstallationIssue[]                      @relation("InstallationOrderIssues")
   notifications           InstallationNotification[]
   completion              InstallationCompletion?
+  // 외부 협력사 배정. partnerRouting 은 자동 판별을 관리자가 덮어쓴 값 (PARTNER / INHOUSE).
+  partnerId               String?                                  @map("partner_id")
+  partner                 InstallationPartner?                     @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  partnerAssignedAt       DateTime?                                @map("partner_assigned_at") @db.Timestamptz(6)
+  partnerStatus           String?                                  @map("partner_status")
+  partnerStatusChangedAt  DateTime?                                @map("partner_status_changed_at") @db.Timestamptz(6)
+  partnerRouting          String?                                  @map("partner_routing")
+  partnerNotes            InstallationPartnerNote[]
 
   @@index([status, createdAt])
   @@index([status, statusChangedAt])
+  @@index([partnerId, partnerStatus])
   @@map("installation_orders")
 }
 

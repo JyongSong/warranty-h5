@@ -102,6 +102,9 @@ async function listReferencedPaths() {
     select: { completionPhotoPaths: true },
   });
   for (const row of asOrders) for (const path of row.completionPhotoPaths) referenced.add(path);
+  // 외부 협력사(PL) 완료 사진 (partner/<orderId>/).
+  const partnerNotes = await prisma.installationPartnerNote.findMany({ select: { photoPaths: true } });
+  for (const row of partnerNotes) for (const path of row.photoPaths) referenced.add(path);
 
   return referenced;
 }

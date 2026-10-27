@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import {
   PARTNER_COOKIE_NAME,
   createPartnerSessionToken,
-  requirePartner,
+  getPartnerHomePath,
+  requirePartnerWithCode,
   verifyPartnerPassword,
 } from "@/lib/partnerAuth";
 import {
@@ -28,7 +29,7 @@ export async function partnerLoginAction(formData: FormData): Promise<PartnerLog
 
   const partner = await prisma.partnerAccount.findUnique({
     where: { loginId },
-    select: { id: true, passwordHash: true, active: true },
+    select: { id: true, passwordHash: true, active: true, partnerCode: true },
   });
 
   // 존재하지 않는 아이디와 틀린 비밀번호를 같은 문구로 돌려준다(계정 탐색 방지).
@@ -50,7 +51,7 @@ export async function partnerLoginAction(formData: FormData): Promise<PartnerLog
     maxAge: 12 * 60 * 60,
   });
 
-  redirect("/partner/cj");
+  redirect(getPartnerHomePath(partner.partnerCode));
 }
 
 export async function partnerLogoutAction() {
@@ -64,7 +65,7 @@ export type UploadManifestResult =
   | { ok: false; message: string };
 
 export async function uploadCjManifestAction(formData: FormData): Promise<UploadManifestResult> {
-  const partner = await requirePartner();
+  const partner = await requirePartnerWithCode("CJ");
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -112,7 +113,7 @@ export type SearchManifestResult =
   | { ok: false; message: string };
 
 export async function searchCjManifestAction(query: string): Promise<SearchManifestResult> {
-  await requirePartner();
+  await requirePartnerWithCode("CJ");
 
   try {
     const { entries, truncated } = await searchCjManifestEntries(query);
@@ -136,7 +137,7 @@ export async function searchCjManifestAction(query: string): Promise<SearchManif
 export type DeleteManifestResult = { ok: true } | { ok: false; message: string };
 
 export async function deleteCjManifestAction(id: string): Promise<DeleteManifestResult> {
-  await requirePartner();
+  await requirePartnerWithCode("CJ");
 
   try {
     const result = await deleteCjManifestEntry(id);

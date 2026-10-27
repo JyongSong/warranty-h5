@@ -111,3 +111,17 @@ export async function requirePartner(): Promise<AuthPartner> {
   }
   return partner;
 }
+
+// 협력사 코드별 첫 화면. CJ 는 주문번호 명단 업로드, PL 은 배정된 설치 건 관리.
+export function getPartnerHomePath(partnerCode: string) {
+  return partnerCode === "PL" ? "/partner/orders" : "/partner/cj";
+}
+
+/** 해당 협력사 코드의 계정만 통과시킨다. 다른 협력사 계정은 자기 첫 화면으로 보낸다. */
+export async function requirePartnerWithCode(partnerCode: string): Promise<AuthPartner> {
+  const partner = await requirePartner();
+  if (partner.partnerCode !== partnerCode) {
+    redirect(getPartnerHomePath(partner.partnerCode));
+  }
+  return partner;
+}

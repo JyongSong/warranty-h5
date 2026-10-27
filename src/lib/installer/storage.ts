@@ -104,6 +104,11 @@ export function createAsCompletionUploadTargets(asOrderId: string, count: number
   return createUploadTargets(`as/${asOrderId}/`, count);
 }
 
+// 외부 협력사(PL) 완료 사진. 경로 접두사는 partner/service 의 isPartnerPhotoPathForOrder 와 맞춘다.
+export function createPartnerCompletionUploadTargets(orderId: string, count: number) {
+  return createUploadTargets(`partner/${orderId}/`, count);
+}
+
 /**
  * 제출된 경로가 실제로 Storage 에 올라와 있는지 확인한다.
  *

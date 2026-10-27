@@ -174,6 +174,8 @@ export async function listInstallationOrderStatuses({
         select: installationAssignmentAttemptListSelect,
       },
       currentInstallerId: true,
+      partnerStatus: true,
+      partner: { select: { name: true } },
       hasOpenIssue: true,
       statusChangedAt: true,
       createdAt: true,

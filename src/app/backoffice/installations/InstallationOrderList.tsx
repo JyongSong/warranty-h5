@@ -26,6 +26,7 @@ import {
   approveInstallationAssignmentsAction,
   sendCustomerInputSmsForInstallationOrdersAction,
 } from "./actions";
+import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 
 const TABLE_PREFS_KEY = "backoffice.installations.table.v3";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
@@ -45,6 +46,8 @@ export type InstallationOrderListItem = {
   sourceOrderDate: string | null;
   status: string;
   currentInstallerId: string | null;
+  /** 외부 협력사(PL) 배정 건이면 협력사명과 협력사 진행 상태 */
+  partner?: { name: string; status: string | null } | null;
   hasOpenIssue: boolean;
   issueCodes: string[];
   statusChangedAt: string;
@@ -462,11 +465,17 @@ export default function InstallationOrderList({
       const assignmentColumns: ColumnDef<InstallationOrderListItem>[] = [
         {
           id: "assignedInstaller",
-          accessorFn: (row) => row.assignment?.installerName ?? row.assignment?.installerId ?? "",
+          accessorFn: (row) =>
+            formatPartnerAssignee(row.partner) ?? row.assignment?.installerName ?? row.assignment?.installerId ?? "",
           header: "배정-기사",
           size: 180,
           minSize: 120,
-          cell: ({ row }) => formatText(row.original.assignment?.installerName ?? row.original.assignment?.installerId),
+          cell: ({ row }) =>
+            formatText(
+              formatPartnerAssignee(row.original.partner) ??
+                row.original.assignment?.installerName ??
+                row.original.assignment?.installerId,
+            ),
           sortingFn: "alphanumeric",
         },
         {
@@ -580,11 +589,12 @@ export default function InstallationOrderList({
         statusChangedAtColumn,
         {
           id: "finalInstaller",
-          accessorFn: (row) => row.assignment?.installerId ?? "",
+          accessorFn: (row) => formatPartnerAssignee(row.partner) ?? row.assignment?.installerId ?? "",
           header: "최종 기사",
           size: 180,
           minSize: 120,
-          cell: ({ row }) => formatText(row.original.assignment?.installerId),
+          cell: ({ row }) =>
+            formatText(formatPartnerAssignee(row.original.partner) ?? row.original.assignment?.installerId),
           sortingFn: "alphanumeric",
         },
       ];
@@ -1249,4 +1259,10 @@ function getAdminAttentionTextClassName(row: InstallationOrderListItem) {
   if (getAdminAttentionLabel(row) === "-") return "text-xs font-semibold text-zinc-400";
 
   return "text-xs font-semibold text-amber-700";
+}
+
+// 협력사(PL) 배정 건은 기사 대신 "PL · 진행 상태" 로 보인다. 이전 자사 배정 시도는 무시한다.
+function formatPartnerAssignee(partner: InstallationOrderListItem["partner"]) {
+  if (!partner) return null;
+  return `${partner.name} · ${formatPartnerStatus(partner.status)}`;
 }

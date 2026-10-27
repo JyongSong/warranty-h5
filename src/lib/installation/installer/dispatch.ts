@@ -19,6 +19,7 @@ import {
   toInstallationNotificationAlimtalkFields,
 } from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
+import { shouldRouteToPartner } from "@/lib/installation/partner/routing";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -68,6 +69,7 @@ type AssignmentDispatchResult = {
 type ReadyOrder = {
   id: string;
   activeCustomerRequestId: string | null;
+  partnerRouting?: string | null;
   source: {
     memo: string | null;
     addressEncrypted: string | null;
@@ -150,6 +152,7 @@ export async function dispatchReadyInstallationOrders({
     select: {
       id: true,
       activeCustomerRequestId: true,
+      partnerRouting: true,
       source: {
         select: {
           memo: true,
@@ -185,6 +188,12 @@ export async function dispatchReadyInstallationOrders({
   let skippedCount = 0;
   let failedCount = 0;
   for (const order of orders as ReadyOrder[]) {
+    // 협력사(PL) 대상 건은 assignReadyOrdersToPartner 가 먼저 가져간다. 그 단계가
+    // 실패했거나 협력사가 꺼져 있어도 자사 도어락 기사에게 보내지 않는다.
+    if (!orderId && shouldRouteToPartner({ memo: order.source?.memo, partnerRouting: order.partnerRouting })) {
+      skippedCount += 1;
+      continue;
+    }
     try {
     const customerRequest = getActiveCustomerRequest(order);
     const installAddress = decryptNullablePii(customerRequest?.installAddressEncrypted);
