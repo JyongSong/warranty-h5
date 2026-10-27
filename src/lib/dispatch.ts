@@ -238,10 +238,15 @@ export function determineItem(memo: string): { itemCode: string | null; itemName
 // 데이터 조회 + 분배 파이프라인
 // ============================================================
 
-// 설치 업무 대상이 되는 용역 품목: 00010 출장비, 00012% 도어락 설치비,
-// 그리고 외부 협력사(PL)로 넘기는 00011 조명 스위치 / 00019 월패드 모듈 / 00024 슬림 면조명 설치비.
+// 외부 협력사(PL)로 넘기는 용역 품목 코드. 품목명 목록은 installation/partner/routing.ts 와 맞춘다.
+const PARTNER_SERVICE_ITEM_CODES = [
+  '00004', '00011', '00013', '00013-1', '00013-2', '00014', '00015', '00015-1', '00024', '00025', '00027',
+]
+
+// 설치 업무 대상이 되는 용역 품목: 00010 출장비, 00012% 도어락 설치비, 그리고 PL 용역 품목.
 function serviceItemCondition(alias: string) {
-  return `(${alias}.CD_ITEM IN ('00010', '00011', '00019', '00024') OR ${alias}.CD_ITEM LIKE '00012%')`
+  const codes = ['00010', ...PARTNER_SERVICE_ITEM_CODES].map((code) => `'${code}'`).join(', ')
+  return `(${alias}.CD_ITEM IN (${codes}) OR ${alias}.CD_ITEM LIKE '00012%')`
 }
 
 // 기사배정 대상 조회 SQL. 정규 조회(납기일자 범위)와 번호 직접 조회가 같은
@@ -457,7 +462,7 @@ const DISPATCH_CONF_WHERE_BY_NUMBER = `        WHERE CONF.CD_COMPANY = '1000'
 /**
  * 기사배정 대상 주문 조회 (ERP)
  * - 납기일자 (DT_DUEDATE) 범위 매칭
- * - 해당 주문(NO_SO)에 용역 품목(serviceItemCondition: 출장비 / 도어락 · 조명 · 월패드 설치비) 포함
+ * - 해당 주문(NO_SO)에 용역 품목(serviceItemCondition: 출장비 / 도어락 설치비 / PL 용역 품목) 포함
  * - 전화번호 기준 그룹핑 (한 사람 = 한 행)
  * @param dueDateFrom YYYYMMDD (포함)
  * @param dueDateTo   YYYYMMDD (포함)

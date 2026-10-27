@@ -72,8 +72,8 @@ export default function PartnerAssignmentPanel({
               {data.partnerRouting === "PARTNER"
                 ? "PL 배정 예정 (고객 입력이 끝나면 자동으로 넘어갑니다)"
                 : data.hasPartnerServiceItem
-                  ? "조명·월패드 설치 건 — 고객 입력이 끝나면 PL 로 자동 배정됩니다."
-                  : "자사 기사 배정 건입니다. 조명·월패드 설치가 필요하면 PL 로 넘길 수 있습니다."}
+                  ? "PL 용역 품목(조명·커튼·도어벨 등)이 든 건 — 고객 입력이 끝나면 PL 로 자동 배정됩니다."
+                  : "자사 기사 배정 건입니다. PL 이 맡아야 하는 건이면 PL 로 넘길 수 있습니다."}
             </p>
           </div>
           {data.canSwitchToPartner && data.partnerRouting !== "PARTNER" ? (

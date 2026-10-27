@@ -57,7 +57,7 @@ describe("installation partner service", () => {
       status: "READY_FOR_CANDIDATE_SELECTION",
       activeAssignmentId: null,
       activeCustomerRequestId: "request-1",
-      source: { memo: "용역 월패드 모듈 설치비 x1" },
+      source: { memo: "용역 조명 스위치 설치비 x1" },
       activeCustomerRequest: { installDate: "2026-10-30", installAddress1Encrypted: null },
     });
 

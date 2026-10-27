@@ -40,7 +40,7 @@ export type AssignReadyOrdersToPartnerResult = {
 };
 
 /**
- * 고객 입력이 끝난(READY_FOR_CANDIDATE_SELECTION) 조명·월패드 설치 건을 협력사에 넘긴다.
+ * 고객 입력이 끝난(READY_FOR_CANDIDATE_SELECTION) PL 용역 품목(도어락팀 밖의 설치) 건을 협력사에 넘긴다.
  * 디스패처에서 자사 기사 자동배정보다 먼저 돈다. 자사 배정과 달리 설치 희망일
  * 10일 이내를 기다리지 않는다 — 일정은 협력사가 직접 잡는다.
  */

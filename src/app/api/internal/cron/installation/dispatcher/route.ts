@@ -111,7 +111,7 @@ export async function GET(request: Request) {
             limit: config.limits.fallbackCustomerRequests,
           }),
         ),
-        // 조명·월패드 설치 건은 자사 기사 자동배정보다 먼저 협력사(PL)로 넘긴다.
+        // PL 용역 품목(조명·커튼·도어벨 등) 건은 자사 기사 자동배정보다 먼저 협력사(PL)로 넘긴다.
         assignPartnerOrders: await runDispatcherStep("assignPartnerOrders", metrics, () =>
           assignReadyOrdersToPartner({
             baseUrl,
