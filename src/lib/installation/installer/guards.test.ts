@@ -6,10 +6,12 @@ import {
 } from "@/lib/installation/installer/guards";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
 import { respondInstallerAssignment } from "@/lib/installation/installer/response";
+import { decryptPii, encryptPii } from "@/lib/piiCrypto";
 
-const { findManyAssignments, findManyOrders } = vi.hoisted(() => ({
+const { findManyAssignments, findManyOrders, upsertNotification } = vi.hoisted(() => ({
   findManyAssignments: vi.fn(),
   findManyOrders: vi.fn(),
+  upsertNotification: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -19,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({
     },
     installationOrder: {
       findMany: findManyOrders,
+    },
+    installationNotification: {
+      upsert: upsertNotification,
     },
   },
 }));
@@ -38,6 +43,8 @@ describe("installation dispatch guards", () => {
   beforeEach(() => {
     findManyAssignments.mockReset();
     findManyOrders.mockReset();
+    upsertNotification.mockReset();
+    process.env.PII_ENCRYPTION_KEY = "test-pii-key";
     respondInstallerAssignmentMock.mockReset();
     createInstallationIssueMock.mockReset();
   });
@@ -67,6 +74,8 @@ describe("installation dispatch guards", () => {
         id: true,
         installationOrderId: true,
         installerTokenHash: true,
+        installer: { select: { phone: true } },
+        customerRequest: { select: { installAddress1Encrypted: true } },
       },
     });
     expect(respondInstallerAssignmentMock).toHaveBeenCalledWith("hashed-token", {
@@ -75,6 +84,60 @@ describe("installation dispatch guards", () => {
       now,
       tokenIsHash: true,
     });
+  });
+
+  it("queues a cancel notice for the timed-out installer instead of sending it right away", async () => {
+    const now = new Date("2026-06-11T17:00:00.000Z"); // 02:00 KST
+    findManyAssignments.mockResolvedValue([
+      {
+        id: "assignment-1",
+        installationOrderId: "order-1",
+        installerTokenHash: "hashed-token",
+        installer: { phone: "010-1111-2222" },
+        customerRequest: { installAddress1Encrypted: encryptPii("서울 강남구 테헤란로 1") },
+      },
+    ]);
+    respondInstallerAssignmentMock.mockResolvedValue(undefined);
+
+    await timeoutExpiredInstallerAssignments({ now, limit: 10 });
+
+    expect(upsertNotification).toHaveBeenCalledWith({
+      where: { idempotencyKey: "installer-assignment-timeout:assignment-1" },
+      create: expect.objectContaining({
+        installationOrderId: "order-1",
+        assignmentAttemptId: "assignment-1",
+        smsType: "INSTALLER_ASSIGNMENT_TIMEOUT",
+        recipientType: "INSTALLER",
+        status: "PENDING",
+        smsBody: expect.stringContaining("서울 강남구 테헤란로 1"),
+      }),
+      update: {},
+    });
+    const created = upsertNotification.mock.calls[0][0].create;
+    expect(decryptPii(created.recipientPhoneEncrypted)).toBe("01011112222");
+  });
+
+  it("keeps the timeout even when the cancel notice cannot be queued", async () => {
+    const now = new Date("2026-06-11T05:00:00.000Z");
+    findManyAssignments.mockResolvedValue([
+      {
+        id: "assignment-1",
+        installationOrderId: "order-1",
+        installerTokenHash: "hashed-token",
+        installer: { phone: "010-1111-2222" },
+        customerRequest: null,
+      },
+    ]);
+    respondInstallerAssignmentMock.mockResolvedValue(undefined);
+    upsertNotification.mockRejectedValue(new Error("db down"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(timeoutExpiredInstallerAssignments({ now, limit: 10 })).resolves.toEqual({
+      timedOutCount: 1,
+      failedCount: 0,
+    });
+    expect(createInstallationIssueMock).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("opens an admin issue when timeout processing fails", async () => {

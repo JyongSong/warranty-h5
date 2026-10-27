@@ -9,6 +9,7 @@ import {
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
 import {
+  pushPendingInstallerAssignmentRequests,
   sendPendingInstallationNotifications,
   syncInstallationSmsDeliveryReports,
 } from "@/lib/installation/notifications/outbox";
@@ -56,6 +57,7 @@ vi.mock("@/lib/installation/installer/guards", () => ({
 }));
 
 vi.mock("@/lib/installation/notifications/outbox", () => ({
+  pushPendingInstallerAssignmentRequests: vi.fn(),
   sendPendingInstallationNotifications: vi.fn(),
   syncInstallationSmsDeliveryReports: vi.fn(),
 }));
@@ -68,6 +70,7 @@ const timeoutExpiredInstallerAssignmentsMock = vi.mocked(timeoutExpiredInstaller
 const alertOrphanedInstallationOrdersMock = vi.mocked(alertOrphanedInstallationOrders);
 const alertDueSoonUnassignedOrdersMock = vi.mocked(alertDueSoonUnassignedOrders);
 const sendPendingInstallationNotificationsMock = vi.mocked(sendPendingInstallationNotifications);
+const pushPendingInstallerAssignmentRequestsMock = vi.mocked(pushPendingInstallerAssignmentRequests);
 const syncInstallationSmsDeliveryReportsMock = vi.mocked(syncInstallationSmsDeliveryReports);
 const cronJobStatusUpdateMock = vi.mocked(prisma.cronJobStatus.update);
 const cronJobStatusUpsertMock = vi.mocked(prisma.cronJobStatus.upsert);
@@ -147,6 +150,7 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
     alertOrphanedInstallationOrdersMock.mockResolvedValue({ issueCount: 0 });
     alertDueSoonUnassignedOrdersMock.mockResolvedValue({ issueCount: 7 });
     sendPendingInstallationNotificationsMock.mockResolvedValue({ sentCount: 8, failedCount: 0, pushedCount: 0 });
+    pushPendingInstallerAssignmentRequestsMock.mockResolvedValue({ pushedCount: 0, failedCount: 0 });
     syncInstallationSmsDeliveryReportsMock.mockResolvedValue({
       checkedCount: 9,
       updatedCount: 9,
@@ -440,6 +444,8 @@ describe("GET /api/internal/cron/installation/dispatcher", () => {
 
     expect(response.status).toBe(200);
     expect(sendPendingInstallationNotificationsMock).not.toHaveBeenCalled();
+    // 기사 배정 요청 푸시는 시간대 밖에도 바로 나간다.
+    expect(pushPendingInstallerAssignmentRequestsMock).toHaveBeenCalled();
     expect(processPendingInstallationOrdersMock).toHaveBeenCalled();
     expect(dispatchReadyInstallationOrdersMock).toHaveBeenCalled();
     expect(syncInstallationSmsDeliveryReportsMock).toHaveBeenCalled();

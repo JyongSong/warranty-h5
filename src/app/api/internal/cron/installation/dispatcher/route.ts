@@ -20,6 +20,7 @@ import {
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
 import {
+  pushPendingInstallerAssignmentRequests,
   sendPendingInstallationNotifications,
   syncInstallationSmsDeliveryReports,
 } from "@/lib/installation/notifications/outbox";
@@ -136,12 +137,14 @@ export async function GET(request: Request) {
               ? sendPendingInstallationNotifications({
                   limit: config.limits.sendInstallationNotifications,
                 })
-              : Promise.resolve({
+              : // 발송 시간대 밖에도 기사 배정 요청 푸시는 바로 보낸다. 문자는 시간대가 열릴 때.
+                pushPendingInstallerAssignmentRequests({
+                  limit: config.limits.sendInstallationNotifications,
+                }).then((pushResult) => ({
                   sentCount: 0,
-                  failedCount: 0,
-                  pushedCount: 0,
+                  ...pushResult,
                   skippedQuietHours: true,
-                }),
+                })),
         ),
         alertOrphanedOrders: await runDispatcherStep("alertOrphanedOrders", metrics, () =>
           alertOrphanedInstallationOrders({
