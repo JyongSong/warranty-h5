@@ -123,6 +123,11 @@ vi.mock("./installations/actions", () => ({
   switchInstallationOrderToManualRequiredAction: vi.fn(),
 }));
 
+vi.mock("./installation-order-source/actions", () => ({
+  addErpOrderToQueueAction: vi.fn(),
+  lookupErpOrderByNumberAction: vi.fn(),
+}));
+
 const backofficeDir = join(process.cwd(), "src", "app", "backoffice");
 const loginDir = join(process.cwd(), "src", "app", "login");
 const routesDir = join(backofficeDir, "installations");

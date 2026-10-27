@@ -4,6 +4,7 @@ import type { FetchedInstallationOrder } from "@/lib/installation/orders/source/
 import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
+import ErpOrderLookupPanel from "./ErpOrderLookupPanel";
 import { installationOrderSourceColumns } from "./InstallationOrderSourceTable.columns";
 
 const TABLE_PREFS_KEY = "backoffice.installation-order-source.table.v3";
@@ -28,6 +29,8 @@ export default function InstallationOrderSourceTable({
             데이터 처리 중 오류가 발생했습니다. {errorMessage}
           </div>
         ) : null}
+
+        <ErpOrderLookupPanel />
 
         <BackofficeDataTable
           columns={installationOrderSourceColumns}

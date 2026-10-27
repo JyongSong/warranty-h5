@@ -238,38 +238,22 @@ export function determineItem(memo: string): { itemCode: string | null; itemName
 // 데이터 조회 + 분배 파이프라인
 // ============================================================
 
-/**
- * 기사배정 대상 주문 조회 (ERP)
- * - 납기일자 (DT_DUEDATE) 범위 매칭
- * - 해당 주문(NO_SO)에 용역 품목(00010 출장비 / 00012% 도어락 설치비) 포함
- * - 전화번호 기준 그룹핑 (한 사람 = 한 행)
- * @param dueDateFrom YYYYMMDD (포함)
- * @param dueDateTo   YYYYMMDD (포함)
- */
-export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string): Promise<DispatchRow[]> {
-  const pool = await getErpPool()
-  const result = await pool.request()
-    .input('dueDateFrom', sql.VarChar(8), dueDateFrom)
-    .input('dueDateTo',   sql.VarChar(8), dueDateTo)
-    .query(`
+// 기사배정 대상 조회 SQL. 정규 조회(납기일자 범위)와 번호 직접 조회가 같은
+// 행 조립(lines → 전화번호 그룹핑)을 쓰고, 어떤 주문을 대상으로 삼을지만 다르다.
+// eligible 은 NO_SO/CD_COMPANY(번호 조회면 shipped 도) 를 내는 SELECT 본문,
+// confWhere 는 내부/인플루언서 단(CZ_PU_INOUT_CONF) 의 WHERE 절이다.
+function buildDispatchRowsQuery({
+  eligible,
+  confWhere,
+  lookupFlags,
+}: {
+  eligible: string
+  confWhere: string
+  lookupFlags: boolean
+}) {
+  return `
       WITH eligible AS (
-        SELECT DISTINCT SOL.NO_SO, SOL.CD_COMPANY
-        FROM NEOE.SA_SOL SOL
-        WHERE SOL.CD_COMPANY = '1000'
-          AND SOL.NO_HST     = 0
-          AND SOL.DT_DUEDATE BETWEEN @dueDateFrom AND @dueDateTo
-          AND (SOL.CD_ITEM = '00010' OR SOL.CD_ITEM LIKE '00012%')
-          -- 출하의뢰가 1건 이상 존재하고, 모든 SA_GIRL 라인이 QT_GIR = QT_GI 인 주문만
-          AND EXISTS (
-            SELECT 1 FROM NEOE.SA_GIRL G
-            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM NEOE.SA_GIRL G
-            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
-              AND G.QT_GIR <> G.QT_GI
-          )
-      ),
+${eligible}      ),
       lines AS (
         SELECT
           SOL.NO_SO, SOL.SEQ_SO, SOL.CD_COMPANY,
@@ -299,7 +283,7 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
             NULLIF(LTRIM(RTRIM(CZ.DC_ADDR1)), ''),
             NULLIF(LTRIM(RTRIM(ISNULL(DLV.ADDR1, '') + ' ' + ISNULL(DLV.ADDR2, ''))), '')
           ) AS addr,
-          CZ.PRODUCT_NAME AS product_name
+          CZ.PRODUCT_NAME AS product_name${lookupFlags ? ",\n          e.shipped" : ""}
         FROM eligible e
         JOIN NEOE.SA_SOL SOL
           ON SOL.NO_SO = e.NO_SO AND SOL.CD_COMPANY = e.CD_COMPANY
@@ -344,23 +328,11 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
           ) AS phone,
           CONF.NM_CUST AS nm,
           CONF.DC_ADDR1 AS addr,
-          CONF.DC_RMK_ORDER AS product_name
+          CONF.DC_RMK_ORDER AS product_name${lookupFlags ? ",\n          CASE WHEN CONF.CD_STAT = '02' THEN 1 ELSE 0 END AS shipped" : ""}
         FROM NEOE.CZ_PU_INOUT_CONF CONF
         LEFT JOIN NEOE.MA_PITEM I
           ON I.CD_ITEM = CONF.CD_ITEM AND I.CD_COMPANY = '1000'
-        WHERE CONF.CD_COMPANY = '1000'
-          AND CONF.DT_RCV BETWEEN @dueDateFrom AND @dueDateTo
-          AND CONF.CD_STAT = '02'
-          AND NOT EXISTS (
-            SELECT 1 FROM NEOE.SA_GIRL G
-            WHERE G.NO_GIR = CONF.NO_RCV AND G.CD_COMPANY = CONF.CD_COMPANY
-          )
-          AND EXISTS (
-            SELECT 1 FROM NEOE.CZ_PU_INOUT_CONF C2
-            WHERE C2.NO_RCV = CONF.NO_RCV AND C2.CD_COMPANY = CONF.CD_COMPANY
-              AND (C2.CD_ITEM = '00010' OR C2.CD_ITEM LIKE '00012%')
-          )
-      )
+${confWhere}      )
       SELECT
         MAX(nm)        AS customer_name,
         l1.phone       AS phone,
@@ -400,14 +372,130 @@ export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string):
             END,
             l2.SEQ_SO
           FOR XML PATH(''), TYPE
-        ).value('.', 'NVARCHAR(MAX)'), 1, 3, '') AS memo
+        ).value('.', 'NVARCHAR(MAX)'), 1, 3, '') AS memo${lookupFlags ? LOOKUP_FLAG_COLUMNS : ""}
       FROM lines l1
       WHERE l1.phone IS NOT NULL
       GROUP BY l1.phone
       ORDER BY MIN(due_date), customer_name
-    `)
+    `
+}
+
+const DISPATCH_ELIGIBLE_BY_DUE_DATE = `        SELECT DISTINCT SOL.NO_SO, SOL.CD_COMPANY
+        FROM NEOE.SA_SOL SOL
+        WHERE SOL.CD_COMPANY = '1000'
+          AND SOL.NO_HST     = 0
+          AND SOL.DT_DUEDATE BETWEEN @dueDateFrom AND @dueDateTo
+          AND (SOL.CD_ITEM = '00010' OR SOL.CD_ITEM LIKE '00012%')
+          -- 출하의뢰가 1건 이상 존재하고, 모든 SA_GIRL 라인이 QT_GIR = QT_GI 인 주문만
+          AND EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+              AND G.QT_GIR <> G.QT_GI
+          )
+`
+
+const DISPATCH_CONF_WHERE_BY_DUE_DATE = `        WHERE CONF.CD_COMPANY = '1000'
+          AND CONF.DT_RCV BETWEEN @dueDateFrom AND @dueDateTo
+          AND CONF.CD_STAT = '02'
+          AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_GIR = CONF.NO_RCV AND G.CD_COMPANY = CONF.CD_COMPANY
+          )
+          AND EXISTS (
+            SELECT 1 FROM NEOE.CZ_PU_INOUT_CONF C2
+            WHERE C2.NO_RCV = CONF.NO_RCV AND C2.CD_COMPANY = CONF.CD_COMPANY
+              AND (C2.CD_ITEM = '00010' OR C2.CD_ITEM LIKE '00012%')
+          )
+`
+
+// 번호 조회는 정규 조회가 거르는 주문(미출고/부분출고, 용역 품목 없음)도 보여주고
+// 그 사유를 표시만 한다. 추가할지는 담당자가 판단한다.
+const LOOKUP_FLAG_COLUMNS = `,
+        MIN(shipped) AS fully_shipped,
+        MAX(CASE WHEN l1.CD_ITEM = '00010' OR l1.CD_ITEM LIKE '00012%' THEN 1 ELSE 0 END) AS has_service_item`
+
+const DISPATCH_ELIGIBLE_BY_NUMBER = `        SELECT DISTINCT SOL.NO_SO, SOL.CD_COMPANY,
+          CASE WHEN EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+          ) AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_SO = SOL.NO_SO AND G.CD_COMPANY = SOL.CD_COMPANY
+              AND G.QT_GIR <> G.QT_GI
+          ) THEN 1 ELSE 0 END AS shipped
+        FROM NEOE.SA_SOL SOL
+        WHERE SOL.CD_COMPANY = '1000'
+          AND SOL.NO_HST     = 0
+          AND SOL.NO_SO IN (
+            SELECT S.NO_SO FROM NEOE.SA_SOL S
+            WHERE S.CD_COMPANY = '1000' AND S.NO_HST = 0
+              AND (S.NO_ORDER_ON = @orderNo OR S.NO_SO = @orderNo)
+            UNION
+            SELECT G.NO_SO FROM NEOE.SA_GIRL G
+            WHERE G.CD_COMPANY = '1000' AND G.NO_GIR = @orderNo
+          )
+`
+
+const DISPATCH_CONF_WHERE_BY_NUMBER = `        WHERE CONF.CD_COMPANY = '1000'
+          AND CONF.NO_RCV = @orderNo
+          AND NOT EXISTS (
+            SELECT 1 FROM NEOE.SA_GIRL G
+            WHERE G.NO_GIR = CONF.NO_RCV AND G.CD_COMPANY = CONF.CD_COMPANY
+          )
+`
+
+/**
+ * 기사배정 대상 주문 조회 (ERP)
+ * - 납기일자 (DT_DUEDATE) 범위 매칭
+ * - 해당 주문(NO_SO)에 용역 품목(00010 출장비 / 00012% 도어락 설치비) 포함
+ * - 전화번호 기준 그룹핑 (한 사람 = 한 행)
+ * @param dueDateFrom YYYYMMDD (포함)
+ * @param dueDateTo   YYYYMMDD (포함)
+ */
+export async function fetchDispatchRows(dueDateFrom: string, dueDateTo: string): Promise<DispatchRow[]> {
+  const pool = await getErpPool()
+  const result = await pool.request()
+    .input('dueDateFrom', sql.VarChar(8), dueDateFrom)
+    .input('dueDateTo',   sql.VarChar(8), dueDateTo)
+    .query(buildDispatchRowsQuery({
+      eligible: DISPATCH_ELIGIBLE_BY_DUE_DATE,
+      confWhere: DISPATCH_CONF_WHERE_BY_DUE_DATE,
+      lookupFlags: false,
+    }))
 
   return result.recordset as DispatchRow[]
+}
+
+export type DispatchLookupRow = DispatchRow & {
+  fully_shipped: boolean
+  has_service_item: boolean
+}
+
+/**
+ * 주문번호(쇼핑몰 NO_ORDER_ON 또는 ERP NO_SO) / 출고번호(NO_GIR, 내부단 NO_RCV)
+ * 로 한 주문을 직접 조회한다. 납기일자·용역 품목·전량 출고 조건을 걸지 않는다.
+ */
+export async function fetchDispatchRowsByOrderNumber(orderNo: string): Promise<DispatchLookupRow[]> {
+  const pool = await getErpPool()
+  const result = await pool.request()
+    .input('orderNo', sql.NVarChar(50), orderNo)
+    .query(buildDispatchRowsQuery({
+      eligible: DISPATCH_ELIGIBLE_BY_NUMBER,
+      confWhere: DISPATCH_CONF_WHERE_BY_NUMBER,
+      lookupFlags: true,
+    }))
+
+  return (result.recordset as Array<DispatchRow & { fully_shipped: number; has_service_item: number }>).map(
+    (row) => ({
+      ...row,
+      fully_shipped: row.fully_shipped === 1,
+      has_service_item: row.has_service_item === 1,
+    }),
+  )
 }
 
 /**
