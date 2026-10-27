@@ -142,6 +142,28 @@ describe("installation dispatch guards", () => {
     });
   });
 
+  it("does not flag a wait whose assignment request is still queued for sending", async () => {
+    const now = new Date("2026-06-11T13:00:00.000Z");
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        status: "WAITING_INSTALLER_RESPONSE",
+        activeAssignmentId: "assignment-1",
+        activeAssignment: {
+          id: "assignment-1",
+          status: "WAITING_INSTALLER_RESPONSE",
+          installerTokenExpiresAt: null,
+          notifications: [{ id: "notification-1", status: "PENDING" }],
+        },
+      },
+    ]);
+
+    await expect(alertOrphanedInstallationOrders({ now, limit: 10 })).resolves.toEqual({
+      issueCount: 0,
+    });
+    expect(createInstallationIssueMock).not.toHaveBeenCalled();
+  });
+
   it("creates due-soon issues for orders due tomorrow after 09:00 KST", async () => {
     const now = new Date("2026-06-11T00:00:00.000Z");
     findManyOrders.mockResolvedValue([

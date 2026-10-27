@@ -98,10 +98,13 @@ export async function alertOrphanedInstallationOrders({
   for (const order of orders) {
     const assignment = order.activeAssignment;
     const notification = assignment?.notifications[0] ?? null;
+    // 마감 시각은 첫 알림이 나갈 때 정해진다. 배정 요청이 아직 발송 대기(PENDING)
+    // 이면(발송 시간대 밖 배정 등) 정상 대기다.
     const hasValidWait = Boolean(
       assignment &&
       order.activeAssignmentId === assignment.id &&
-      ((assignment.status === "WAITING_INSTALLER_RESPONSE" && assignment.installerTokenExpiresAt) ||
+      ((assignment.status === "WAITING_INSTALLER_RESPONSE" &&
+        (assignment.installerTokenExpiresAt || notification?.status === "PENDING")) ||
         (assignment.status === "SYSTEM_SMS_RETRY_PENDING" && notification?.status === "PENDING")),
     );
     if (hasValidWait) continue;
