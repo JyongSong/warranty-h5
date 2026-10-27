@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canComplete,
   canManuallyAssign,
+  canReassignInstaller,
   canRetryAssignment,
   canSendCustomerInputSms,
   getSmsDeliveryStatusView,
@@ -372,5 +373,13 @@ describe("ManualAssignmentInstallerSelector", () => {
       "installer-1",
       "installer-2",
     ]);
+  });
+
+  it("allows reassigning only orders that already have an installer in response or assigned state", () => {
+    expect(canReassignInstaller("INSTALLER_ASSIGNED", "installer-1")).toBe(true);
+    expect(canReassignInstaller("WAITING_INSTALLER_RESPONSE", "installer-1")).toBe(true);
+    expect(canReassignInstaller("INSTALLER_ASSIGNED", null)).toBe(false);
+    expect(canReassignInstaller("WAITING_HQ_REVIEW", "installer-1")).toBe(false);
+    expect(canReassignInstaller("COMPLETED", "installer-1")).toBe(false);
   });
 });

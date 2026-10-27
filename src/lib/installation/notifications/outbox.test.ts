@@ -103,6 +103,7 @@ describe("sendPendingInstallationNotifications", () => {
     // 대부분의 기사는 아직 앱 미설치 상태라 기본은 문자 즉시 발송이다.
     listInstallerDeviceTokens.mockResolvedValue([]);
     sendAssignmentPushToInstaller.mockReset();
+    sendAssignmentPushToInstaller.mockResolvedValue(1);
     findUniqueAssignment.mockReset();
     findUniqueAssignment.mockResolvedValue({
       id: "assignment-1",
@@ -199,6 +200,24 @@ describe("sendPendingInstallationNotifications", () => {
         }),
       }),
     );
+  });
+
+  it("texts immediately when every registered device rejects the push", async () => {
+    // 앱을 지운 기사는 토큰이 남아 있어도 FCM 이 전부 거부한다(예외는 없다).
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["stale-token"]);
+    sendAssignmentPushToInstaller.mockResolvedValue(0);
+    findMany.mockResolvedValue([assignmentRequestNotification()]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    expect(sendSms).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: { pushSentAt: now },
+    });
   });
 
   it("texts immediately when FCM is not configured, even with a registered device", async () => {

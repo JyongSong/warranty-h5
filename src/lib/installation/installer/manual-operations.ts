@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getInstallerContact } from "@/lib/installation/installer/source";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
+import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
+import { sendSms } from "@/lib/sms";
 import {
   buildInstallerAssignmentRequestSmsContent,
   toInstallationNotificationAlimtalkFields,
@@ -32,6 +34,10 @@ type ManualAssignmentOptions = AdminOperationOptions & {
   tokenFactory?: () => string;
 };
 
+type ReassignmentOptions = Omit<ManualAssignmentOptions, "manualReason"> & {
+  reason: string;
+};
+
 type CancelOrderOptions = AdminOperationOptions & {
   reason: string;
 };
@@ -45,6 +51,7 @@ type ManualOrder = {
   } | null;
   activeCustomerRequestId: string | null;
   activeAssignmentId: string | null;
+  currentInstallerId?: string | null;
   customerRequests?: Array<{
     installAddressEncrypted: string | null;
     installAddress1Encrypted: string | null;
@@ -61,7 +68,60 @@ type ManualAssignment = {
   selectionSnapshot?: unknown;
 };
 
-export async function createManualInstallerAssignment(
+export async function createManualInstallerAssignment(orderId: string, options: ManualAssignmentOptions) {
+  const { result } = await createManualAssignmentAttempt(orderId, options, "ASSIGN");
+  return result;
+}
+
+// 기사가 이미 수락했거나 응답 대기 중인 주문을 다른 기사에게 다시 보낸다.
+// 새 기사도 수락해야 배정이 확정되고, 이전 기사에게는 배정 취소를 알린다.
+export async function reassignInstallationOrderInstaller(
+  orderId: string,
+  { reason, ...options }: ReassignmentOptions,
+) {
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    throw new InstallationManualOperationError("REASSIGNMENT_REASON_REQUIRED");
+  }
+
+  const { result, previousInstallerId } = await createManualAssignmentAttempt(
+    orderId,
+    { ...options, manualReason: normalizedReason },
+    "REASSIGN",
+  );
+  if (previousInstallerId) {
+    await notifyInstallerOfReassignment(previousInstallerId);
+  }
+  return result;
+}
+
+async function notifyInstallerOfReassignment(installerId: string) {
+  try {
+    await sendAssignmentPushToInstaller(installerId, {
+      title: "설치 배정이 취소되었습니다",
+      body: "본사에서 다른 기사님께 재배정했습니다.",
+    });
+  } catch (error) {
+    console.error("[installation/reassign-push]", error);
+  }
+
+  try {
+    const installer = await prisma.installer.findUnique({
+      where: { id: installerId },
+      select: { phone: true },
+    });
+    if (installer?.phone) {
+      await sendSms(
+        installer.phone,
+        "[Aqara 기사] 설치 배정이 취소되었습니다.\n본사에서 다른 기사님께 재배정했습니다. 해당 건은 방문하지 않으셔도 됩니다.",
+      );
+    }
+  } catch (error) {
+    console.error("[installation/reassign-sms]", error);
+  }
+}
+
+async function createManualAssignmentAttempt(
   orderId: string,
   {
     installerId,
@@ -71,6 +131,7 @@ export async function createManualInstallerAssignment(
     baseUrl,
     tokenFactory = createInstallerResponseToken,
   }: ManualAssignmentOptions,
+  mode: "ASSIGN" | "REASSIGN",
 ) {
   return prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
@@ -86,6 +147,7 @@ export async function createManualInstallerAssignment(
         },
         activeCustomerRequestId: true,
         activeAssignmentId: true,
+        currentInstallerId: true,
         customerRequests: {
           where: {
             status: { in: ["SUBMITTED", "FALLBACK_USED"] },
@@ -108,14 +170,26 @@ export async function createManualInstallerAssignment(
     }
 
     const typedOrder = order as ManualOrder;
-    if (!canCreateManualAssignmentFromOrder(typedOrder)) {
+    const isReassign = mode === "REASSIGN";
+    if (isReassign) {
+      if (!canReassignInstallerFromOrder(typedOrder)) {
+        throw new InstallationManualOperationError("ORDER_NOT_REASSIGNABLE");
+      }
+      if (typedOrder.currentInstallerId === installerId) {
+        throw new InstallationManualOperationError("REASSIGNMENT_SAME_INSTALLER");
+      }
+    } else if (!canCreateManualAssignmentFromOrder(typedOrder)) {
       throw new InstallationManualOperationError("ORDER_NOT_MANUAL_ASSIGNABLE");
     }
     const activeAssignment = await findActiveAssignmentForManualOperation(
       tx as never,
       typedOrder.activeAssignmentId,
     );
-    if (activeAssignment && !canOverrideActiveAssignmentForManualAssignment(typedOrder, activeAssignment)) {
+    if (
+      activeAssignment &&
+      !isReassign &&
+      !canOverrideActiveAssignmentForManualAssignment(typedOrder, activeAssignment)
+    ) {
       throw new InstallationManualOperationError("ORDER_ALREADY_HAS_ACTIVE_ASSIGNMENT");
     }
     const installer = await getInstallerContact(installerId, tx as never);
@@ -130,13 +204,16 @@ export async function createManualInstallerAssignment(
       throw new InstallationManualOperationError("MANUAL_ASSIGNMENT_REASON_REQUIRED");
     }
 
-    const duplicateAssignment = await tx.installationInstallerAssignmentAttempt.findFirst({
-      where: {
-        installationOrderId: orderId,
-        installerId,
-      },
-      select: { id: true },
-    });
+    // 재배정은 이전에 거절했거나 교체된 기사에게 다시 보내는 경우도 있어 중복 검사를 건너뛴다.
+    const duplicateAssignment = isReassign
+      ? null
+      : await tx.installationInstallerAssignmentAttempt.findFirst({
+          where: {
+            installationOrderId: orderId,
+            installerId,
+          },
+          select: { id: true },
+        });
     if (duplicateAssignment) {
       throw new InstallationManualOperationError("DUPLICATE_INSTALLER_REQUEST");
     }
@@ -153,6 +230,7 @@ export async function createManualInstallerAssignment(
               adminId,
               reason: normalizedManualReason,
               overriddenAt: now.toISOString(),
+              ...(isReassign ? { reassignedToInstallerId: installerId } : {}),
             },
           },
         },
@@ -223,15 +301,22 @@ export async function createManualInstallerAssignment(
           currentInstallerId: installerId,
         },
         event: {
-          eventType: "MANUAL_ASSIGNMENT_CREATED",
+          eventType: isReassign ? "ADMIN_REASSIGNED_INSTALLER" : "MANUAL_ASSIGNMENT_CREATED",
           actorType: "ADMIN",
           actorId: adminId,
+          ...(isReassign ? { reason: normalizedManualReason } : {}),
           metadata: {
             assignmentId: assignment.id,
             customerRequestId: typedOrder.activeCustomerRequestId,
             installerId,
             manualReason: normalizedManualReason,
             regionMatched,
+            ...(isReassign
+              ? {
+                  previousInstallerId: typedOrder.currentInstallerId ?? null,
+                  previousAssignmentId: typedOrder.activeAssignmentId,
+                }
+              : {}),
           },
         },
       },
@@ -239,16 +324,27 @@ export async function createManualInstallerAssignment(
     );
 
     return {
-      assignmentId: assignment.id,
-      status: INSTALLATION_ORDER_STATUSES.WAITING_INSTALLER_RESPONSE,
-      activeAttempt: {
-        id: assignment.id,
-        assignmentType: "MANUAL_DIRECT",
-        assignmentStatus: "WAITING_INSTALLER_RESPONSE",
-        smsRetryPending: false,
+      result: {
+        assignmentId: assignment.id,
+        status: INSTALLATION_ORDER_STATUSES.WAITING_INSTALLER_RESPONSE,
+        activeAttempt: {
+          id: assignment.id,
+          assignmentType: "MANUAL_DIRECT",
+          assignmentStatus: "WAITING_INSTALLER_RESPONSE",
+          smsRetryPending: false,
+        },
       },
+      previousInstallerId: isReassign ? typedOrder.currentInstallerId ?? null : null,
     };
   });
+}
+
+function canReassignInstallerFromOrder(order: Pick<ManualOrder, "status" | "currentInstallerId">) {
+  return (
+    (order.status === INSTALLATION_ORDER_STATUSES.INSTALLER_ASSIGNED ||
+      order.status === INSTALLATION_ORDER_STATUSES.WAITING_INSTALLER_RESPONSE) &&
+    Boolean(order.currentInstallerId)
+  );
 }
 
 function canCreateManualAssignmentFromOrder(

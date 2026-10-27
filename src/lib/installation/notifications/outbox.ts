@@ -713,10 +713,13 @@ async function tryPushInsteadOfSms(
     const tokens = await listInstallerDeviceTokens(attempt.installerId);
     if (tokens.length === 0) return false;
 
-    await sendAssignmentPushToInstaller(attempt.installerId, {
+    const deliveredCount = await sendAssignmentPushToInstaller(attempt.installerId, {
       title: "새 작업이 배정되었습니다",
       body: "앱에서 확인하고 수락/거절해 주세요.",
     });
+    // 등록된 토큰이 모두 거부되면(앱 삭제 등) 예외 없이 0 이 온다. 이것을
+    // 보낸 것으로 치면 기사는 폴백 시각까지 아무것도 못 받는다.
+    if (deliveredCount === 0) return false;
   } catch (error) {
     console.error("[installation/notification/push-first]", error);
     return false;
