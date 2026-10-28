@@ -15,6 +15,7 @@ const KIND_LABELS: Record<string, string> = {
   STATUS: "상태 변경",
   COMPLETION: "설치 완료 등록",
   REVIEW: "본사 검수",
+  AMOUNT: "청구 금액",
 };
 
 export default function PartnerNoteTimeline({ notes }: { notes: PartnerNoteItem[] }) {

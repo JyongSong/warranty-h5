@@ -12,6 +12,7 @@ import {
 import {
   addPartnerNoteAction,
   getPartnerUploadTargetsAction,
+  setPartnerClaimAmountAction,
   submitPartnerCompletionAction,
   updatePartnerStatusAction,
 } from "../actions";
@@ -26,7 +27,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   REASON_REQUIRED: "설치 불가 사유를 적어 주세요.",
   NOTE_REQUIRED: "메모 내용을 입력해 주세요.",
   NOTE_TOO_LONG: "메모가 너무 깁니다. (2000자 이하)",
-  PHOTO_REQUIRED: "완료 사진을 1장 이상 올려 주세요.",
+  CLAIM_AMOUNT_INVALID: "청구 금액을 숫자로 입력해 주세요. (1,000만 원 이하)",
+  CLAIM_CHANGE_REASON_REQUIRED: "금액을 바꾸는 사유를 적어 주세요.",
+  CLAIM_AMOUNT_REQUIRED: "설치 완료 전에 청구 금액을 먼저 입력해 주세요.",
   PHOTO_COUNT_INVALID: `사진은 ${PHOTO_MAX}장까지 올릴 수 있습니다.`,
   PHOTO_UPLOAD_INCOMPLETE: "사진 업로드가 끝나지 않았습니다. 다시 시도해 주세요.",
   UPLOAD_TARGET_FAILED: "사진 업로드 준비에 실패했습니다. 잠시 후 다시 시도해 주세요.",
@@ -47,20 +50,24 @@ function getSupabaseBrowser() {
 export default function PartnerOrderActions({
   orderId,
   partnerStatus,
+  claimAmount,
 }: {
   orderId: string;
   partnerStatus: string | null;
+  claimAmount: number | null;
 }) {
   const router = useRouter();
+  const [amountInput, setAmountInput] = useState(claimAmount != null ? String(claimAmount) : "");
+  const [amountReason, setAmountReason] = useState("");
   const [status, setStatus] = useState(partnerStatus ?? PARTNER_STATUSES.RECEIVED);
   const [statusBody, setStatusBody] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [completionBody, setCompletionBody] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
-  const [busy, setBusy] = useState<"status" | "note" | "completion" | null>(null);
+  const [busy, setBusy] = useState<"amount" | "status" | "note" | "completion" | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  async function run(kind: "status" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
+  async function run(kind: "amount" | "status" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
     setBusy(kind);
     setMessage(null);
     try {
@@ -79,6 +86,20 @@ export default function PartnerOrderActions({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function handleAmount() {
+    const digits = amountInput.replace(/[^\d]/g, "");
+    if (!digits) {
+      setMessage({ tone: "error", text: ERROR_MESSAGES.CLAIM_AMOUNT_INVALID });
+      return;
+    }
+    const ok = await run(
+      "amount",
+      () => setPartnerClaimAmountAction({ orderId, amount: Number(digits), reason: amountReason }),
+      "청구 금액을 저장했습니다.",
+    );
+    if (ok) setAmountReason("");
   }
 
   async function handleStatus() {
@@ -104,8 +125,8 @@ export default function PartnerOrderActions({
   }
 
   async function handleCompletion() {
-    if (photos.length === 0) {
-      setMessage({ tone: "error", text: ERROR_MESSAGES.PHOTO_REQUIRED });
+    if (claimAmount == null) {
+      setMessage({ tone: "error", text: ERROR_MESSAGES.CLAIM_AMOUNT_REQUIRED });
       return;
     }
     if (!window.confirm("설치 완료로 등록할까요? 등록하면 본사 검수가 끝날 때까지 수정할 수 없습니다.")) return;
@@ -113,23 +134,24 @@ export default function PartnerOrderActions({
     const ok = await run(
       "completion",
       async () => {
-        const targets = await getPartnerUploadTargetsAction(orderId, photos.length);
-        if (!targets.ok) return targets;
+        // 진행 내용과 사진은 선택이다. 사진이 있을 때만 업로드한다.
+        let photoPaths: string[] = [];
+        if (photos.length > 0) {
+          const targets = await getPartnerUploadTargetsAction(orderId, photos.length);
+          if (!targets.ok) return targets;
 
-        const supabase = getSupabaseBrowser();
-        for (let index = 0; index < photos.length; index += 1) {
-          const target = targets.targets[index];
-          const upload = await supabase.storage
-            .from(targets.bucket)
-            .uploadToSignedUrl(target.path, target.token, photos[index]);
-          if (upload.error) return { ok: false, error: "PHOTO_UPLOAD_INCOMPLETE" };
+          const supabase = getSupabaseBrowser();
+          for (let index = 0; index < photos.length; index += 1) {
+            const target = targets.targets[index];
+            const upload = await supabase.storage
+              .from(targets.bucket)
+              .uploadToSignedUrl(target.path, target.token, photos[index]);
+            if (upload.error) return { ok: false, error: "PHOTO_UPLOAD_INCOMPLETE" };
+          }
+          photoPaths = targets.targets.map((target) => target.path);
         }
 
-        return submitPartnerCompletionAction({
-          orderId,
-          body: completionBody,
-          photoPaths: targets.targets.map((target) => target.path),
-        });
+        return submitPartnerCompletionAction({ orderId, body: completionBody, photoPaths });
       },
       "설치 완료를 등록했습니다. 본사 검수 후 완료 처리됩니다.",
     );
@@ -151,6 +173,40 @@ export default function PartnerOrderActions({
           {message.text}
         </div>
       ) : null}
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="text-base font-bold">청구 금액</h2>
+        <p className="mb-3 mt-1 text-xs text-zinc-500">
+          본사에 청구할 시공비입니다. 설치 완료 등록 전까지 수정할 수 있고, 바꿀 때마다 기록이 남습니다.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            inputMode="numeric"
+            value={amountInput}
+            onChange={(event) => setAmountInput(event.target.value)}
+            placeholder="예) 150000"
+            className="h-10 min-w-0 flex-1 rounded-md border border-zinc-300 px-3 text-sm"
+          />
+          <span className="text-sm text-zinc-600">원</span>
+        </div>
+        {claimAmount != null ? (
+          <textarea
+            value={amountReason}
+            onChange={(event) => setAmountReason(event.target.value)}
+            rows={2}
+            placeholder="금액을 바꾸는 사유 (수정 시 필수)"
+            className="mt-2 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={handleAmount}
+          disabled={busy !== null}
+          className="mt-2 h-10 w-full rounded-md bg-zinc-950 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy === "amount" ? "저장 중…" : claimAmount != null ? "금액 수정" : "금액 저장"}
+        </button>
+      </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-base font-bold">진행 상태</h2>
@@ -195,7 +251,8 @@ export default function PartnerOrderActions({
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-base font-bold">설치 완료 등록</h2>
+        <h2 className="text-base font-bold">설치 완료 등록</h2>
+        <p className="mb-3 mt-1 text-xs text-zinc-500">진행 내용과 사진은 선택입니다. 등록하면 본사가 확인한 뒤 완료 처리됩니다.</p>
         <label className="flex h-24 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-sm font-medium text-zinc-600 hover:border-zinc-500">
           사진 추가 ({photos.length}/{PHOTO_MAX})
           <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotos} />
@@ -219,8 +276,8 @@ export default function PartnerOrderActions({
         <textarea
           value={completionBody}
           onChange={(event) => setCompletionBody(event.target.value)}
-          rows={2}
-          placeholder="작업 내용 (선택)"
+          rows={3}
+          placeholder="진행 내용 (선택) — 작업 내용, 특이사항 등"
           className="mt-3 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
         />
         <button

@@ -34,6 +34,7 @@ vi.mock("@/lib/installer/storage", () => ({ findMissingPhotos }));
 import {
   assignReadyOrdersToPartner,
   reviewPartnerCompletion,
+  setPartnerClaimAmount,
   submitPartnerCompletion,
   switchOrderToInhouse,
   updatePartnerStatus,
@@ -137,26 +138,101 @@ describe("installation partner service", () => {
     ).rejects.toThrow("PHOTO_PATH_INVALID");
   });
 
-  it("moves a submitted completion to HQ review", async () => {
+  it("moves a submitted completion to HQ review, with progress text and photos both optional", async () => {
     db.installationOrder.findUnique.mockResolvedValue({
       id: "order-1",
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-pl",
       partnerStatus: "SCHEDULED",
+      partnerClaimAmount: 150000,
     });
 
-    await submitPartnerCompletion("order-1", {
-      partnerId: "partner-pl",
-      userId: "acc-1",
-      photoPaths: ["partner/order-1/a.jpg"],
-    });
+    await submitPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: [] });
 
+    expect(findMissingPhotos).toHaveBeenCalledWith([]);
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      kind: "COMPLETION",
+      body: null,
+      photoPaths: [],
+    });
     expect(transition).toHaveBeenCalledWith(
       "order-1",
       "WAITING_HQ_REVIEW",
       expect.objectContaining({ orderData: expect.objectContaining({ partnerStatus: "COMPLETION_SUBMITTED" }) }),
       db,
     );
+  });
+
+  it("requires the claim amount before completion", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerStatus: "SCHEDULED",
+      partnerClaimAmount: null,
+    });
+
+    await expect(
+      submitPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: [] }),
+    ).rejects.toThrow("CLAIM_AMOUNT_REQUIRED");
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it("records the first claim amount and requires a reason to change it", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerStatus: "RECEIVED",
+      partnerClaimAmount: null,
+    });
+    await setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 150000 });
+    expect(db.installationOrder.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: { partnerClaimAmount: 150000 },
+    });
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      kind: "AMOUNT",
+      body: "청구 금액 150,000원",
+    });
+
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerStatus: "SCHEDULED",
+      partnerClaimAmount: 150000,
+    });
+    await expect(
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 180000 }),
+    ).rejects.toThrow("CLAIM_CHANGE_REASON_REQUIRED");
+
+    await setPartnerClaimAmount("order-1", {
+      partnerId: "partner-pl",
+      userId: "acc-1",
+      amount: 180000,
+      reason: "현장 배선 추가",
+    });
+    expect(db.installationPartnerNote.create.mock.calls[1][0].data.body).toBe(
+      "청구 금액 150,000원 → 180,000원\n현장 배선 추가",
+    );
+  });
+
+  it("does not let the amount change after completion was submitted", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "WAITING_HQ_REVIEW",
+      partnerId: "partner-pl",
+      partnerStatus: "COMPLETION_SUBMITTED",
+      partnerClaimAmount: 150000,
+    });
+
+    await expect(
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 200000, reason: "추가" }),
+    ).rejects.toThrow("ORDER_NOT_WORKABLE");
+    await expect(
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: -1 }),
+    ).rejects.toThrow("CLAIM_AMOUNT_INVALID");
   });
 
   it("returns a rejected completion to PL and requires a reason", async () => {

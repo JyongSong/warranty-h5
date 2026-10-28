@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { BackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 import PartnerNoteTimeline from "@/app/partner/orders/PartnerNoteTimeline";
+import { formatClaimAmount } from "@/app/partner/orders/format";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import {
   addHqPartnerNoteAction,
@@ -112,6 +113,13 @@ export default function PartnerAssignmentPanel({
           {formatPartnerStatus(detail?.partnerStatus)}
         </span>
       </div>
+      <p className="mb-3 text-sm text-zinc-700">
+        PL 청구 금액{" "}
+        <span className={detail?.claimAmount == null ? "font-semibold text-amber-700" : "font-semibold text-zinc-950"}>
+          {formatClaimAmount(detail?.claimAmount)}
+        </span>
+        <span className="ml-2 text-xs text-zinc-500">(PL 입력값, 변경 이력은 아래 기록)</span>
+      </p>
 
       <PartnerNoteTimeline notes={detail?.notes ?? []} />
 

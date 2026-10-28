@@ -8,6 +8,7 @@ import {
   getInstallationPartnerByCode,
   InstallationPartnerError,
   PARTNER_COMPLETION_PHOTO_MAX,
+  setPartnerClaimAmount,
   submitPartnerCompletion,
   updatePartnerStatus,
 } from "@/lib/installation/partner/service";
@@ -41,6 +42,24 @@ export async function updatePartnerStatusAction(input: {
       userId: user.id,
       status: input.status,
       body: input.body,
+    }),
+  );
+}
+
+export async function setPartnerClaimAmountAction(input: {
+  orderId: string;
+  amount: number;
+  reason?: string | null;
+}): Promise<PartnerActionResult> {
+  const user = await requirePartnerUser();
+  if (!user) return { ok: false, error: "UNAUTHORIZED" };
+
+  return run(input.orderId, () =>
+    setPartnerClaimAmount(input.orderId, {
+      partnerId: user.partnerId,
+      userId: user.id,
+      amount: input.amount,
+      reason: input.reason,
     }),
   );
 }

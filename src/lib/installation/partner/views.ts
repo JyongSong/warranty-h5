@@ -28,6 +28,7 @@ const ORDER_SELECT = {
   partnerStatus: true,
   partnerAssignedAt: true,
   partnerStatusChangedAt: true,
+  partnerClaimAmount: true,
   source: {
     select: {
       customerNameEncrypted: true,
@@ -60,6 +61,7 @@ type OrderRow = {
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
   partnerStatusChangedAt: Date | null;
+  partnerClaimAmount: number | null;
   source: {
     customerNameEncrypted: string | null;
     phoneEncrypted: string | null;
@@ -87,6 +89,8 @@ export type PartnerOrderSummary = {
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
   partnerStatusChangedAt: Date | null;
+  /** 협력사가 본사에 청구하는 시공비(원) */
+  claimAmount: number | null;
   customerName: string | null;
   customerPhone: string | null;
   backupPhone: string | null;
@@ -111,6 +115,7 @@ function shapeOrder(order: OrderRow): PartnerOrderSummary {
     partnerStatus: order.partnerStatus,
     partnerAssignedAt: order.partnerAssignedAt,
     partnerStatusChangedAt: order.partnerStatusChangedAt,
+    claimAmount: order.partnerClaimAmount,
     customerName:
       decryptNullablePii(request?.customerNameEncrypted) ?? decryptNullablePii(order.source?.customerNameEncrypted),
     customerPhone:

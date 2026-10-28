@@ -19,3 +19,7 @@ export function formatInstallSchedule(installDate: string | null, installTimeSlo
   if (!installDate) return "희망일 없음";
   return [installDate, installTimeSlot].filter(Boolean).join(" ");
 }
+
+export function formatClaimAmount(value: number | null | undefined) {
+  return value == null ? "미입력" : `${value.toLocaleString("ko-KR")}원`;
+}

@@ -11,7 +11,7 @@ import {
   type PartnerOrderView,
 } from "@/lib/installation/partner/views";
 import PartnerHeader from "./PartnerHeader";
-import { formatInstallSchedule, formatPartnerDateTime, formatPartnerPhone } from "./format";
+import { formatClaimAmount, formatInstallSchedule, formatPartnerDateTime, formatPartnerPhone } from "./format";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +81,9 @@ export default async function PartnerOrdersPage({ searchParams }: PageProps) {
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
                     <span>설치 희망 {formatInstallSchedule(order.installDate, order.installTimeSlot)}</span>
                     <span>배정 {formatPartnerDateTime(order.partnerAssignedAt)}</span>
+                    <span className={order.claimAmount == null ? "font-semibold text-amber-700" : undefined}>
+                      청구 {formatClaimAmount(order.claimAmount)}
+                    </span>
                   </div>
                 </Link>
               </li>

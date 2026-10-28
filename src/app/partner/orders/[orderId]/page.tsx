@@ -7,7 +7,7 @@ import { getPartnerOrderDetail } from "@/lib/installation/partner/views";
 import PartnerHeader from "../PartnerHeader";
 import PartnerNoteTimeline from "../PartnerNoteTimeline";
 import PartnerOrderActions from "./PartnerOrderActions";
-import { formatInstallSchedule, formatPartnerDateTime, formatPartnerPhone } from "../format";
+import { formatClaimAmount, formatInstallSchedule, formatPartnerDateTime, formatPartnerPhone } from "../format";
 
 export const dynamic = "force-dynamic";
 
@@ -65,13 +65,15 @@ export default async function PartnerOrderDetailPage({ params }: PageProps) {
             <dd className="break-keep">{order.memo ?? "-"}</dd>
             <dt className="whitespace-nowrap text-zinc-500">주문번호</dt>
             <dd>{order.orderNumber ?? "-"}</dd>
+            <dt className="whitespace-nowrap text-zinc-500">청구 금액</dt>
+            <dd className="font-semibold">{formatClaimAmount(order.claimAmount)}</dd>
             <dt className="whitespace-nowrap text-zinc-500">배정 일시</dt>
             <dd>{formatPartnerDateTime(order.partnerAssignedAt)}</dd>
           </dl>
         </section>
 
         {workable ? (
-          <PartnerOrderActions orderId={order.id} partnerStatus={order.partnerStatus} />
+          <PartnerOrderActions orderId={order.id} partnerStatus={order.partnerStatus} claimAmount={order.claimAmount} />
         ) : (
           <p className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
             {order.status === "WAITING_HQ_REVIEW"

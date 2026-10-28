@@ -21,6 +21,8 @@ import {
 // 협력사 안의 세부 진행(접수 → 기사 배정 → 일정 확정)은 partnerStatus 에만 남긴다.
 
 export const PARTNER_COMPLETION_PHOTO_MAX = 10;
+// 협력사 청구 시공비 상한. 오타(0 하나 더)를 막는 정도의 값이다.
+export const PARTNER_CLAIM_AMOUNT_MAX = 10_000_000;
 const NOTE_BODY_MAX = 2000;
 
 export class InstallationPartnerError extends Error {}
@@ -314,7 +316,7 @@ export async function switchOrderToInhouse(
 async function loadPartnerOrderForUpdate(tx: Tx, orderId: string, partnerId: string) {
   const order = await tx.installationOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true, partnerId: true, partnerStatus: true },
+    select: { id: true, status: true, partnerId: true, partnerStatus: true, partnerClaimAmount: true },
   });
   // 다른 협력사 주문은 존재 여부도 알려주지 않는다.
   if (!order || order.partnerId !== partnerId) throw new InstallationPartnerError("ORDER_NOT_FOUND");
@@ -415,6 +417,62 @@ export async function addPartnerNote(
   });
 }
 
+/**
+ * 협력사가 본사에 청구할 시공비를 입력/수정한다. 접수 때 넣고, 완료 등록 전까지 고칠 수 있다.
+ * 본사 승인은 없고 기록만 남긴다. 처음 입력이 아니면 사유를 받는다.
+ */
+export async function setPartnerClaimAmount(
+  orderId: string,
+  {
+    partnerId,
+    userId,
+    amount,
+    reason,
+    now = new Date(),
+  }: { partnerId: string; userId: string; amount: number; reason?: string | null; now?: Date },
+) {
+  if (!Number.isInteger(amount) || amount < 0 || amount > PARTNER_CLAIM_AMOUNT_MAX) {
+    throw new InstallationPartnerError("CLAIM_AMOUNT_INVALID");
+  }
+  const normalizedReason = normalizeOptionalText(reason);
+
+  return prisma.$transaction(async (tx) => {
+    const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
+    assertPartnerWorkable(order);
+
+    const previous = order.partnerClaimAmount;
+    if (previous === amount) return;
+    if (previous != null && !normalizedReason) throw new InstallationPartnerError("CLAIM_CHANGE_REASON_REQUIRED");
+
+    await tx.installationOrder.update({
+      where: { id: orderId },
+      data: { partnerClaimAmount: amount },
+    });
+    await tx.installationPartnerNote.create({
+      data: {
+        installationOrderId: orderId,
+        partnerId,
+        authorUserId: userId,
+        authorType: "PARTNER",
+        kind: "AMOUNT",
+        body: [
+          previous == null
+            ? `청구 금액 ${formatWon(amount)}`
+            : `청구 금액 ${formatWon(previous)} → ${formatWon(amount)}`,
+          normalizedReason,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        createdAt: now,
+      },
+    });
+  });
+}
+
+function formatWon(value: number) {
+  return `${value.toLocaleString("ko-KR")}원`;
+}
+
 export function isPartnerPhotoPathForOrder(orderId: string, path: string) {
   return path.startsWith(`partner/${orderId}/`) && !path.includes("..");
 }
@@ -429,8 +487,8 @@ export async function submitPartnerCompletion(
     now = new Date(),
   }: { partnerId: string; userId: string; body?: string | null; photoPaths: string[]; now?: Date },
 ) {
+  // 진행 내용과 사진은 둘 다 선택이다. 청구 금액만 완료 전에 들어가 있어야 한다.
   const paths = Array.from(new Set(photoPaths.map((path) => path.trim()).filter(Boolean)));
-  if (paths.length === 0) throw new InstallationPartnerError("PHOTO_REQUIRED");
   if (paths.length > PARTNER_COMPLETION_PHOTO_MAX) throw new InstallationPartnerError("PHOTO_COUNT_INVALID");
   if (!paths.every((path) => isPartnerPhotoPathForOrder(orderId, path))) {
     throw new InstallationPartnerError("PHOTO_PATH_INVALID");
@@ -440,6 +498,7 @@ export async function submitPartnerCompletion(
   return prisma.$transaction(async (tx) => {
     const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
     assertPartnerWorkable(order);
+    if (order.partnerClaimAmount == null) throw new InstallationPartnerError("CLAIM_AMOUNT_REQUIRED");
 
     await tx.installationPartnerNote.create({
       data: {
@@ -468,7 +527,7 @@ export async function submitPartnerCompletion(
           eventType: "PARTNER_COMPLETION_SUBMITTED",
           actorType: "PARTNER",
           actorId: userId,
-          metadata: { partnerId, photoCount: paths.length },
+          metadata: { partnerId, photoCount: paths.length, claimAmount: order.partnerClaimAmount },
         },
       },
       tx as never,
