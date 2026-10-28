@@ -1862,6 +1862,7 @@ describe("backoffice installation order routes", () => {
         activeAssignmentId: null,
         currentInstallerId: null,
         partnerStatus: null,
+        partnerClaimAmount: null,
         partner: null,
         hasOpenIssue: false,
         statusChangedAt: new Date("2026-06-16T05:11:28.983Z"),

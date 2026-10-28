@@ -26,7 +26,7 @@ import {
   approveInstallationAssignmentsAction,
   sendCustomerInputSmsForInstallationOrdersAction,
 } from "./actions";
-import { formatPartnerStatus } from "@/lib/installation/partner/routing";
+import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
 
 const TABLE_PREFS_KEY = "backoffice.installations.table.v3";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
@@ -47,7 +47,7 @@ export type InstallationOrderListItem = {
   status: string;
   currentInstallerId: string | null;
   /** 외부 협력사(PL) 배정 건이면 협력사명과 협력사 진행 상태 */
-  partner?: { name: string; status: string | null } | null;
+  partner?: { name: string; status: string | null; claimAmount: number | null } | null;
   hasOpenIssue: boolean;
   issueCodes: string[];
   statusChangedAt: string;
@@ -561,12 +561,25 @@ export default function InstallationOrderList({
         {
           id: "settlementAmount",
           // 정렬은 숫자로, 표시는 확정/예상 구분해서.
-          accessorFn: (row) => row.settlementAmount?.totalAmount ?? -1,
+          accessorFn: (row) => row.settlementAmount?.totalAmount ?? row.partner?.claimAmount ?? -1,
           header: "운영-정산 금액",
           size: 150,
           minSize: 120,
           cell: ({ row }) => {
             const amount = row.original.settlementAmount;
+            const partner = row.original.partner;
+            // PL 건은 기사 정산이 없으므로 PL 이 적은 청구 금액을 보여준다.
+            if (!amount && partner) {
+              if (partner.claimAmount == null) return <span className="text-zinc-300">-</span>;
+              return (
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="font-semibold text-zinc-900">{partner.claimAmount.toLocaleString()}원</span>
+                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-800">
+                    PL 청구
+                  </span>
+                </span>
+              );
+            }
             if (!amount) return <span className="text-zinc-300">-</span>;
             return (
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
@@ -1171,6 +1184,11 @@ function formatOpenIssueReason(issueCodes: string[]) {
 }
 
 function getNextActionLabel(row: InstallationOrderListItem) {
+  if (row.partner) {
+    const partnerLabel = getPartnerNextActionLabel(row);
+    if (partnerLabel) return partnerLabel;
+  }
+
   if (row.hasOpenIssue) {
     if (row.issueCodes.includes("INSTALLER_ASSIGNMENT_SMS_SEND_FAILED")) return "SMS 확인 후 기사 재배정";
     if (
@@ -1269,6 +1287,22 @@ function getAdminAttentionTextClassName(row: InstallationOrderListItem) {
   if (getAdminAttentionLabel(row) === "-") return "text-xs font-semibold text-zinc-400";
 
   return "text-xs font-semibold text-amber-700";
+}
+
+// 협력사(PL) 건은 기사 응답·완료 대신 협력사 진행 단계로 다음 할 일을 보여준다.
+function getPartnerNextActionLabel(row: InstallationOrderListItem) {
+  const partner = row.partner;
+  if (!partner) return null;
+  if (row.hasOpenIssue) {
+    if (partner.status === PARTNER_STATUSES.UNABLE) return `${partner.name} 설치 불가 확인`;
+    if (row.issueCodes.includes("INSTALLER_ASSIGNMENT_SMS_SEND_FAILED")) return `${partner.name} 배정 문자 확인`;
+    return null;
+  }
+  if (row.status === "WAITING_HQ_REVIEW") return `${partner.name} 완료 검수`;
+  if (row.status !== "INSTALLER_ASSIGNED") return null;
+  if (partner.status === PARTNER_STATUSES.RECEIVED) return `${partner.name} 접수 대기`;
+  if (partner.status === PARTNER_STATUSES.ACCEPTED) return `${partner.name} 진행 중`;
+  return null;
 }
 
 // 협력사(PL) 배정 건은 기사 대신 "PL · 진행 상태" 로 보인다. 이전 자사 배정 시도는 무시한다.
