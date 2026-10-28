@@ -24,7 +24,7 @@ export function normalizePartnerOrderView(value: string | string[] | undefined):
 const ORDER_SELECT = {
   id: true,
   status: true,
-  statusChangedAt: true,
+  partnerCompletedAt: true,
   partnerId: true,
   partnerStatus: true,
   partnerAssignedAt: true,
@@ -59,7 +59,7 @@ const ORDER_SELECT = {
 type OrderRow = {
   id: string;
   status: string;
-  statusChangedAt: Date;
+  partnerCompletedAt: Date | null;
   partnerId: string | null;
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
@@ -90,7 +90,7 @@ type OrderRow = {
 export type PartnerOrderSummary = {
   id: string;
   status: string;
-  /** 본사 검수 승인으로 완료된 시각. 완료 건만 값이 있다. */
+  /** 협력사가 설치 완료 등록을 누른 시각 (완료일). 완료 등록 전이면 null. */
   completedAt: Date | null;
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
@@ -120,7 +120,7 @@ function shapeOrder(order: OrderRow): PartnerOrderSummary {
   return {
     id: order.id,
     status: order.status,
-    completedAt: order.status === INSTALLATION_ORDER_STATUSES.COMPLETED ? order.statusChangedAt : null,
+    completedAt: order.partnerCompletedAt,
     partnerStatus: order.partnerStatus,
     partnerAssignedAt: order.partnerAssignedAt,
     partnerStatusChangedAt: order.partnerStatusChangedAt,
@@ -189,7 +189,7 @@ export type PartnerCompletedSummary = {
   pendingReviewAmount: number;
 };
 
-/** 본사 승인(완료) 일자가 기간 안에 드는 협력사 완료 건과 청구 금액 합계. */
+/** 협력사가 완료 등록한 날이 기간 안에 들고 본사 검수까지 끝난 건과 청구 금액 합계. */
 export async function getPartnerCompletedSummary(
   partnerId: string,
   range: PartnerCompletedRange,
@@ -200,9 +200,9 @@ export async function getPartnerCompletedSummary(
       where: {
         partnerId,
         status: INSTALLATION_ORDER_STATUSES.COMPLETED,
-        statusChangedAt: { gte: kstDayStart(range.from), lt: end },
+        partnerCompletedAt: { gte: kstDayStart(range.from), lt: end },
       },
-      orderBy: { statusChangedAt: "desc" },
+      orderBy: { partnerCompletedAt: "desc" },
       take: 500,
       select: ORDER_SELECT,
     }),
@@ -294,7 +294,7 @@ export async function getPartnerOrderDetail(
     ...shapeOrder(order),
     partnerName: order.partner?.name ?? null,
     acceptedAt: order.partnerNotes.find((note) => note.kind === "AMOUNT")?.createdAt ?? null,
-    completionSubmittedAt: completionNotes.at(-1)?.createdAt ?? null,
+    completionSubmittedAt: order.partnerCompletedAt ?? completionNotes.at(-1)?.createdAt ?? null,
     notes,
   };
 }

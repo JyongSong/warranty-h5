@@ -562,6 +562,7 @@ export async function submitPartnerCompletion(
         orderData: {
           partnerStatus: PARTNER_STATUSES.COMPLETION_SUBMITTED,
           partnerStatusChangedAt: now,
+          partnerCompletedAt: now,
         },
         event: {
           eventType: "PARTNER_COMPLETION_SUBMITTED",

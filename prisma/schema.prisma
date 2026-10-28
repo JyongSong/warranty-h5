@@ -526,6 +526,8 @@ model InstallationOrder {
   partnerClaimAmount      Int?                                     @map("partner_claim_amount")
   // 협력사가 직접 적는 담당 기사 (이름·연락처 자유 입력). 변경 이력은 partnerNotes(kind INSTALLER).
   partnerInstaller        String?                                  @map("partner_installer")
+  // 협력사가 마지막으로 설치 완료 등록을 누른 시각. 완료 탭 기간 조회 기준.
+  partnerCompletedAt      DateTime?                                @map("partner_completed_at") @db.Timestamptz(6)
   partnerNotes            InstallationPartnerNote[]
 
   @@index([status, createdAt])

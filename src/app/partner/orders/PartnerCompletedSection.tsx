@@ -4,7 +4,7 @@ import { formatClaimAmount } from "./format";
 
 // 협력사 완료 탭: 기사 앱의 이력/정산처럼 기간 합계와 건별 내역을 보여준다.
 // 기사 앱은 월 단위지만 협력사는 관리자가 고른 기간(시작일~종료일)으로 본다.
-// 완료일 = 본사 검수 승인일.
+// 완료일 = 협력사가 설치 완료 등록을 누른 날. 합계에는 본사 검수가 끝난 건만 넣는다.
 
 export default function PartnerCompletedSection({
   basePath,
@@ -74,7 +74,7 @@ export default function PartnerCompletedSection({
         <p className="mt-1 text-3xl font-extrabold tracking-tight text-zinc-950">
           {summary.totalAmount.toLocaleString("ko-KR")}원
         </p>
-        <p className="mt-1 text-xs text-zinc-500">완료 {summary.orders.length}건 · 본사 검수 승인일 기준</p>
+        <p className="mt-1 text-xs text-zinc-500">완료 {summary.orders.length}건 · 설치 완료 등록일 기준</p>
       </div>
 
       {summary.pendingReviewCount > 0 ? (
@@ -82,7 +82,7 @@ export default function PartnerCompletedSection({
           <p className="font-bold">
             본사 검수 중 {summary.pendingReviewCount}건 · {summary.pendingReviewAmount.toLocaleString("ko-KR")}원
           </p>
-          <p className="mt-0.5 text-xs">본사 승인 후 완료로 넘어오며, 승인일 기준으로 합계에 들어갑니다.</p>
+          <p className="mt-0.5 text-xs">본사 승인 후 합계에 들어갑니다. (설치 완료 등록일 기준으로 표시)</p>
         </div>
       ) : null}
 

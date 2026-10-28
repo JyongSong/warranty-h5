@@ -148,7 +148,7 @@ describe("installation partner service", () => {
       partnerClaimAmount: 150000,
     });
 
-    await submitPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: [] });
+    await submitPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: [], now: new Date("2026-10-31T09:00:00Z") });
 
     expect(findMissingPhotos).toHaveBeenCalledWith([]);
     expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
@@ -159,7 +159,12 @@ describe("installation partner service", () => {
     expect(transition).toHaveBeenCalledWith(
       "order-1",
       "WAITING_HQ_REVIEW",
-      expect.objectContaining({ orderData: expect.objectContaining({ partnerStatus: "COMPLETION_SUBMITTED" }) }),
+      expect.objectContaining({
+        orderData: expect.objectContaining({
+          partnerStatus: "COMPLETION_SUBMITTED",
+          partnerCompletedAt: new Date("2026-10-31T09:00:00Z"),
+        }),
+      }),
       db,
     );
   });

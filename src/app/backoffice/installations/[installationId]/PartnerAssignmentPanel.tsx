@@ -19,7 +19,7 @@ import {
 const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: "로그인이 필요합니다.",
   FORBIDDEN: "권한이 없습니다.",
-  PARTNER_NOT_CONFIGURED: "협력사(PL)가 등록되어 있지 않습니다.",
+  PARTNER_NOT_CONFIGURED: "협력사(PL ENG)가 등록되어 있지 않습니다.",
   ORDER_NOT_PARTNER_SWITCHABLE: "지금 상태에서는 협력사로 넘길 수 없습니다.",
   ORDER_NOT_INHOUSE_SWITCHABLE: "지금 상태에서는 자사 기사 배정으로 돌릴 수 없습니다.",
   ORDER_NOT_IN_REVIEW: "검수 대기 상태가 아닙니다.",
@@ -68,13 +68,13 @@ export default function PartnerAssignmentPanel({
       <section className="mx-6 mt-6 rounded-lg border border-zinc-200 bg-white p-4 lg:mx-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
-            <p className="font-semibold text-zinc-900">외부 협력사(PL) 배정</p>
+            <p className="font-semibold text-zinc-900">외부 협력사(PL ENG) 배정</p>
             <p className="mt-0.5 text-zinc-500">
               {data.partnerRouting === "PARTNER"
-                ? "PL 배정 예정 (고객 입력이 끝나면 자동으로 넘어갑니다)"
+                ? "PL ENG 배정 예정 (고객 입력이 끝나면 자동으로 넘어갑니다)"
                 : data.hasPartnerServiceItem
-                  ? "PL 용역 품목(조명·커튼·도어벨 등)이 든 건 — 고객 입력이 끝나면 PL 로 자동 배정됩니다."
-                  : "자사 기사 배정 건입니다. PL 이 맡아야 하는 건이면 PL 로 넘길 수 있습니다."}
+                  ? "PL ENG 용역 품목(조명·커튼·도어벨 등)이 든 건 — 고객 입력이 끝나면 PL ENG 로 자동 배정됩니다."
+                  : "자사 기사 배정 건입니다. PL ENG 가 맡아야 하는 건이면 PL ENG 로 넘길 수 있습니다."}
             </p>
           </div>
           {data.canSwitchToPartner && data.partnerRouting !== "PARTNER" ? (
@@ -85,11 +85,11 @@ export default function PartnerAssignmentPanel({
               onClick={() =>
                 run(
                   () => switchOrderToPartnerAction({ installationId }),
-                  "이 주문을 PL 로 넘길까요? 진행 중인 자사 기사 배정 요청은 취소됩니다.",
+                  "이 주문을 PL ENG 로 넘길까요? 진행 중인 자사 기사 배정 요청은 취소됩니다.",
                 )
               }
             >
-              PL 로 넘기기
+              PL ENG 로 넘기기
             </button>
           ) : null}
         </div>
@@ -107,7 +107,7 @@ export default function PartnerAssignmentPanel({
     <section className="mx-6 mt-6 rounded-lg border border-violet-200 bg-violet-50/40 p-4 lg:mx-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-zinc-950">
-          외부 협력사 배정 · {detail?.partnerName ?? "PL"}
+          외부 협력사 배정 · {detail?.partnerName ?? "PL ENG"}
         </h2>
         <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
           {formatPartnerStatus(detail?.partnerStatus)}
@@ -129,7 +129,7 @@ export default function PartnerAssignmentPanel({
         value={text}
         onChange={(event) => setText(event.target.value)}
         rows={2}
-        placeholder={inReview ? "반려 사유 또는 승인 메모" : "PL 에 전달할 메모 / 전환 사유"}
+        placeholder={inReview ? "반려 사유 또는 승인 메모" : "PL ENG 에 전달할 메모 / 전환 사유"}
         className="mt-4 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
       />
       {error ? <p className="mt-1 text-sm text-rose-700">{error}</p> : null}
@@ -156,7 +156,7 @@ export default function PartnerAssignmentPanel({
               className={getBackofficeButtonClass("dangerSecondary")}
               onClick={() => run(() => reviewPartnerCompletionAction({ installationId, approve: false, reason: text }))}
             >
-              반려 (PL 에 되돌리기)
+              반려 (PL ENG 에 되돌리기)
             </button>
           </>
         ) : null}
@@ -176,7 +176,7 @@ export default function PartnerAssignmentPanel({
             onClick={() =>
               run(
                 () => switchOrderToInhouseAction({ installationId, reason: text }),
-                "PL 배정을 취소하고 자사 기사 자동배정으로 돌릴까요? (입력한 내용이 사유로 남습니다)",
+                "PL ENG 배정을 취소하고 자사 기사 자동배정으로 돌릴까요? (입력한 내용이 사유로 남습니다)",
               )
             }
           >
