@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { BackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 import PartnerNoteTimeline from "@/app/partner/orders/PartnerNoteTimeline";
-import { formatClaimAmount } from "@/app/partner/orders/format";
+import { formatClaimAmount, formatPartnerDateTime } from "@/app/partner/orders/format";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import {
   addHqPartnerNoteAction,
@@ -113,13 +113,14 @@ export default function PartnerAssignmentPanel({
           {formatPartnerStatus(detail?.partnerStatus)}
         </span>
       </div>
-      <p className="mb-3 text-sm text-zinc-700">
-        PL 청구 금액{" "}
-        <span className={detail?.claimAmount == null ? "font-semibold text-amber-700" : "font-semibold text-zinc-950"}>
-          {formatClaimAmount(detail?.claimAmount)}
-        </span>
-        <span className="ml-2 text-xs text-zinc-500">(PL 입력값, 변경 이력은 아래 기록)</span>
-      </p>
+      <dl className="mb-4 grid grid-cols-3 gap-2 text-sm">
+        <PartnerFact label="접수" value={detail?.acceptedAt ? formatPartnerDateTime(detail.acceptedAt) : "접수 전"} warn={!detail?.acceptedAt} />
+        <PartnerFact label="청구 금액" value={formatClaimAmount(detail?.claimAmount)} warn={detail?.claimAmount == null} />
+        <PartnerFact
+          label="완료 등록"
+          value={detail?.completionSubmittedAt ? formatPartnerDateTime(detail.completionSubmittedAt) : "-"}
+        />
+      </dl>
 
       <PartnerNoteTimeline notes={detail?.notes ?? []} />
 
@@ -183,5 +184,14 @@ export default function PartnerAssignmentPanel({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function PartnerFact({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div className="rounded-md border border-violet-100 bg-white px-3 py-2">
+      <dt className="text-xs text-zinc-500">{label}</dt>
+      <dd className={warn ? "mt-0.5 font-semibold text-amber-700" : "mt-0.5 font-semibold text-zinc-950"}>{value}</dd>
+    </div>
   );
 }

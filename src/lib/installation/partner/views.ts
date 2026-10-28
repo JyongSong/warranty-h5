@@ -167,6 +167,10 @@ export type PartnerNoteItem = {
 
 export type PartnerOrderDetail = PartnerOrderSummary & {
   partnerName: string | null;
+  /** 협력사가 처음 청구 금액을 넣은(접수한) 시각 */
+  acceptedAt: Date | null;
+  /** 마지막 설치 완료 등록 시각 */
+  completionSubmittedAt: Date | null;
   notes: PartnerNoteItem[];
 };
 
@@ -203,9 +207,12 @@ export async function getPartnerOrderDetail(
     })),
   );
 
+  const completionNotes = order.partnerNotes.filter((note) => note.kind === "COMPLETION");
   return {
     ...shapeOrder(order),
     partnerName: order.partner?.name ?? null,
+    acceptedAt: order.partnerNotes.find((note) => note.kind === "AMOUNT")?.createdAt ?? null,
+    completionSubmittedAt: completionNotes.at(-1)?.createdAt ?? null,
     notes,
   };
 }

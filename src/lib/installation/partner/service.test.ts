@@ -36,8 +36,8 @@ import {
   reviewPartnerCompletion,
   setPartnerClaimAmount,
   submitPartnerCompletion,
+  reportPartnerUnable,
   switchOrderToInhouse,
-  updatePartnerStatus,
 } from "@/lib/installation/partner/service";
 
 const PARTNER = { id: "partner-pl", name: "PL", notifyPhone: "010-1111-2222", active: true };
@@ -97,18 +97,17 @@ describe("installation partner service", () => {
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-pl",
       partnerStatus: "RECEIVED",
+      partnerClaimAmount: null,
     });
 
     await expect(
-      updatePartnerStatus("order-1", { partnerId: "partner-pl", userId: "acc-1", status: "UNABLE", body: " " }),
+      reportPartnerUnable("order-1", { partnerId: "partner-pl", userId: "acc-1", reason: " " }),
     ).rejects.toThrow("REASON_REQUIRED");
 
-    await updatePartnerStatus("order-1", {
-      partnerId: "partner-pl",
-      userId: "acc-1",
-      status: "UNABLE",
-      body: "천장 구조상 설치 불가",
-    });
+    await reportPartnerUnable("order-1", { partnerId: "partner-pl", userId: "acc-1", reason: "천장 구조상 설치 불가" });
+    expect(db.installationOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ partnerStatus: "UNABLE" }) }),
+    );
     expect(createIssue).toHaveBeenCalledWith(
       expect.objectContaining({ installationOrderId: "order-1", type: "INSTALLATION_NOT_COMPLETED" }),
       db,
@@ -121,10 +120,11 @@ describe("installation partner service", () => {
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-other",
       partnerStatus: "RECEIVED",
+      partnerClaimAmount: null,
     });
 
     await expect(
-      updatePartnerStatus("order-1", { partnerId: "partner-pl", userId: "acc-1", status: "SCHEDULED" }),
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 100000 }),
     ).rejects.toThrow("ORDER_NOT_FOUND");
   });
 
@@ -143,7 +143,7 @@ describe("installation partner service", () => {
       id: "order-1",
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-pl",
-      partnerStatus: "SCHEDULED",
+      partnerStatus: "ACCEPTED",
       partnerClaimAmount: 150000,
     });
 
@@ -168,7 +168,7 @@ describe("installation partner service", () => {
       id: "order-1",
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-pl",
-      partnerStatus: "SCHEDULED",
+      partnerStatus: "ACCEPTED",
       partnerClaimAmount: null,
     });
 
@@ -189,18 +189,19 @@ describe("installation partner service", () => {
     await setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 150000 });
     expect(db.installationOrder.update).toHaveBeenCalledWith({
       where: { id: "order-1" },
-      data: { partnerClaimAmount: 150000 },
+      data: expect.objectContaining({ partnerClaimAmount: 150000, partnerStatus: "ACCEPTED" }),
     });
     expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
       kind: "AMOUNT",
-      body: "청구 금액 150,000원",
+      partnerStatus: "ACCEPTED",
+      body: "접수 · 청구 금액 150,000원",
     });
 
     db.installationOrder.findUnique.mockResolvedValue({
       id: "order-1",
       status: "INSTALLER_ASSIGNED",
       partnerId: "partner-pl",
-      partnerStatus: "SCHEDULED",
+      partnerStatus: "ACCEPTED",
       partnerClaimAmount: 150000,
     });
     await expect(
@@ -235,7 +236,7 @@ describe("installation partner service", () => {
     ).rejects.toThrow("CLAIM_AMOUNT_INVALID");
   });
 
-  it("returns a rejected completion to PL and requires a reason", async () => {
+  it("returns a rejected completion to PL as 접수 완료 and requires a reason", async () => {
     db.installationOrder.findUnique.mockResolvedValue({ id: "order-1", status: "WAITING_HQ_REVIEW", partnerId: "partner-pl" });
 
     await expect(reviewPartnerCompletion("order-1", { adminId: "admin-1", approve: false })).rejects.toThrow(
@@ -246,7 +247,7 @@ describe("installation partner service", () => {
     expect(transition).toHaveBeenLastCalledWith(
       "order-1",
       "INSTALLER_ASSIGNED",
-      expect.objectContaining({ orderData: expect.objectContaining({ partnerStatus: "SCHEDULED" }) }),
+      expect.objectContaining({ orderData: expect.objectContaining({ partnerStatus: "ACCEPTED" }) }),
       db,
     );
 

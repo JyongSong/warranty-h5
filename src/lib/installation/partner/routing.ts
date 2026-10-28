@@ -44,11 +44,11 @@ export function shouldRouteToPartner({
   return hasPartnerServiceItem(memo);
 }
 
-// 협력사가 기록하는 진행 단계. 완료 등록 → 본사 검수(승인/반려)는 본사 몫이다.
+// 본사가 알아야 하는 협력사 진행 단계만 둔다: 접수했는지(청구 금액 입력), 언제 끝났는지(완료 등록).
+// 협력사 안에서 기사를 고르고 일정을 잡는 과정은 협력사가 알아서 하고 여기 남기지 않는다.
 export const PARTNER_STATUSES = {
   RECEIVED: "RECEIVED",
-  INSTALLER_ASSIGNED: "INSTALLER_ASSIGNED",
-  SCHEDULED: "SCHEDULED",
+  ACCEPTED: "ACCEPTED",
   COMPLETION_SUBMITTED: "COMPLETION_SUBMITTED",
   COMPLETED: "COMPLETED",
   UNABLE: "UNABLE",
@@ -57,21 +57,12 @@ export const PARTNER_STATUSES = {
 export type PartnerStatus = (typeof PARTNER_STATUSES)[keyof typeof PARTNER_STATUSES];
 
 export const PARTNER_STATUS_LABELS: Record<PartnerStatus, string> = {
-  RECEIVED: "접수",
-  INSTALLER_ASSIGNED: "기사 배정",
-  SCHEDULED: "일정 확정",
+  RECEIVED: "신규 (접수 전)",
+  ACCEPTED: "접수 완료",
   COMPLETION_SUBMITTED: "설치 완료 (본사 검수 중)",
   COMPLETED: "완료",
   UNABLE: "설치 불가",
 };
-
-// 협력사가 상태 변경 버튼으로 직접 고를 수 있는 단계. 완료는 사진과 함께 따로 등록한다.
-export const PARTNER_SELECTABLE_STATUSES: readonly PartnerStatus[] = [
-  PARTNER_STATUSES.RECEIVED,
-  PARTNER_STATUSES.INSTALLER_ASSIGNED,
-  PARTNER_STATUSES.SCHEDULED,
-  PARTNER_STATUSES.UNABLE,
-];
 
 export function formatPartnerStatus(value: string | null | undefined) {
   if (!value) return "-";

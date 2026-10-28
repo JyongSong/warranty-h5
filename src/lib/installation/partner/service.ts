@@ -8,17 +8,16 @@ import { findMissingPhotos } from "@/lib/installer/storage";
 import {
   DEFAULT_PARTNER_CODE,
   PARTNER_ROUTING,
-  PARTNER_SELECTABLE_STATUSES,
   PARTNER_SERVICE_ITEM_NAMES,
   PARTNER_STATUSES,
-  type PartnerStatus,
 } from "@/lib/installation/partner/routing";
 
 // 외부 협력사(PL) 배정 건의 상태 변경. 주문 상태는 기존 흐름을 그대로 쓴다.
 //   협력사 배정       → INSTALLER_ASSIGNED (currentInstaller 없음, partnerId 있음)
 //   협력사 완료 등록  → WAITING_HQ_REVIEW
 //   본사 승인 / 반려  → COMPLETED / INSTALLER_ASSIGNED
-// 협력사 안의 세부 진행(접수 → 기사 배정 → 일정 확정)은 partnerStatus 에만 남긴다.
+// partnerStatus 는 본사가 알아야 할 것만: 신규 → 접수(청구 금액 입력) → 완료 등록 → 완료 / 설치 불가.
+// 협력사 안의 기사 배정·일정은 협력사가 알아서 하고 남기지 않는다.
 
 export const PARTNER_COMPLETION_PHOTO_MAX = 10;
 // 협력사 청구 시공비 상한. 오타(0 하나 더)를 막는 정도의 값이다.
@@ -329,23 +328,12 @@ function assertPartnerWorkable(order: { status: string; partnerStatus: string | 
   }
 }
 
-export async function updatePartnerStatus(
+/** 협력사가 이 건을 맡을 수 없다고 알린다. 본사 예외로 올라가고, 본사가 취소하거나 자사로 돌린다. */
+export async function reportPartnerUnable(
   orderId: string,
-  {
-    partnerId,
-    userId,
-    status,
-    body,
-    now = new Date(),
-  }: { partnerId: string; userId: string; status: string; body?: string | null; now?: Date },
+  { partnerId, userId, reason, now = new Date() }: { partnerId: string; userId: string; reason: string; now?: Date },
 ) {
-  if (!PARTNER_SELECTABLE_STATUSES.includes(status as PartnerStatus)) {
-    throw new InstallationPartnerError("PARTNER_STATUS_INVALID");
-  }
-  const normalizedBody = normalizeOptionalText(body);
-  if (status === PARTNER_STATUSES.UNABLE && !normalizedBody) {
-    throw new InstallationPartnerError("REASON_REQUIRED");
-  }
+  const normalizedReason = requireText(reason, "REASON_REQUIRED");
 
   return prisma.$transaction(async (tx) => {
     const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
@@ -353,7 +341,7 @@ export async function updatePartnerStatus(
 
     await tx.installationOrder.update({
       where: { id: orderId },
-      data: { partnerStatus: status, partnerStatusChangedAt: now },
+      data: { partnerStatus: PARTNER_STATUSES.UNABLE, partnerStatusChangedAt: now },
     });
     await tx.installationPartnerNote.create({
       data: {
@@ -362,25 +350,22 @@ export async function updatePartnerStatus(
         authorUserId: userId,
         authorType: "PARTNER",
         kind: "STATUS",
-        partnerStatus: status,
-        body: normalizedBody,
+        partnerStatus: PARTNER_STATUSES.UNABLE,
+        body: normalizedReason,
         createdAt: now,
       },
     });
-
-    if (status === PARTNER_STATUSES.UNABLE) {
-      await createInstallationIssue(
-        {
-          installationOrderId: orderId,
-          type: "INSTALLATION_NOT_COMPLETED",
-          title: "협력사 설치 불가",
-          description: normalizedBody,
-          metadata: { partnerId, partnerStatus: status },
-          now,
-        },
-        tx as never,
-      );
-    }
+    await createInstallationIssue(
+      {
+        installationOrderId: orderId,
+        type: "INSTALLATION_NOT_COMPLETED",
+        title: "협력사 설치 불가",
+        description: normalizedReason,
+        metadata: { partnerId, partnerStatus: PARTNER_STATUSES.UNABLE },
+        now,
+      },
+      tx as never,
+    );
   });
 }
 
@@ -444,9 +429,15 @@ export async function setPartnerClaimAmount(
     if (previous === amount) return;
     if (previous != null && !normalizedReason) throw new InstallationPartnerError("CLAIM_CHANGE_REASON_REQUIRED");
 
+    // 처음 금액을 넣는 것이 곧 접수다.
+    const accepting =
+      order.partnerStatus === PARTNER_STATUSES.RECEIVED || order.partnerStatus === PARTNER_STATUSES.UNABLE;
     await tx.installationOrder.update({
       where: { id: orderId },
-      data: { partnerClaimAmount: amount },
+      data: {
+        partnerClaimAmount: amount,
+        ...(accepting ? { partnerStatus: PARTNER_STATUSES.ACCEPTED, partnerStatusChangedAt: now } : {}),
+      },
     });
     await tx.installationPartnerNote.create({
       data: {
@@ -455,9 +446,10 @@ export async function setPartnerClaimAmount(
         authorUserId: userId,
         authorType: "PARTNER",
         kind: "AMOUNT",
+        partnerStatus: accepting ? PARTNER_STATUSES.ACCEPTED : null,
         body: [
           previous == null
-            ? `청구 금액 ${formatWon(amount)}`
+            ? `접수 · 청구 금액 ${formatWon(amount)}`
             : `청구 금액 ${formatWon(previous)} → ${formatWon(amount)}`,
           normalizedReason,
         ]
@@ -558,7 +550,7 @@ export async function reviewPartnerCompletion(
       throw new InstallationPartnerError("ORDER_NOT_IN_REVIEW");
     }
 
-    const nextPartnerStatus = approve ? PARTNER_STATUSES.COMPLETED : PARTNER_STATUSES.SCHEDULED;
+    const nextPartnerStatus = approve ? PARTNER_STATUSES.COMPLETED : PARTNER_STATUSES.ACCEPTED;
     await tx.installationPartnerNote.create({
       data: {
         installationOrderId: orderId,

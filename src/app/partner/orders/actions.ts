@@ -8,9 +8,9 @@ import {
   getInstallationPartnerByCode,
   InstallationPartnerError,
   PARTNER_COMPLETION_PHOTO_MAX,
+  reportPartnerUnable,
   setPartnerClaimAmount,
   submitPartnerCompletion,
-  updatePartnerStatus,
 } from "@/lib/installation/partner/service";
 import { getPartnerOrderDetail } from "@/lib/installation/partner/views";
 
@@ -28,21 +28,15 @@ async function requirePartnerUser() {
   return { id: account.id, partnerId: partner.id };
 }
 
-export async function updatePartnerStatusAction(input: {
+export async function reportPartnerUnableAction(input: {
   orderId: string;
-  status: string;
-  body?: string | null;
+  reason: string;
 }): Promise<PartnerActionResult> {
   const user = await requirePartnerUser();
   if (!user) return { ok: false, error: "UNAUTHORIZED" };
 
   return run(input.orderId, () =>
-    updatePartnerStatus(input.orderId, {
-      partnerId: user.partnerId,
-      userId: user.id,
-      status: input.status,
-      body: input.body,
-    }),
+    reportPartnerUnable(input.orderId, { partnerId: user.partnerId, userId: user.id, reason: input.reason }),
   );
 }
 

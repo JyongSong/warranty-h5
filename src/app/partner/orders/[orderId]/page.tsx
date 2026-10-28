@@ -69,11 +69,13 @@ export default async function PartnerOrderDetailPage({ params }: PageProps) {
             <dd className="font-semibold">{formatClaimAmount(order.claimAmount)}</dd>
             <dt className="whitespace-nowrap text-zinc-500">배정 일시</dt>
             <dd>{formatPartnerDateTime(order.partnerAssignedAt)}</dd>
+            <dt className="whitespace-nowrap text-zinc-500">접수 일시</dt>
+            <dd>{order.acceptedAt ? formatPartnerDateTime(order.acceptedAt) : "접수 전"}</dd>
           </dl>
         </section>
 
         {workable ? (
-          <PartnerOrderActions orderId={order.id} partnerStatus={order.partnerStatus} claimAmount={order.claimAmount} />
+          <PartnerOrderActions orderId={order.id} claimAmount={order.claimAmount} />
         ) : (
           <p className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
             {order.status === "WAITING_HQ_REVIEW"

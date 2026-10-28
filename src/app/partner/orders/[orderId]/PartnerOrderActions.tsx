@@ -5,16 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent } from "react";
 import { compressImage } from "@/lib/installer/image";
 import {
-  PARTNER_SELECTABLE_STATUSES,
-  PARTNER_STATUS_LABELS,
-  PARTNER_STATUSES,
-} from "@/lib/installation/partner/routing";
-import {
   addPartnerNoteAction,
   getPartnerUploadTargetsAction,
   setPartnerClaimAmountAction,
   submitPartnerCompletionAction,
-  updatePartnerStatusAction,
+  reportPartnerUnableAction,
 } from "../actions";
 
 const PHOTO_MAX = 10;
@@ -23,13 +18,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
   ORDER_NOT_FOUND: "주문을 찾을 수 없습니다.",
   ORDER_NOT_WORKABLE: "이미 완료 등록되었거나 진행할 수 없는 건입니다.",
-  PARTNER_STATUS_INVALID: "선택할 수 없는 상태입니다.",
   REASON_REQUIRED: "설치 불가 사유를 적어 주세요.",
   NOTE_REQUIRED: "메모 내용을 입력해 주세요.",
   NOTE_TOO_LONG: "메모가 너무 깁니다. (2000자 이하)",
   CLAIM_AMOUNT_INVALID: "청구 금액을 숫자로 입력해 주세요. (1,000만 원 이하)",
   CLAIM_CHANGE_REASON_REQUIRED: "금액을 바꾸는 사유를 적어 주세요.",
-  CLAIM_AMOUNT_REQUIRED: "설치 완료 전에 청구 금액을 먼저 입력해 주세요.",
+  CLAIM_AMOUNT_REQUIRED: "먼저 청구 금액을 입력해 접수해 주세요.",
   PHOTO_COUNT_INVALID: `사진은 ${PHOTO_MAX}장까지 올릴 수 있습니다.`,
   PHOTO_UPLOAD_INCOMPLETE: "사진 업로드가 끝나지 않았습니다. 다시 시도해 주세요.",
   UPLOAD_TARGET_FAILED: "사진 업로드 준비에 실패했습니다. 잠시 후 다시 시도해 주세요.",
@@ -47,27 +41,26 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
+// 협력사가 하는 일은 셋뿐이다: 청구 금액을 넣어 접수, 설치 완료 등록, (못 맡으면) 설치 불가.
+// 기사 배정·일정은 협력사가 알아서 하고 이 화면에 남기지 않는다.
 export default function PartnerOrderActions({
   orderId,
-  partnerStatus,
   claimAmount,
 }: {
   orderId: string;
-  partnerStatus: string | null;
   claimAmount: number | null;
 }) {
   const router = useRouter();
   const [amountInput, setAmountInput] = useState(claimAmount != null ? String(claimAmount) : "");
   const [amountReason, setAmountReason] = useState("");
-  const [status, setStatus] = useState(partnerStatus ?? PARTNER_STATUSES.RECEIVED);
-  const [statusBody, setStatusBody] = useState("");
+  const [unableReason, setUnableReason] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [completionBody, setCompletionBody] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
-  const [busy, setBusy] = useState<"amount" | "status" | "note" | "completion" | null>(null);
+  const [busy, setBusy] = useState<"amount" | "unable" | "note" | "completion" | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  async function run(kind: "amount" | "status" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
+  async function run(kind: "amount" | "unable" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
     setBusy(kind);
     setMessage(null);
     try {
@@ -97,18 +90,19 @@ export default function PartnerOrderActions({
     const ok = await run(
       "amount",
       () => setPartnerClaimAmountAction({ orderId, amount: Number(digits), reason: amountReason }),
-      "청구 금액을 저장했습니다.",
+      claimAmount == null ? "접수했습니다." : "청구 금액을 수정했습니다.",
     );
     if (ok) setAmountReason("");
   }
 
-  async function handleStatus() {
+  async function handleUnable() {
+    if (!window.confirm("이 건을 맡을 수 없다고 본사에 알릴까요?")) return;
     const ok = await run(
-      "status",
-      () => updatePartnerStatusAction({ orderId, status, body: statusBody }),
-      "진행 상태를 저장했습니다.",
+      "unable",
+      () => reportPartnerUnableAction({ orderId, reason: unableReason }),
+      "본사에 설치 불가를 알렸습니다.",
     );
-    if (ok) setStatusBody("");
+    if (ok) setUnableReason("");
   }
 
   async function handleNote() {
@@ -175,9 +169,11 @@ export default function PartnerOrderActions({
       ) : null}
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="text-base font-bold">청구 금액</h2>
+        <h2 className="text-base font-bold">{claimAmount == null ? "접수" : "청구 금액"}</h2>
         <p className="mb-3 mt-1 text-xs text-zinc-500">
-          본사에 청구할 시공비입니다. 설치 완료 등록 전까지 수정할 수 있고, 바꿀 때마다 기록이 남습니다.
+          {claimAmount == null
+            ? "본사에 청구할 시공비를 입력하면 접수됩니다. 기사 배정과 일정은 직접 진행해 주세요."
+            : "설치 완료 등록 전까지 수정할 수 있고, 바꿀 때마다 기록이 남습니다."}
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -204,52 +200,12 @@ export default function PartnerOrderActions({
           disabled={busy !== null}
           className="mt-2 h-10 w-full rounded-md bg-zinc-950 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy === "amount" ? "저장 중…" : claimAmount != null ? "금액 수정" : "금액 저장"}
+          {busy === "amount" ? "저장 중…" : claimAmount != null ? "금액 수정" : "접수하기"}
         </button>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-base font-bold">진행 상태</h2>
-        <div className="flex flex-wrap gap-2">
-          {PARTNER_SELECTABLE_STATUSES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setStatus(value)}
-              className={[
-                "rounded-full border px-3 py-1.5 text-sm font-semibold",
-                status === value
-                  ? value === PARTNER_STATUSES.UNABLE
-                    ? "border-rose-600 bg-rose-600 text-white"
-                    : "border-zinc-950 bg-zinc-950 text-white"
-                  : "border-zinc-300 bg-white text-zinc-700",
-              ].join(" ")}
-            >
-              {PARTNER_STATUS_LABELS[value]}
-            </button>
-          ))}
-        </div>
-        <textarea
-          value={statusBody}
-          onChange={(event) => setStatusBody(event.target.value)}
-          rows={2}
-          placeholder={
-            status === PARTNER_STATUSES.UNABLE
-              ? "설치 불가 사유 (필수)"
-              : "담당 기사, 방문 일정 등 (선택)"
-          }
-          className="mt-3 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={handleStatus}
-          disabled={busy !== null}
-          className="mt-2 h-10 w-full rounded-md bg-zinc-950 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {busy === "status" ? "저장 중…" : "상태 저장"}
-        </button>
-      </section>
-
+      {/* 접수(청구 금액 입력) 뒤에만 완료 등록을 연다. */}
+      {claimAmount != null ? (
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="text-base font-bold">설치 완료 등록</h2>
         <p className="mb-3 mt-1 text-xs text-zinc-500">진행 내용과 사진은 선택입니다. 등록하면 본사가 확인한 뒤 완료 처리됩니다.</p>
@@ -289,6 +245,7 @@ export default function PartnerOrderActions({
           {busy === "completion" ? "등록 중…" : "설치 완료 등록"}
         </button>
       </section>
+      ) : null}
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-base font-bold">메모</h2>
@@ -308,6 +265,25 @@ export default function PartnerOrderActions({
           {busy === "note" ? "등록 중…" : "메모 남기기"}
         </button>
       </section>
+
+      <details className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-zinc-500">이 건을 맡을 수 없나요?</summary>
+        <textarea
+          value={unableReason}
+          onChange={(event) => setUnableReason(event.target.value)}
+          rows={2}
+          placeholder="설치 불가 사유 (필수)"
+          className="mt-3 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={handleUnable}
+          disabled={busy !== null}
+          className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white text-sm font-semibold text-rose-700 disabled:opacity-50"
+        >
+          {busy === "unable" ? "전송 중…" : "본사에 설치 불가 알리기"}
+        </button>
+      </details>
     </div>
   );
 }
