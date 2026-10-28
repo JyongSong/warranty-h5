@@ -46,6 +46,7 @@ export type InstallationOrderDetailItem = {
     name: string;
     branch: string | null;
   } | null;
+  partnerId?: string | null;
   hasOpenIssue: boolean;
   lastIssueId: string | null;
   statusChangedAt: string;
@@ -595,7 +596,7 @@ export default function InstallationOrderDetail({
             hasOpenIssue={item.hasOpenIssue}
             fallbackUsed={Boolean(activeCustomerRequest?.fallbackUsed)}
             activeAssignmentId={item.activeAssignmentId}
-            reassignable={canReassignInstaller(item.status, item.currentInstallerId)}
+            reassignable={canReassignInstaller(item.status, item.currentInstallerId, item.partnerId)}
             onSendCustomerInputSms={sendCustomerInputSms}
             onApproveAssignment={approveAssignment}
             onManualAssign={manualAssign}
@@ -2362,8 +2363,13 @@ export function canManuallyAssign(status: string, hasOpenIssue: boolean, fallbac
   return (hasOpenIssue || fallbackUsed) && canSwitchToManual(status);
 }
 
-export function canReassignInstaller(status: string, currentInstallerId: string | null) {
-  if (!currentInstallerId) return false;
+export function canReassignInstaller(
+  status: string,
+  currentInstallerId: string | null,
+  partnerId?: string | null,
+) {
+  // 협력사(PL) 배정 건은 협력사 패널의 "자사 기사 배정으로 전환" 으로만 돌린다.
+  if (partnerId || !currentInstallerId) return false;
   return ["WAITING_INSTALLER_RESPONSE", "INSTALLER_ASSIGNED"].includes(status);
 }
 

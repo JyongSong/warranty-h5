@@ -53,6 +53,7 @@ type ManualOrder = {
   activeCustomerRequestId: string | null;
   activeAssignmentId: string | null;
   currentInstallerId?: string | null;
+  partnerId?: string | null;
   customerRequests?: Array<{
     installAddressEncrypted: string | null;
     installAddress1Encrypted: string | null;
@@ -149,6 +150,7 @@ async function createManualAssignmentAttempt(
         activeCustomerRequestId: true,
         activeAssignmentId: true,
         currentInstallerId: true,
+        partnerId: true,
         customerRequests: {
           where: {
             status: { in: ["SUBMITTED", "FALLBACK_USED"] },
@@ -353,7 +355,11 @@ async function createManualAssignmentAttempt(
   });
 }
 
-function canReassignInstallerFromOrder(order: Pick<ManualOrder, "status" | "currentInstallerId">) {
+function canReassignInstallerFromOrder(
+  order: Pick<ManualOrder, "status" | "currentInstallerId" | "partnerId">,
+) {
+  // 협력사(PL) 배정 건은 협력사 패널의 자사 전환으로 처리한다.
+  if (order.partnerId) return false;
   return (
     (order.status === INSTALLATION_ORDER_STATUSES.INSTALLER_ASSIGNED ||
       order.status === INSTALLATION_ORDER_STATUSES.WAITING_INSTALLER_RESPONSE) &&

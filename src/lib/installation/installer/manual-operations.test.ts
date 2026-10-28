@@ -737,6 +737,7 @@ describe("installation manual operations", () => {
 
     it.each([
       ["a submitted completion awaiting review", { status: "WAITING_HQ_REVIEW" }],
+      ["a partner (PL) order", { partnerId: "partner-pl" }],
       ["an order without a current installer", { currentInstallerId: null }],
     ])("rejects reassignment of %s", async (_label, overrides) => {
       mockAssignedOrder(overrides);

@@ -123,6 +123,13 @@ vi.mock("./installations/actions", () => ({
   switchInstallationOrderToManualRequiredAction: vi.fn(),
 }));
 
+vi.mock("./installations/[installationId]/partner-actions", () => ({
+  addHqPartnerNoteAction: vi.fn(),
+  reviewPartnerCompletionAction: vi.fn(),
+  switchOrderToInhouseAction: vi.fn(),
+  switchOrderToPartnerAction: vi.fn(),
+}));
+
 vi.mock("./installation-order-source/actions", () => ({
   addErpOrderToQueueAction: vi.fn(),
   lookupErpOrderByNumberAction: vi.fn(),
@@ -181,6 +188,7 @@ function createInstallationOrderDetail(overrides: Record<string, unknown> = {}) 
     activeCustomerRequestId: "request-1",
     activeAssignmentId: null,
     currentInstallerId: null,
+    partnerId: null,
     currentInstaller: null,
     hasOpenIssue: true,
     lastIssueId: null,
@@ -1853,6 +1861,9 @@ describe("backoffice installation order routes", () => {
         activeCustomerRequestId: null,
         activeAssignmentId: null,
         currentInstallerId: null,
+        partnerStatus: null,
+        partnerClaimAmount: null,
+        partner: null,
         hasOpenIssue: false,
         statusChangedAt: new Date("2026-06-16T05:11:28.983Z"),
         createdAt: new Date("2026-06-16T05:11:28.983Z"),

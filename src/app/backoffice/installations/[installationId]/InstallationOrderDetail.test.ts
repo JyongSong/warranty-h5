@@ -382,4 +382,10 @@ describe("ManualAssignmentInstallerSelector", () => {
     expect(canReassignInstaller("WAITING_HQ_REVIEW", "installer-1")).toBe(false);
     expect(canReassignInstaller("COMPLETED", "installer-1")).toBe(false);
   });
+
+  it("never offers in-house reassignment for an order assigned to the partner (PL)", () => {
+    expect(canReassignInstaller("INSTALLER_ASSIGNED", "installer-1")).toBe(true);
+    expect(canReassignInstaller("INSTALLER_ASSIGNED", "installer-1", "partner-pl")).toBe(false);
+    expect(canReassignInstaller("INSTALLER_ASSIGNED", null, "partner-pl")).toBe(false);
+  });
 });

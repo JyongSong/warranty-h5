@@ -28,6 +28,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
       activeCustomerRequestId: true,
       activeAssignmentId: true,
       currentInstallerId: true,
+      partnerId: true,
       currentInstaller: {
         select: {
           name: true,

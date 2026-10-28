@@ -1,4 +1,4 @@
-import { requirePartner } from "@/lib/partnerAuth";
+import { requirePartnerWithCode } from "@/lib/partnerAuth";
 import {
   getCjManifestStats,
   listRecentCjManifestUploads,
@@ -9,7 +9,7 @@ import CjUploadClient from "./CjUploadClient";
 export const dynamic = "force-dynamic";
 
 export default async function PartnerCjUploadPage() {
-  const partner = await requirePartner();
+  const partner = await requirePartnerWithCode("CJ");
   const [uploads, stats, recent] = await Promise.all([
     listRecentCjManifestUploads(),
     getCjManifestStats(),

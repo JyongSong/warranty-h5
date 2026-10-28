@@ -238,6 +238,17 @@ export function determineItem(memo: string): { itemCode: string | null; itemName
 // 데이터 조회 + 분배 파이프라인
 // ============================================================
 
+// 외부 협력사(PL)로 넘기는 용역 품목 코드. 품목명 목록은 installation/partner/routing.ts 와 맞춘다.
+const PARTNER_SERVICE_ITEM_CODES = [
+  '00011', '00013', '00013-1', '00013-2', '00013-3', '00014', '00015', '00015-1', '00024', '00025', '00027',
+]
+
+// 설치 업무 대상이 되는 용역 품목: 00010 출장비, 00012% 도어락 설치비, 그리고 PL 용역 품목.
+function serviceItemCondition(alias: string) {
+  const codes = ['00010', ...PARTNER_SERVICE_ITEM_CODES].map((code) => `'${code}'`).join(', ')
+  return `(${alias}.CD_ITEM IN (${codes}) OR ${alias}.CD_ITEM LIKE '00012%')`
+}
+
 // 기사배정 대상 조회 SQL. 정규 조회(납기일자 범위)와 번호 직접 조회가 같은
 // 행 조립(lines → 전화번호 그룹핑)을 쓰고, 어떤 주문을 대상으로 삼을지만 다르다.
 // eligible 은 NO_SO/CD_COMPANY(번호 조회면 shipped 도) 를 내는 SELECT 본문,
@@ -344,7 +355,7 @@ ${confWhere}      )
           WHERE l2.phone = l1.phone
             AND l2.NO_ORDER_ON IS NOT NULL
             -- 용역 라인이 속한 NO_ORDER_ON 만 (일반 상품의 NO_ORDER_ON 제외)
-            AND (l2.CD_ITEM = '00010' OR l2.CD_ITEM LIKE '00012%')
+            AND ${serviceItemCondition('l2')}
           FOR XML PATH(''), TYPE
         ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS order_numbers,
         STUFF((
@@ -385,7 +396,7 @@ const DISPATCH_ELIGIBLE_BY_DUE_DATE = `        SELECT DISTINCT SOL.NO_SO, SOL.CD
         WHERE SOL.CD_COMPANY = '1000'
           AND SOL.NO_HST     = 0
           AND SOL.DT_DUEDATE BETWEEN @dueDateFrom AND @dueDateTo
-          AND (SOL.CD_ITEM = '00010' OR SOL.CD_ITEM LIKE '00012%')
+          AND ${serviceItemCondition('SOL')}
           -- 출하의뢰가 1건 이상 존재하고, 모든 SA_GIRL 라인이 QT_GIR = QT_GI 인 주문만
           AND EXISTS (
             SELECT 1 FROM NEOE.SA_GIRL G
@@ -408,7 +419,7 @@ const DISPATCH_CONF_WHERE_BY_DUE_DATE = `        WHERE CONF.CD_COMPANY = '1000'
           AND EXISTS (
             SELECT 1 FROM NEOE.CZ_PU_INOUT_CONF C2
             WHERE C2.NO_RCV = CONF.NO_RCV AND C2.CD_COMPANY = CONF.CD_COMPANY
-              AND (C2.CD_ITEM = '00010' OR C2.CD_ITEM LIKE '00012%')
+              AND ${serviceItemCondition('C2')}
           )
 `
 
@@ -416,7 +427,7 @@ const DISPATCH_CONF_WHERE_BY_DUE_DATE = `        WHERE CONF.CD_COMPANY = '1000'
 // 그 사유를 표시만 한다. 추가할지는 담당자가 판단한다.
 const LOOKUP_FLAG_COLUMNS = `,
         MIN(shipped) AS fully_shipped,
-        MAX(CASE WHEN l1.CD_ITEM = '00010' OR l1.CD_ITEM LIKE '00012%' THEN 1 ELSE 0 END) AS has_service_item`
+        MAX(CASE WHEN ${serviceItemCondition('l1')} THEN 1 ELSE 0 END) AS has_service_item`
 
 const DISPATCH_ELIGIBLE_BY_NUMBER = `        SELECT DISTINCT SOL.NO_SO, SOL.CD_COMPANY,
           CASE WHEN EXISTS (
@@ -451,7 +462,7 @@ const DISPATCH_CONF_WHERE_BY_NUMBER = `        WHERE CONF.CD_COMPANY = '1000'
 /**
  * 기사배정 대상 주문 조회 (ERP)
  * - 납기일자 (DT_DUEDATE) 범위 매칭
- * - 해당 주문(NO_SO)에 용역 품목(00010 출장비 / 00012% 도어락 설치비) 포함
+ * - 해당 주문(NO_SO)에 용역 품목(serviceItemCondition: 출장비 / 도어락 설치비 / PL 용역 품목) 포함
  * - 전화번호 기준 그룹핑 (한 사람 = 한 행)
  * @param dueDateFrom YYYYMMDD (포함)
  * @param dueDateTo   YYYYMMDD (포함)

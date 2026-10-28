@@ -126,6 +126,7 @@ export async function InstallationOrderListView({
       sourceOrderDate: order.sourceOrderDate,
       status: order.status,
       currentInstallerId: order.currentInstallerId,
+      partner: order.partner ? { name: order.partner.name, status: order.partnerStatus, claimAmount: order.partnerClaimAmount } : null,
       hasOpenIssue: order.hasOpenIssue,
       issueCodes: order.issues.map((issue) => issue.type),
       statusChangedAt: order.statusChangedAt.toISOString(),

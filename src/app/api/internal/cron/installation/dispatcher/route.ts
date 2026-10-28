@@ -28,6 +28,7 @@ import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-bas
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
 import { isInstallationSmsSendWindowOpen } from "@/lib/installation/notifications/sms-send-window";
 import { remindUnrespondedAsAssignments } from "@/lib/installation/as/service";
+import { assignReadyOrdersToPartner } from "@/lib/installation/partner/service";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,13 @@ export async function GET(request: Request) {
             limit: config.limits.fallbackCustomerRequests,
           }),
         ),
+        // PL 용역 품목(조명·커튼·도어벨 등) 건은 자사 기사 자동배정보다 먼저 협력사(PL)로 넘긴다.
+        assignPartnerOrders: await runDispatcherStep("assignPartnerOrders", metrics, () =>
+          assignReadyOrdersToPartner({
+            baseUrl,
+            limit: config.limits.dispatchReadyOrders,
+          }),
+        ),
         dispatchReadyOrders: await runDispatcherStep("dispatchReadyOrders", metrics, () =>
           dispatchReadyInstallationOrders({
             baseUrl,
@@ -171,6 +179,7 @@ export async function GET(request: Request) {
       });
       const degraded =
         results.processInstallationOrders.failedCount > 0 ||
+        results.assignPartnerOrders.failedCount > 0 ||
         results.dispatchReadyOrders.failedCount > 0 ||
         results.timeoutInstallerAssignments.failedCount > 0 ||
         results.sendInstallationNotifications.failedCount > 0 ||

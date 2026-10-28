@@ -24,8 +24,8 @@ export default function PartnerLoginClient() {
     <div style={pageStyle}>
       <form action={handleSubmit} style={cardStyle}>
         <p style={eyebrowStyle}>PARTNER</p>
-        <h1 style={titleStyle}>주문번호 명단 업로드</h1>
-        <p style={subtitleStyle}>CJ 담당자 전용 페이지입니다.</p>
+        <h1 style={titleStyle}>협력사 로그인</h1>
+        <p style={subtitleStyle}>아카라라이프 협력사 담당자 전용 페이지입니다.</p>
 
         <label style={labelStyle}>
           아이디

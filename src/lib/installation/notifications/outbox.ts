@@ -1233,7 +1233,11 @@ async function createSmsDeliveryFailedIssue(
 }
 
 function getSmsFailedIssueType(smsType: string) {
-  if (smsType === "INSTALLER_ASSIGNMENT_REQUEST" || smsType === "INSTALLER_HAPPYCALL_GUIDE") {
+  if (
+    smsType === "INSTALLER_ASSIGNMENT_REQUEST" ||
+    smsType === "INSTALLER_HAPPYCALL_GUIDE" ||
+    smsType === "PARTNER_ASSIGNMENT_REQUEST"
+  ) {
     return "INSTALLER_ASSIGNMENT_SMS_SEND_FAILED";
   }
   if (smsType === "CUSTOMER_ASSIGNMENT_CONFIRMED") {
