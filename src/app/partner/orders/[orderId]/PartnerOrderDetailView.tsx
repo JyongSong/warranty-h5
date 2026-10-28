@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 import type { PartnerOrderDetail } from "@/lib/installation/partner/views";
 import PartnerHeader from "../PartnerHeader";
+import PartnerInstallItems from "../PartnerInstallItems";
 import PartnerNoteTimeline from "../PartnerNoteTimeline";
 import PartnerOrderActions from "./PartnerOrderActions";
 import {
@@ -63,8 +64,15 @@ export default function PartnerOrderDetailView({
                 <dd>{formatInstallSchedule(order.installDate, order.installTimeSlot)}</dd>
                 <dt className="text-zinc-500">고객 요청</dt>
                 <dd className="whitespace-pre-wrap break-keep">{order.customerNote ?? "-"}</dd>
+                <dt className="text-zinc-500">설치 품목</dt>
+                <dd>
+                  <PartnerInstallItems items={order.installItems} />
+                  {order.installItemsEdited ? (
+                    <p className="mt-1 text-xs text-violet-700">본사에서 확정한 품목입니다.</p>
+                  ) : null}
+                </dd>
                 <dt className="text-zinc-500">주문 상품</dt>
-                <dd className="break-keep">{order.memo ?? "-"}</dd>
+                <dd className="break-keep text-zinc-600">{order.memo ?? "-"}</dd>
               </dl>
             </section>
 

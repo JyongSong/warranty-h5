@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolvePartnerInstallItems, type PartnerInstallItem } from "@/lib/installation/partner/install-items";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/installer/storage";
 import { INSTALLATION_ORDER_STATUSES } from "@/lib/installation/orders/status";
@@ -31,6 +32,7 @@ const ORDER_SELECT = {
   partnerStatusChangedAt: true,
   partnerClaimAmount: true,
   partnerInstaller: true,
+  partnerInstallItems: true,
   source: {
     select: {
       customerNameEncrypted: true,
@@ -66,6 +68,7 @@ type OrderRow = {
   partnerStatusChangedAt: Date | null;
   partnerClaimAmount: number | null;
   partnerInstaller: string | null;
+  partnerInstallItems: unknown;
   source: {
     customerNameEncrypted: string | null;
     phoneEncrypted: string | null;
@@ -107,6 +110,10 @@ export type PartnerOrderSummary = {
   installTimeSlot: string | null;
   customerNote: string | null;
   memo: string | null;
+  /** 설치 품목 (본사가 고친 값, 없으면 주문 상품에서 자동으로 뽑은 값) */
+  installItems: PartnerInstallItem[];
+  /** 본사 관리자가 고친 값이면 true */
+  installItemsEdited: boolean;
   orderNumber: string | null;
 };
 
@@ -136,8 +143,14 @@ function shapeOrder(order: OrderRow): PartnerOrderSummary {
     installTimeSlot: request?.installTimeSlot ?? null,
     customerNote: request?.customerNote ?? null,
     memo: order.source?.memo ?? null,
+    ...shapeInstallItems(order),
     orderNumber: order.source?.orderNumbers ?? order.source?.externalOrderNo ?? order.source?.noGirl ?? null,
   };
+}
+
+function shapeInstallItems(order: OrderRow) {
+  const { items, edited } = resolvePartnerInstallItems(order.partnerInstallItems, order.source?.memo);
+  return { installItems: items, installItemsEdited: edited };
 }
 
 export async function listPartnerOrders(partnerId: string, view: PartnerOrderView) {

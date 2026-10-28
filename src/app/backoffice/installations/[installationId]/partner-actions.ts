@@ -6,6 +6,7 @@ import {
   addPartnerNote,
   InstallationPartnerError,
   reviewPartnerCompletion,
+  setPartnerInstallItems,
   switchOrderToInhouse,
   switchOrderToPartner,
 } from "@/lib/installation/partner/service";
@@ -46,6 +47,16 @@ export async function addHqPartnerNoteAction(input: {
 }): Promise<BackofficePartnerActionResult> {
   return runAsAdmin(input.installationId, (adminId) =>
     addPartnerNote(input.installationId, { authorType: "HQ", partnerId: null, userId: adminId, body: input.body }),
+  );
+}
+
+/** items 가 null 이면 본사 수정값을 지우고 주문 상품 기준 자동 판별로 되돌린다. */
+export async function setPartnerInstallItemsAction(input: {
+  installationId: string;
+  items: Array<{ code: string | null; name: string; quantity: number; onsitePayment: boolean }> | null;
+}): Promise<BackofficePartnerActionResult> {
+  return runAsAdmin(input.installationId, (adminId) =>
+    setPartnerInstallItems(input.installationId, { adminId, items: input.items }),
   );
 }
 

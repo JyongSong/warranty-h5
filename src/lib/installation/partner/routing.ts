@@ -68,3 +68,4 @@ export function formatPartnerStatus(value: string | null | undefined) {
   if (!value) return "-";
   return PARTNER_STATUS_LABELS[value as PartnerStatus] ?? value;
 }
+

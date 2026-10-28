@@ -36,6 +36,7 @@ import {
   reviewPartnerCompletion,
   setPartnerClaimAmount,
   setPartnerInstaller,
+  setPartnerInstallItems,
   submitPartnerCompletion,
   reportPartnerUnable,
   switchOrderToInhouse,
@@ -297,5 +298,77 @@ describe("installation partner service", () => {
       expect.objectContaining({ orderData: expect.objectContaining({ partnerId: null, partnerRouting: "INHOUSE" }) }),
       db,
     );
+  });
+
+  it("lets HQ edit 설치 품목, logging the new list, and revert to the memo", async () => {
+    const memo = "용역 도어락 설치비(K100) x1 / 용역 도어벨 상시전원 설치비 (부자재 비용 현장 결제) x1 / 용역 출장비 x1";
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerInstallItems: null,
+      source: { memo },
+    });
+
+    await setPartnerInstallItems("order-1", {
+      adminId: "admin-1",
+      items: [
+        { code: "00050", quantity: 1 },
+        { code: null, name: "중문 설치", quantity: 2, onsitePayment: true },
+      ],
+    });
+
+    expect(db.installationOrder.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: {
+        partnerInstallItems: [
+          { code: "00050", name: "K100도어락설치", quantity: 1, onsitePayment: false },
+          { code: null, name: "중문 설치", quantity: 2, onsitePayment: true },
+        ],
+      },
+    });
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      authorType: "HQ",
+      kind: "ITEMS",
+      partnerId: "partner-pl",
+      body: "설치 품목 수정\nK100도어락설치 ×1, 중문 설치 ×2 (현장결제)",
+    });
+
+    // 자동 판별과 같은 목록을 그대로 저장하려 하면 아무것도 바꾸지 않는다.
+    vi.clearAllMocks();
+    db.$transaction.mockImplementation((fn: (tx: typeof db) => unknown) => fn(db));
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerInstallItems: null,
+      source: { memo },
+    });
+    await setPartnerInstallItems("order-1", { adminId: "admin-1", items: null });
+    expect(db.installationOrder.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects 설치 품목 edits on non-PL or cancelled orders and bad rows", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: null,
+      partnerInstallItems: null,
+      source: { memo: null },
+    });
+    await expect(setPartnerInstallItems("order-1", { adminId: "a", items: [] })).rejects.toThrow("ORDER_NOT_PARTNER");
+
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "CANCELLED",
+      partnerId: "partner-pl",
+      partnerInstallItems: null,
+      source: { memo: null },
+    });
+    await expect(setPartnerInstallItems("order-1", { adminId: "a", items: [] })).rejects.toThrow("ORDER_NOT_WORKABLE");
+
+    await expect(
+      setPartnerInstallItems("order-1", { adminId: "a", items: [{ code: "00054", quantity: 0 }] }),
+    ).rejects.toThrow("INSTALL_ITEM_QUANTITY_INVALID");
   });
 });
