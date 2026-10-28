@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { BackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 import PartnerNoteTimeline from "@/app/partner/orders/PartnerNoteTimeline";
+import PartnerInstallItemsEditor from "./PartnerInstallItemsEditor";
 import { formatClaimAmount, formatPartnerDateTime } from "@/app/partner/orders/format";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import {
@@ -122,6 +123,15 @@ export default function PartnerAssignmentPanel({
           value={detail?.completionSubmittedAt ? formatPartnerDateTime(detail.completionSubmittedAt) : "-"}
         />
       </dl>
+
+      {detail ? (
+        <PartnerInstallItemsEditor
+          installationId={installationId}
+          items={detail.installItems}
+          edited={detail.installItemsEdited}
+          editable={data.orderStatus !== "CANCELLED"}
+        />
+      ) : null}
 
       <PartnerNoteTimeline notes={detail?.notes ?? []} />
 

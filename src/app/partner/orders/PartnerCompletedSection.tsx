@@ -124,7 +124,7 @@ export default function PartnerCompletedSection({
                       <span className="line-clamp-2 break-keep">{order.address ?? "-"}</span>
                     </RowCell>
                     <RowCell href={href} className="max-w-[320px]">
-                      <PartnerInstallItems memo={order.memo} compact />
+                      <PartnerInstallItems items={order.installItems} compact />
                     </RowCell>
                     <RowCell href={href} className="whitespace-nowrap">{order.installer ?? "-"}</RowCell>
                     <RowCell href={href} className="whitespace-nowrap text-right font-bold text-zinc-950">

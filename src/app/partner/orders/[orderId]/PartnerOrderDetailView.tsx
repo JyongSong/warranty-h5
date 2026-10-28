@@ -66,7 +66,10 @@ export default function PartnerOrderDetailView({
                 <dd className="whitespace-pre-wrap break-keep">{order.customerNote ?? "-"}</dd>
                 <dt className="text-zinc-500">설치 품목</dt>
                 <dd>
-                  <PartnerInstallItems memo={order.memo} />
+                  <PartnerInstallItems items={order.installItems} />
+                  {order.installItemsEdited ? (
+                    <p className="mt-1 text-xs text-violet-700">본사에서 확정한 품목입니다.</p>
+                  ) : null}
                 </dd>
                 <dt className="text-zinc-500">주문 상품</dt>
                 <dd className="break-keep text-zinc-600">{order.memo ?? "-"}</dd>

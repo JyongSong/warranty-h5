@@ -69,36 +69,3 @@ export function formatPartnerStatus(value: string | null | undefined) {
   return PARTNER_STATUS_LABELS[value as PartnerStatus] ?? value;
 }
 
-// 협력사가 실제로 해야 하는 설치 작업만 원천 메모에서 뽑는다.
-// 메모는 "품목명 x수량 / 품목명 x수량" 형식이고, 설치 작업은 "용역 ..." 품목(+ 접두어 없는 00013-3)이다.
-// 출장비·용역매출은 작업이 아니라서 뺀다. 예) "용역 도어락 설치비(K100) x1" → { label: "도어락 K100 설치", quantity: 1 }
-const NON_WORK_SERVICE_ITEMS = ["용역 출장비", "용역 용역매출", "용역매출"];
-const UNPREFIXED_INSTALL_ITEMS = ["길이조절 커튼 레일 설치 + 출장비"];
-
-export type PartnerInstallItem = { label: string; quantity: number };
-
-export function parsePartnerInstallItems(memo: string | null | undefined): PartnerInstallItem[] {
-  if (!memo) return [];
-
-  const items: PartnerInstallItem[] = [];
-  for (const segment of memo.split(" / ")) {
-    const match = /^(.*?)\s*x\s*(\d+)\s*$/i.exec(segment.trim());
-    const name = (match ? match[1] : segment).replace(/^★\s*/, "").trim();
-    const quantity = match ? Number(match[2]) : 1;
-
-    const isServiceItem = name.startsWith("용역") || UNPREFIXED_INSTALL_ITEMS.includes(name);
-    if (!isServiceItem || NON_WORK_SERVICE_ITEMS.includes(name)) continue;
-
-    items.push({ label: formatInstallItemLabel(name), quantity });
-  }
-  return items;
-}
-
-function formatInstallItemLabel(name: string) {
-  return name
-    .replace(/^용역\s*/, "")
-    .replace(/\s*\([^)]*결제[^)]*\)/g, "") // (현장결제), (부자재 비용 현장 결제) 같은 결제 안내는 뺀다
-    .replace(/설치비\s*\(([A-Za-z0-9]+)\)/, "$1 설치") // 도어락 설치비(K100) → 도어락 K100 설치
-    .replace(/설치(비|서비스)/g, "설치")
-    .trim();
-}

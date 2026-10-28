@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii, encryptNullablePii, hmacPii, normalizePhone11 } from "@/lib/piiCrypto";
 import { INSTALLATION_ORDER_STATUSES, transitionInstallationOrderStatus } from "@/lib/installation/orders/status";
@@ -5,6 +6,14 @@ import { createInstallationIssue } from "@/lib/installation/orders/issues/create
 import { buildPartnerAssignmentRequestSmsContent } from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { findMissingPhotos } from "@/lib/installer/storage";
+import {
+  deriveInstallItemsFromMemo,
+  formatInstallItemsText,
+  normalizeInstallItems,
+  PartnerInstallItemsError,
+  resolvePartnerInstallItems,
+  type PartnerInstallItem,
+} from "@/lib/installation/partner/install-items";
 import {
   DEFAULT_PARTNER_CODE,
   PARTNER_ROUTING,
@@ -503,6 +512,57 @@ export async function setPartnerInstaller(
         authorType: "PARTNER",
         kind: "INSTALLER",
         body: previous ? `담당 기사 ${previous} → ${normalized}` : `담당 기사 ${normalized}`,
+        createdAt: now,
+      },
+    });
+  });
+}
+
+/**
+ * 본사 관리자가 협력사 주문의 설치 품목을 고친다. items 가 null 이면 저장값을 지우고 메모 자동 판별로 되돌린다.
+ * 바뀐 내용은 진행 기록(ITEMS)에 남아 협력사 화면에서도 보인다.
+ */
+export async function setPartnerInstallItems(
+  orderId: string,
+  { adminId, items, now = new Date() }: { adminId: string; items: unknown[] | null; now?: Date },
+) {
+  let normalized: PartnerInstallItem[] | null;
+  try {
+    normalized = items === null ? null : normalizeInstallItems(items);
+  } catch (error) {
+    if (error instanceof PartnerInstallItemsError) throw new InstallationPartnerError(error.message);
+    throw error;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.installationOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, status: true, partnerId: true, partnerInstallItems: true, source: { select: { memo: true } } },
+    });
+    if (!order) throw new InstallationPartnerError("ORDER_NOT_FOUND");
+    if (!order.partnerId) throw new InstallationPartnerError("ORDER_NOT_PARTNER");
+    if (order.status === INSTALLATION_ORDER_STATUSES.CANCELLED) throw new InstallationPartnerError("ORDER_NOT_WORKABLE");
+
+    const before = resolvePartnerInstallItems(order.partnerInstallItems, order.source?.memo);
+    const after = normalized
+      ? { items: normalized, edited: true }
+      : { items: deriveInstallItemsFromMemo(order.source?.memo), edited: false };
+    if (before.edited === after.edited && JSON.stringify(before.items) === JSON.stringify(after.items)) return;
+
+    await tx.installationOrder.update({
+      where: { id: orderId },
+      data: { partnerInstallItems: normalized ?? Prisma.DbNull },
+    });
+    await tx.installationPartnerNote.create({
+      data: {
+        installationOrderId: orderId,
+        partnerId: order.partnerId,
+        authorUserId: adminId,
+        authorType: "HQ",
+        kind: "ITEMS",
+        body: normalized
+          ? `설치 품목 수정\n${formatInstallItemsText(after.items)}`
+          : `설치 품목을 주문 상품 기준 자동 판별로 되돌림\n${formatInstallItemsText(after.items)}`,
         createdAt: now,
       },
     });

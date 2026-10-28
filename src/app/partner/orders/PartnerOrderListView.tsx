@@ -107,7 +107,7 @@ export default function PartnerOrderListView({
                       </RowCell>
                       <RowCell href={href} className="max-w-[320px]">
                         <span title={order.memo ?? undefined}>
-                          <PartnerInstallItems memo={order.memo} compact />
+                          <PartnerInstallItems items={order.installItems} compact />
                         </span>
                       </RowCell>
                       <RowCell
