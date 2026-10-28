@@ -24,14 +24,16 @@ export async function listInstallerDeviceTokens(installerId: string): Promise<st
 // Fire a high-priority FCM notification to all of an installer's devices.
 // High priority is what wakes an Android device out of Doze (validated in the
 // C1' spike). SMS remains the fallback, so failures here only log.
+// Returns how many devices FCM accepted the message for; 0 means nothing went
+// out (no devices, or every token was rejected), so callers can fall back to SMS.
 export async function sendAssignmentPushToInstaller(
   installerId: string,
   { title, body }: { title: string; body: string },
-): Promise<void> {
-  if (!isFcmConfigured()) return;
+): Promise<number> {
+  if (!isFcmConfigured()) return 0;
 
   const tokens = await listInstallerDeviceTokens(installerId);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return 0;
 
   const res = await getInstallerFcm().sendEachForMulticast({
     tokens,
@@ -54,4 +56,6 @@ export async function sendAssignmentPushToInstaller(
       }
     }),
   );
+
+  return res.successCount;
 }

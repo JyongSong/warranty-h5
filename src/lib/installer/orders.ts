@@ -60,7 +60,9 @@ const orderContentSelect = {
       ordererPhoneEncrypted: true,
     },
   },
-  completion: { select: { reviewStatus: true, rejectionReason: true, installEndAt: true } },
+  completion: {
+    select: { reviewStatus: true, rejectionReason: true, installEndAt: true, submittedInstallerId: true },
+  },
 } as const;
 
 type OrderContent = {
@@ -82,7 +84,12 @@ type OrderContent = {
     customerPhoneEncrypted: string | null;
     ordererPhoneEncrypted: string | null;
   }>;
-  completion: { reviewStatus: string; rejectionReason: string | null; installEndAt: Date } | null;
+  completion: {
+    reviewStatus: string;
+    rejectionReason: string | null;
+    installEndAt: Date;
+    submittedInstallerId: string;
+  } | null;
 };
 
 function summarizeProducts(memo: string | null | undefined): string {
@@ -103,9 +110,12 @@ function shapeOrder(
       .join(" ") || null;
 
   // Unhandled rejection: back with the installer (ACCEPTED) but the last
-  // completion was rejected and not yet resubmitted.
+  // completion was rejected and not yet resubmitted. A rejection of the
+  // previous installer's submission (before a reassignment) isn't theirs.
   const rejectionReason =
-    status === "ACCEPTED" && order.completion?.reviewStatus === "REJECTED"
+    status === "ACCEPTED" &&
+    order.completion?.reviewStatus === "REJECTED" &&
+    order.completion.submittedInstallerId === order.currentInstallerId
       ? order.completion.rejectionReason
       : null;
 

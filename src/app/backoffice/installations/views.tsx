@@ -149,6 +149,7 @@ export async function InstallationOrderListView({
             installerName: assignment.installer.name,
             installerPhone: assignment.installer.phone,
             installerBranch: assignment.installer.branch,
+            installerHasApp: assignment.installer._count.devices > 0,
             assignmentNumber: assignment.assignmentNumber,
             status: assignment.status,
             createdAt: assignment.createdAt.toISOString(),

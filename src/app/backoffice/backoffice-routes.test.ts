@@ -188,6 +188,7 @@ function createInstallationOrderDetail(overrides: Record<string, unknown> = {}) 
     activeCustomerRequestId: "request-1",
     activeAssignmentId: null,
     currentInstallerId: null,
+    partnerId: null,
     currentInstaller: null,
     hasOpenIssue: true,
     lastIssueId: null,

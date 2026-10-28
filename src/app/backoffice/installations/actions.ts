@@ -11,6 +11,7 @@ import {
   completeInstallationOrder,
   createManualInstallerAssignment,
   InstallationManualOperationError,
+  reassignInstallationOrderInstaller,
   switchInstallationOrderToManualRequired,
 } from "@/lib/installation/installer/manual-operations";
 import { InstallationIssueResolveError, resolveInstallationIssue } from "@/lib/installation/orders/issues/resolve";
@@ -149,6 +150,41 @@ export async function createManualInstallationAssignmentAction(
     }
     console.error("[action/installations/manual-assignment]", error);
     return { ok: false, error: "MANUAL_ASSIGNMENT_FAILED" };
+  }
+}
+
+export async function reassignInstallationOrderInstallerAction(input: {
+  installationId: string;
+  installerId: string;
+  reason: string;
+}): Promise<InstallationActionResult> {
+  const auth = await requireInstallationAdmin();
+  if (!auth.ok) return auth;
+
+  const normalizedOrderId = input.installationId.trim();
+  const normalizedInstallerId = input.installerId.trim();
+  const normalizedReason = input.reason.trim();
+  if (!normalizedOrderId) return { ok: false, error: "ORDER_ID_REQUIRED" };
+  if (!normalizedInstallerId) return { ok: false, error: "INSTALLER_ID_REQUIRED" };
+  if (!normalizedReason) return { ok: false, error: "REASSIGNMENT_REASON_REQUIRED" };
+
+  try {
+    const result = await reassignInstallationOrderInstaller(normalizedOrderId, {
+      installerId: normalizedInstallerId,
+      adminId: auth.admin.id,
+      reason: normalizedReason,
+      baseUrl: getSmsLinkBaseUrl(),
+    });
+    return normalizeAssignmentResult(result, {
+      status: "WAITING_INSTALLER_RESPONSE",
+      assignmentType: "MANUAL_DIRECT",
+    });
+  } catch (error) {
+    if (error instanceof InstallationManualOperationError) {
+      return { ok: false, error: toPublicManualAssignmentError(error.message) };
+    }
+    console.error("[action/installations/reassign-installer]", error);
+    return { ok: false, error: "REASSIGNMENT_FAILED" };
   }
 }
 

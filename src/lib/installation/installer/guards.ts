@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
 import { respondInstallerAssignment } from "@/lib/installation/installer/response";
+import { decryptNullablePii, encryptNullablePii, hmacPii, normalizePhone11 } from "@/lib/piiCrypto";
 
 type GuardOptions = {
   now?: Date;
@@ -22,6 +23,8 @@ export async function timeoutExpiredInstallerAssignments({
       id: true,
       installationOrderId: true,
       installerTokenHash: true,
+      installer: { select: { phone: true } },
+      customerRequest: { select: { installAddress1Encrypted: true } },
     },
   });
 
@@ -56,10 +59,59 @@ export async function timeoutExpiredInstallerAssignments({
         now,
       );
       failedCount += 1;
+      continue;
+    }
+
+    try {
+      await queueInstallerTimeoutNotice(assignment);
+    } catch (error) {
+      // 배정 취소 자체는 끝났다. 안내 문자를 못 남긴 것만 로그로 남긴다.
+      console.error("[installation/timeout-notice]", error);
     }
   }
 
   return { timedOutCount, failedCount };
+}
+
+/**
+ * 응답 기한이 지난 기사에게 배정 취소를 알린다. 바로 보내지 않고 알림 대기열에
+ * 넣어 발송 시간대(밤이면 다음 날 아침)에 문자·푸시로 나가게 한다.
+ */
+async function queueInstallerTimeoutNotice(assignment: {
+  id: string;
+  installationOrderId: string;
+  installer: { phone: string | null } | null;
+  customerRequest: { installAddress1Encrypted: string | null } | null;
+}) {
+  const phone = assignment.installer?.phone ? normalizePhone11(assignment.installer.phone) : null;
+  if (!phone) return;
+
+  const address = decryptNullablePii(assignment.customerRequest?.installAddress1Encrypted);
+  const smsBody = [
+    "[Aqara 기사] 응답 기한이 지나 설치 배정이 취소되었습니다.",
+    address ? `주소: ${address}` : null,
+    "해당 건은 진행하지 않으셔도 됩니다.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const idempotencyKey = `installer-assignment-timeout:${assignment.id}`;
+  await prisma.installationNotification.upsert({
+    where: { idempotencyKey },
+    create: {
+      installationOrderId: assignment.installationOrderId,
+      assignmentAttemptId: assignment.id,
+      smsType: "INSTALLER_ASSIGNMENT_TIMEOUT",
+      recipientType: "INSTALLER",
+      recipientPhoneEncrypted: encryptNullablePii(phone),
+      recipientPhoneHash: hmacPii(phone),
+      smsBody,
+      provider: "solapi",
+      status: "PENDING",
+      idempotencyKey,
+    },
+    update: {},
+  });
 }
 
 export async function alertOrphanedInstallationOrders({
@@ -98,10 +150,13 @@ export async function alertOrphanedInstallationOrders({
   for (const order of orders) {
     const assignment = order.activeAssignment;
     const notification = assignment?.notifications[0] ?? null;
+    // 마감 시각은 첫 알림이 나갈 때 정해진다. 배정 요청이 아직 발송 대기(PENDING)
+    // 이면(발송 시간대 밖 배정 등) 정상 대기다.
     const hasValidWait = Boolean(
       assignment &&
       order.activeAssignmentId === assignment.id &&
-      ((assignment.status === "WAITING_INSTALLER_RESPONSE" && assignment.installerTokenExpiresAt) ||
+      ((assignment.status === "WAITING_INSTALLER_RESPONSE" &&
+        (assignment.installerTokenExpiresAt || notification?.status === "PENDING")) ||
         (assignment.status === "SYSTEM_SMS_RETRY_PENDING" && notification?.status === "PENDING")),
     );
     if (hasValidWait) continue;

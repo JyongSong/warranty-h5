@@ -44,12 +44,6 @@ type SendPendingInstallationNotificationsOptions = {
   limit?: number;
   now?: Date;
   sendSms?: SendSms;
-  /**
-   * true 면 기사 배정 요청의 첫 알림(푸시·문자)을 보내지 않고 남겨 둔다.
-   * 이미 푸시가 나간 건의 폴백 문자와 다른 알림은 그대로 보낸다.
-   * 판정은 isInstallerAssignmentFirstNotificationOpen 참고.
-   */
-  holdInstallerFirstNotifications?: boolean;
 };
 
 export type SendPendingInstallationNotificationsResult = {
@@ -135,15 +129,10 @@ export async function sendPendingInstallationNotifications({
   limit = 25,
   now = new Date(),
   sendSms = defaultSendSms,
-  holdInstallerFirstNotifications = false,
 }: SendPendingInstallationNotificationsOptions = {}): Promise<SendPendingInstallationNotificationsResult> {
   const notifications = await prisma.installationNotification.findMany({
     where: {
       status: "PENDING",
-      // 남겨 둘 건은 조회에서 빼야 limit 을 차지해 다른 알림을 막지 않는다.
-      ...(holdInstallerFirstNotifications
-        ? { NOT: { smsType: "INSTALLER_ASSIGNMENT_REQUEST", pushSentAt: null } }
-        : {}),
       // 푸시를 보낸 건은 폴백 시간이 지나기 전까지 다시 집지 않는다.
       OR: [
         { pushSentAt: null },
@@ -234,6 +223,39 @@ export async function sendPendingInstallationNotifications({
   }
 
   return { sentCount, failedCount, pushedCount };
+}
+
+/**
+ * 발송 시간대 밖에서 돈다. 기사 배정 요청 중 앱 기기가 있는 건만 푸시로 바로
+ * 알리고, 문자는 보내지 않는다(기기 없는 기사는 시간대가 열리면 문자로 나간다).
+ */
+export async function pushPendingInstallerAssignmentRequests({
+  limit = 25,
+  now = new Date(),
+}: { limit?: number; now?: Date } = {}): Promise<{ pushedCount: number; failedCount: number }> {
+  const notifications = await prisma.installationNotification.findMany({
+    where: {
+      status: "PENDING",
+      smsType: "INSTALLER_ASSIGNMENT_REQUEST",
+      pushSentAt: null,
+    },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+
+  let pushedCount = 0;
+  let failedCount = 0;
+  for (const notification of notifications) {
+    try {
+      if (await skipStaleNotification(notification)) continue;
+      if (await tryPushInsteadOfSms(notification, now)) pushedCount += 1;
+    } catch (error) {
+      console.error("[installation/notification/quiet-hours-push]", error);
+      failedCount += 1;
+    }
+  }
+
+  return { pushedCount, failedCount };
 }
 
 export async function syncInstallationSmsDeliveryReports({
@@ -713,10 +735,13 @@ async function tryPushInsteadOfSms(
     const tokens = await listInstallerDeviceTokens(attempt.installerId);
     if (tokens.length === 0) return false;
 
-    await sendAssignmentPushToInstaller(attempt.installerId, {
+    const deliveredCount = await sendAssignmentPushToInstaller(attempt.installerId, {
       title: "새 작업이 배정되었습니다",
       body: "앱에서 확인하고 수락/거절해 주세요.",
     });
+    // 등록된 토큰이 모두 거부되면(앱 삭제 등) 예외 없이 0 이 온다. 이것을
+    // 보낸 것으로 치면 기사는 폴백 시각까지 아무것도 못 받는다.
+    if (deliveredCount === 0) return false;
   } catch (error) {
     console.error("[installation/notification/push-first]", error);
     return false;
@@ -953,6 +978,26 @@ async function runPostSendNotificationEffects(
 ) {
   try {
     await resolveSmsFailedIssueForSentNotification(notification, now);
+    if (
+      notification.smsType === "INSTALLER_ASSIGNMENT_TIMEOUT" &&
+      notification.assignmentAttemptId
+    ) {
+      // 문자와 같이 앱에도 알린다. 문자가 이미 나갔으므로 푸시 실패는 로그만 남긴다.
+      try {
+        const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({
+          where: { id: notification.assignmentAttemptId },
+          select: { installerId: true },
+        });
+        if (attempt) {
+          await sendAssignmentPushToInstaller(attempt.installerId, {
+            title: "설치 배정이 취소되었습니다",
+            body: "응답 기한이 지나 배정이 취소되었습니다.",
+          });
+        }
+      } catch (pushError) {
+        console.error("[installation/notification/timeout-push]", pushError);
+      }
+    }
     if (
       notification.smsType === "INSTALLER_ASSIGNMENT_REQUEST" &&
       notification.assignmentAttemptId

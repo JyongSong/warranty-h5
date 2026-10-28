@@ -17,6 +17,7 @@ import {
   cancelInstallationOrderAction,
   completeInstallationOrderAction,
   createManualInstallationAssignmentAction,
+  reassignInstallationOrderInstallerAction,
   resolveInstallationIssueAction,
   retryInstallationOrderAssignmentByAdminAction,
   retrySmsNotificationAction,
@@ -45,6 +46,7 @@ export type InstallationOrderDetailItem = {
     name: string;
     branch: string | null;
   } | null;
+  partnerId?: string | null;
   hasOpenIssue: boolean;
   lastIssueId: string | null;
   statusChangedAt: string;
@@ -206,6 +208,7 @@ type OperationalDecision = {
 type AdminDialogState =
   | { kind: "sendCustomerInputSms" }
   | { kind: "manualAssignment"; installerId: string; manualReason: string }
+  | { kind: "reassignInstaller"; installerId: string; reason: string }
   | { kind: "switchToManual"; reason: string }
   | { kind: "adminRetryAssignment"; reason: string }
   | { kind: "approveAssignment" }
@@ -293,12 +296,17 @@ export default function InstallationOrderDetail({
       ? [{ label: "CJ 주문번호", value: formatText(item.sourceExternalOrderNo ?? null) }]
       : []),
     { label: "ERP 주문번호", value: item.sourceErpOrderNo },
-    { label: "주문일", value: formatBackofficeDateTime(item.sourceOrderDate) },
+    // 자사 건의 이 값은 ERP 납기일자다. 고객 미입력 폴백 때 설치일 후보로 쓰인다.
+    { label: isCjOrder ? "주문일" : "납기일자", value: formatBackofficeDateTime(item.sourceOrderDate) },
     { label: "주문번호", value: item.sourceErpOrderNo },
   ];
 
   function manualAssign() {
     openDialog({ kind: "manualAssignment", installerId: "", manualReason: "" });
+  }
+
+  function reassignInstaller() {
+    openDialog({ kind: "reassignInstaller", installerId: "", reason: "" });
   }
 
   function sendCustomerInputSms() {
@@ -374,6 +382,24 @@ export default function InstallationOrderDetail({
       }
       const ok = await runAction("manualAssignment", () =>
         createManualInstallationAssignmentAction(item.id, installerId, manualReason || undefined),
+      );
+      if (ok) setDialog(null);
+      return;
+    }
+
+    if (dialog.kind === "reassignInstaller") {
+      const installerId = dialog.installerId.trim();
+      if (!installerId) {
+        setDialogError("재배정할 설치 기사를 선택하세요.");
+        return;
+      }
+      const reason = dialog.reason.trim();
+      if (!reason) {
+        setDialogError("재배정 사유를 입력하세요.");
+        return;
+      }
+      const ok = await runAction("reassignInstaller", () =>
+        reassignInstallationOrderInstallerAction({ installationId: item.id, installerId, reason }),
       );
       if (ok) setDialog(null);
       return;
@@ -570,9 +596,11 @@ export default function InstallationOrderDetail({
             hasOpenIssue={item.hasOpenIssue}
             fallbackUsed={Boolean(activeCustomerRequest?.fallbackUsed)}
             activeAssignmentId={item.activeAssignmentId}
+            reassignable={canReassignInstaller(item.status, item.currentInstallerId, item.partnerId)}
             onSendCustomerInputSms={sendCustomerInputSms}
             onApproveAssignment={approveAssignment}
             onManualAssign={manualAssign}
+            onReassignInstaller={reassignInstaller}
             onRetryAssignment={retryAssignment}
             onSwitchToManual={switchToManual}
             onCompleteOrder={completeOrder}
@@ -684,7 +712,11 @@ export default function InstallationOrderDetail({
         <AdminActionDialog
           dialog={dialog}
           error={dialogError}
-          installerCandidates={item.manualAssignmentInstallers}
+          installerCandidates={
+            dialog.kind === "reassignInstaller"
+              ? item.manualAssignmentInstallers.filter((installer) => installer.installerId !== item.currentInstallerId)
+              : item.manualAssignmentInstallers
+          }
           pending={pending}
           onCancel={() => {
             if (pending) return;
@@ -737,6 +769,15 @@ function AdminActionDialog({
         </div>
 
         <div className="space-y-3">
+          {dialog.kind === "reassignInstaller" ? (
+            <ManualAssignmentInstallerSelector
+              candidates={installerCandidates}
+              disabled={pending}
+              selectedInstallerId={dialog.installerId}
+              onSelectInstaller={(installerId) => onChange({ ...dialog, installerId })}
+            />
+          ) : null}
+
           {dialog.kind === "manualAssignment" ? (
             <>
               <ManualAssignmentInstallerSelector
@@ -805,7 +846,11 @@ function AdminActionDialog({
           <LoadingButton
             type="button"
             onClick={onSubmit}
-            disabled={pending || (dialog.kind === "manualAssignment" && installerCandidates.length === 0)}
+            disabled={
+              pending ||
+              ((dialog.kind === "manualAssignment" || dialog.kind === "reassignInstaller") &&
+                installerCandidates.length === 0)
+            }
             loading={pending}
             loadingLabel="처리 중"
             className={getDialogSubmitButtonClass(tone)}
@@ -1004,6 +1049,7 @@ function normalizeManualAssignmentSearchText(value: string) {
 function getAdminDialogTitle(dialog: AdminDialogState) {
   if (dialog.kind === "sendCustomerInputSms") return "고객 입력 문자 발송";
   if (dialog.kind === "manualAssignment") return "기사 직접 지정";
+  if (dialog.kind === "reassignInstaller") return "기사 재배정";
   if (dialog.kind === "switchToManual") return "처리 필요 표시";
   if (dialog.kind === "adminRetryAssignment") return "기사 후보 다시 찾기";
   if (dialog.kind === "approveAssignment") return "후보 승인";
@@ -1018,6 +1064,9 @@ function getAdminDialogDescription(dialog: AdminDialogState) {
   }
   if (dialog.kind === "manualAssignment") {
     return "선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 지역 예외 또는 후보 목록 밖 기사라면 사유를 남겨야 합니다.";
+  }
+  if (dialog.kind === "reassignInstaller") {
+    return "현재 기사의 배정을 취소하고 선택한 기사에게 배정 요청을 보냅니다. 새 기사가 수락해야 배정이 확정되며, 이전 기사에게는 배정 취소 알림(푸시·문자)이 발송됩니다.";
   }
   if (dialog.kind === "switchToManual") {
     return "자동 후보/기사 응답 흐름을 멈추고 처리 필요 항목으로 표시합니다.";
@@ -1040,6 +1089,7 @@ function getAdminDialogDescription(dialog: AdminDialogState) {
 function getAdminDialogSubmitLabel(dialog: AdminDialogState) {
   if (dialog.kind === "sendCustomerInputSms") return "문자 발송";
   if (dialog.kind === "manualAssignment") return "수동 배정";
+  if (dialog.kind === "reassignInstaller") return "재배정";
   if (dialog.kind === "switchToManual") return "수동 처리 전환";
   if (dialog.kind === "adminRetryAssignment") return "다시 찾기";
   if (dialog.kind === "approveAssignment") return "후보 승인";
@@ -1173,8 +1223,10 @@ function StatusActions({
   hasOpenIssue,
   fallbackUsed,
   activeAssignmentId,
+  reassignable,
   onSendCustomerInputSms,
   onManualAssign,
+  onReassignInstaller,
   onApproveAssignment,
   onRetryAssignment,
   onSwitchToManual,
@@ -1187,9 +1239,11 @@ function StatusActions({
   hasOpenIssue: boolean;
   fallbackUsed: boolean;
   activeAssignmentId: string | null;
+  reassignable: boolean;
   onSendCustomerInputSms: () => void;
   onApproveAssignment: () => void;
   onManualAssign: () => void;
+  onReassignInstaller: () => void;
   onRetryAssignment: () => void;
   onSwitchToManual: () => void;
   onCompleteOrder: () => void;
@@ -1200,6 +1254,7 @@ function StatusActions({
     {
       onSendCustomerInputSms,
       onManualAssign,
+      onReassignInstaller,
       onApproveAssignment,
       onRetryAssignment,
       onSwitchToManual,
@@ -1209,6 +1264,7 @@ function StatusActions({
     activeAssignmentId,
     hasOpenIssue,
     fallbackUsed,
+    reassignable,
   );
 
   return (
@@ -1260,6 +1316,7 @@ type StatusActionHandlers = {
   onSendCustomerInputSms: () => void;
   onApproveAssignment: () => void;
   onManualAssign: () => void;
+  onReassignInstaller: () => void;
   onRetryAssignment: () => void;
   onSwitchToManual: () => void;
   onCompleteOrder: () => void;
@@ -1272,6 +1329,7 @@ function getStatusActions(
   activeAssignmentId?: string | null,
   hasOpenIssue = false,
   fallbackUsed = false,
+  reassignable = false,
 ): StatusActionDefinition[] {
   return [
     {
@@ -1304,11 +1362,23 @@ function getStatusActions(
       buttonLabel: "수동 배정",
       resultStatusLabel: statusLabels.WAITING_INSTALLER_RESPONSE,
       description:
-        "관리자가 선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 기사가 수락하면 배정 확정으로 진행하고, 거절하거나 응답 시간이 만료되면 관리자 확인 대상이 됩니다.",
+        "관리자가 선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 기사가 수락하면 배정 확정으로 진행하고, 거절하거나 응답 시간이 만료되면 관리자 확인 대상이 됩니다. 고객 입력 대기 건은 주문 배송지·연락처로 진행하고 일정은 기사가 고객과 협의합니다.",
       tone: "primary",
       enabled: canManuallyAssign(status, hasOpenIssue, fallbackUsed),
-      disabledReason: "후보 선정 가능 또는 관리자 검토 대기 상태에서 직접 지정할 수 있습니다. 기사 응답 대기 상태는 열린 예외 또는 배송지 폴백 주문만 가능합니다.",
+      disabledReason: "고객 입력 대기, 후보 선정 가능 또는 관리자 검토 대기 상태에서 직접 지정할 수 있습니다. 기사 응답 대기 상태는 열린 예외 또는 배송지 폴백 주문만 가능합니다.",
       onClick: handlers.onManualAssign,
+    },
+    {
+      key: "reassignInstaller",
+      label: "기사 재배정",
+      buttonLabel: "재배정",
+      resultStatusLabel: statusLabels.WAITING_INSTALLER_RESPONSE,
+      description:
+        "배정된(또는 응답 대기 중인) 기사를 다른 기사로 바꿉니다. 새 기사에게 배정 요청을 보내고 수락하면 배정 확정으로 진행합니다. 이전 기사에게는 배정 취소 알림이 발송됩니다.",
+      tone: "primary",
+      enabled: reassignable,
+      disabledReason: "기사 응답 대기 또는 기사 배정 확정 상태에서만 재배정할 수 있습니다.",
+      onClick: handlers.onReassignInstaller,
     },
     {
       key: "adminRetryAssignment",
@@ -1905,6 +1975,12 @@ export function formatOperationalMessage(value: string | null | undefined) {
     ACTIVE_ASSIGNMENT_EXISTS: "이미 진행 중인 기사 배정 있음",
     CUSTOMER_NO_INPUT_96H_SOURCE_ORDER_USED: "고객 미입력 96시간 경과 - 주문 정보 사용",
     CUSTOMER_NO_INPUT_96H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 96시간 경과 - 주문 정보 부족",
+    CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED: "고객 미입력 24시간 경과 - 주문 정보 사용",
+    CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED_WITHOUT_DATE: "고객 미입력 24시간 경과 - 주문 정보 사용(일정 미정)",
+    CUSTOMER_NO_INPUT_24H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 24시간 경과 - 주문 정보 부족",
+    ADMIN_MANUAL_ASSIGNMENT_SOURCE_ORDER_USED: "관리자 직접 지정 - 주문 정보 사용",
+    ADMIN_MANUAL_ASSIGNMENT_SOURCE_ORDER_USED_WITHOUT_DATE: "관리자 직접 지정 - 주문 정보 사용(일정 미정)",
+    SOURCE_ORDER_INSUFFICIENT: "주문 정보가 부족해 직접 지정할 수 없음",
     CUSTOMER_INPUT_SMS_ALREADY_REQUESTED: "고객 입력 문자가 이미 요청됨",
     CUSTOMER_INPUT_SMS_INVALID_STATE: "현재 상태에서는 고객 입력 문자를 발송할 수 없음",
     CUSTOMER_INPUT_SMS_QUEUE_FAILED: "고객 입력 문자 발송 요청 실패",
@@ -1914,6 +1990,9 @@ export function formatOperationalMessage(value: string | null | undefined) {
     MISSING_INSTALL_DATE: "설치 희망일 없음",
     NO_CAPABILITY_MATCH: "설치 능력 조건에 맞는 기사 없음",
     NO_REGION_MATCH: "지역 조건에 맞는 기사 없음",
+    ORDER_NOT_REASSIGNABLE: "현재 상태에서는 기사를 재배정할 수 없음",
+    REASSIGNMENT_REASON_REQUIRED: "재배정 사유를 입력하세요",
+    REASSIGNMENT_SAME_INSTALLER: "현재 배정된 기사와 같은 기사입니다",
     ORDER_PRODUCT_REQUIREMENT_UNMAPPED: "제품 요구사항 미매핑",
     PHONE_11_DIGITS_REQUIRED: "휴대전화번호 형식 오류",
     REVALIDATION_FAILED: "후보 재검증 실패",
@@ -2276,11 +2355,22 @@ function requiresManualAssignmentReason(
 }
 
 export function canManuallyAssign(status: string, hasOpenIssue: boolean, fallbackUsed = false) {
-  if (["READY_FOR_CANDIDATE_SELECTION", "WAITING_ADMIN_REVIEW"].includes(status)) {
+  // 고객 입력 대기 건은 주문 배송지·연락처로 고객 요청을 채운 뒤 지정한다.
+  if (["WAITING_CUSTOMER_INPUT", "READY_FOR_CANDIDATE_SELECTION", "WAITING_ADMIN_REVIEW"].includes(status)) {
     return true;
   }
 
   return (hasOpenIssue || fallbackUsed) && canSwitchToManual(status);
+}
+
+export function canReassignInstaller(
+  status: string,
+  currentInstallerId: string | null,
+  partnerId?: string | null,
+) {
+  // 협력사(PL) 배정 건은 협력사 패널의 "자사 기사 배정으로 전환" 으로만 돌린다.
+  if (partnerId || !currentInstallerId) return false;
+  return ["WAITING_INSTALLER_RESPONSE", "INSTALLER_ASSIGNED"].includes(status);
 }
 
 export function canSendCustomerInputSms(status: string) {

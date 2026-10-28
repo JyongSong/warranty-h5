@@ -68,6 +68,7 @@ export type InstallationOrderListItem = {
     installerName?: string | null;
     installerPhone?: string | null;
     installerBranch?: string | null;
+    installerHasApp?: boolean;
     assignmentNumber: number;
     status: string;
     createdAt: string;
@@ -470,12 +471,21 @@ export default function InstallationOrderList({
           header: "배정-기사",
           size: 180,
           minSize: 120,
-          cell: ({ row }) =>
-            formatText(
-              formatPartnerAssignee(row.original.partner) ??
-                row.original.assignment?.installerName ??
-                row.original.assignment?.installerId,
-            ),
+          cell: ({ row }) => {
+            const partnerAssignee = formatPartnerAssignee(row.original.partner);
+            const label = formatText(
+              partnerAssignee ?? row.original.assignment?.installerName ?? row.original.assignment?.installerId,
+            );
+            if (partnerAssignee || !row.original.assignment) return label;
+            return row.original.assignment.installerHasApp ? (
+              <span className="font-bold text-emerald-700" title="기사 앱 설치됨 (푸시 수신 가능)">
+                {label}
+                <span aria-label="앱 설치됨" className="ml-1 text-xs">📱</span>
+              </span>
+            ) : (
+              <span title="기사 앱 미설치 (문자로만 안내)">{label}</span>
+            );
+          },
           sortingFn: "alphanumeric",
         },
         {

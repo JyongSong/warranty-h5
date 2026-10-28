@@ -3,6 +3,7 @@ import {
   cancelInstallationOrder,
   completeInstallationOrder,
   createManualInstallerAssignment,
+  reassignInstallationOrderInstaller,
   switchInstallationOrderToManualRequired,
 } from "@/lib/installation/installer/manual-operations";
 import { decryptPii, hmacPii } from "@/lib/piiCrypto";
@@ -25,6 +26,10 @@ const {
   countIssues,
   createStatusEvent,
   updateCustomerRequest,
+  findFirstCustomerRequest,
+  sendAssignmentPushToInstaller,
+  sendSms,
+  findUniqueInstallerOutsideTx,
 } = vi.hoisted(() => ({
   transaction: vi.fn(),
   findUniqueOrder: vi.fn(),
@@ -43,13 +48,23 @@ const {
   countIssues: vi.fn(),
   createStatusEvent: vi.fn(),
   updateCustomerRequest: vi.fn(),
+  findFirstCustomerRequest: vi.fn(),
+  sendAssignmentPushToInstaller: vi.fn(),
+  sendSms: vi.fn(),
+  findUniqueInstallerOutsideTx: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: transaction,
+    installer: {
+      findUnique: findUniqueInstallerOutsideTx,
+    },
   },
 }));
+
+vi.mock("@/lib/installer/devices", () => ({ sendAssignmentPushToInstaller }));
+vi.mock("@/lib/sms", () => ({ sendSms }));
 
 function createTx() {
   return {
@@ -59,6 +74,7 @@ function createTx() {
     },
     installationCustomerRequest: {
       update: updateCustomerRequest,
+      findFirst: findFirstCustomerRequest,
     },
     installer: {
       findUnique: findUniqueInstaller,
@@ -106,6 +122,10 @@ describe("installation manual operations", () => {
     countIssues.mockReset();
     createStatusEvent.mockReset();
     updateCustomerRequest.mockReset();
+    findFirstCustomerRequest.mockReset();
+    sendAssignmentPushToInstaller.mockReset();
+    sendSms.mockReset();
+    findUniqueInstallerOutsideTx.mockReset();
     findFirstIssue.mockResolvedValue(null);
     createIssue.mockResolvedValue({ id: "issue-1" });
     countIssues.mockResolvedValue(0);
@@ -117,7 +137,7 @@ describe("installation manual operations", () => {
     const now = new Date("2026-06-11T06:00:00.000Z");
     findUniqueOrder.mockResolvedValue({
       id: "order-1",
-      status: "WAITING_CUSTOMER_INPUT",
+      status: "WAITING_HQ_REVIEW",
       hasOpenIssue: false,
       activeCustomerRequestId: "request-1",
       activeAssignmentId: null,
@@ -131,6 +151,125 @@ describe("installation manual operations", () => {
 
     expect(createAssignment).not.toHaveBeenCalled();
     expect(updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("fills a waiting customer request from the source order before a manual direct assignment", async () => {
+    const now = new Date("2026-06-11T06:00:00.000Z");
+    findUniqueOrder
+      // 1) 지정 전 주문 조회
+      .mockResolvedValueOnce({
+        id: "order-1",
+        status: "WAITING_CUSTOMER_INPUT",
+        hasOpenIssue: false,
+        source: { memo: "설치비 (K100) x1" },
+        activeCustomerRequestId: "request-1",
+        activeAssignmentId: null,
+        customerRequests: [],
+      })
+      // 2) 고객 요청 폴백 상태 전이
+      .mockResolvedValueOnce({ id: "order-1", status: "WAITING_CUSTOMER_INPUT" })
+      // 3) 폴백 후 주문 재조회
+      .mockResolvedValueOnce({
+        id: "order-1",
+        status: "READY_FOR_CANDIDATE_SELECTION",
+        hasOpenIssue: false,
+        source: { memo: "설치비 (K100) x1" },
+        activeCustomerRequestId: "request-1",
+        activeAssignmentId: null,
+        customerRequests: [
+          { id: "request-1", installAddressEncrypted: null, fallbackUsed: true, status: "FALLBACK_USED" },
+        ],
+      })
+      // 4) 기사 응답 대기 상태 전이
+      .mockResolvedValueOnce({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    findFirstCustomerRequest.mockResolvedValue({
+      id: "request-1",
+      installationOrderId: "order-1",
+      createdAt: new Date("2026-06-09T06:00:00.000Z"),
+      installationOrder: {
+        source: {
+          phoneEncrypted: "010-1234-5678",
+          addressEncrypted: "서울 강남구 테헤란로 1",
+          dueDate: "20260609",
+        },
+      },
+    });
+    findUniqueInstaller.mockResolvedValue({
+      id: "installer-2",
+      name: "서울강남기사",
+      phone: "010-2222-3333",
+      active: true,
+      capabilities: ["DOORLOCK"],
+      aqaraAppCapability: "NONE",
+      serviceAreas: ["서울 강남구"],
+    });
+    countAssignments.mockResolvedValue(0);
+    createAssignment.mockResolvedValue({ id: "assignment-1" });
+    upsertNotification.mockResolvedValue({ id: "notification-1" });
+    updateOrder.mockResolvedValue({ id: "order-1" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    await createManualInstallerAssignment("order-1", {
+      installerId: "installer-2",
+      adminId: "admin-1",
+      now,
+      baseUrl: "https://example.com",
+      tokenFactory: () => "manual-token",
+    });
+
+    expect(updateCustomerRequest).toHaveBeenCalledWith({
+      where: { id: "request-1" },
+      data: expect.objectContaining({
+        installDate: null,
+        installTimeSlot: "상담 후 조율",
+        customerPhoneSource: "ORDER",
+        status: "FALLBACK_USED",
+      }),
+    });
+    expect(createStatusEvent).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        toStatus: "READY_FOR_CANDIDATE_SELECTION",
+        eventType: "CUSTOMER_FALLBACK_USED",
+        actorType: "ADMIN",
+        actorId: "admin-1",
+      }),
+    });
+    expect(createAssignment).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        installerId: "installer-2",
+        assignmentSource: "MANUAL_DIRECT",
+        status: "WAITING_INSTALLER_RESPONSE",
+      }),
+    });
+  });
+
+  it("rejects manual direct assignment from a waiting customer input order without a usable source phone", async () => {
+    const now = new Date("2026-06-11T06:00:00.000Z");
+    findUniqueOrder.mockResolvedValue({
+      id: "order-1",
+      status: "WAITING_CUSTOMER_INPUT",
+      hasOpenIssue: true,
+      activeCustomerRequestId: "request-1",
+      activeAssignmentId: null,
+      customerRequests: [],
+    });
+    findFirstCustomerRequest.mockResolvedValue({
+      id: "request-1",
+      installationOrderId: "order-1",
+      createdAt: new Date("2026-06-09T06:00:00.000Z"),
+      installationOrder: {
+        source: { phoneEncrypted: null, addressEncrypted: "서울 강남구 테헤란로 1", dueDate: null },
+      },
+    });
+
+    await expect(createManualInstallerAssignment("order-1", {
+      installerId: "installer-2",
+      adminId: "admin-1",
+      now,
+    })).rejects.toThrow("SOURCE_ORDER_INSUFFICIENT: 휴대전화번호 없음 또는 형식 오류");
+
+    expect(updateCustomerRequest).not.toHaveBeenCalled();
+    expect(createAssignment).not.toHaveBeenCalled();
   });
 
   it("creates a manual direct assignment from a candidate selection order without an open issue", async () => {
@@ -436,6 +575,209 @@ describe("installation manual operations", () => {
         currentInstallerId: "installer-2",
         status: "WAITING_INSTALLER_RESPONSE",
       }),
+    });
+  });
+
+  describe("reassignInstallationOrderInstaller", () => {
+    const now = new Date("2026-10-27T06:00:00.000Z");
+
+    function mockAssignedOrder(overrides: Record<string, unknown> = {}) {
+      findUniqueOrder.mockResolvedValue({
+        id: "order-1",
+        status: "INSTALLER_ASSIGNED",
+        hasOpenIssue: false,
+        source: { memo: "설치비 (K100) x1" },
+        activeCustomerRequestId: "request-1",
+        activeAssignmentId: "assignment-accepted",
+        currentInstallerId: "installer-1",
+        customerRequests: [{ id: "request-1", installAddressEncrypted: "서울 강남구 테헤란로 1" }],
+        ...overrides,
+      });
+      findUniqueAssignment.mockResolvedValue({
+        id: "assignment-accepted",
+        status: "INSTALLER_ACCEPTED",
+        assignmentSource: "AUTO",
+        selectionSnapshot: {},
+      });
+      findUniqueInstaller.mockResolvedValue({
+        id: "installer-2",
+        name: "서울강남기사",
+        branch: "서울강남지점",
+        phone: "010-2222-3333",
+        active: true,
+        capabilities: ["DOORLOCK"],
+        aqaraAppCapability: "NONE",
+        region: "서울",
+        coverage: null,
+        serviceAreas: ["서울 강남구"],
+      });
+      countAssignments.mockResolvedValue(1);
+      createAssignment.mockResolvedValue({ id: "assignment-reassigned" });
+      upsertNotification.mockResolvedValue({ id: "notification-1" });
+      updateAssignment.mockResolvedValue({ id: "assignment-accepted" });
+      updateOrder.mockResolvedValue({ id: "order-1" });
+      createStatusEvent.mockResolvedValue({ id: "event-1" });
+      findUniqueInstallerOutsideTx.mockResolvedValue({ phone: "010-1111-2222" });
+    }
+
+    it("replaces an accepted installer, sends a new request and notifies the previous installer", async () => {
+      mockAssignedOrder();
+
+      const result = await reassignInstallationOrderInstaller("order-1", {
+        installerId: "installer-2",
+        adminId: "admin-1",
+        reason: "기존 기사 일정 불가",
+        now,
+        baseUrl: "https://example.com",
+        tokenFactory: () => "reassign-token",
+      });
+
+      expect(result).not.toHaveProperty("previousInstallerId");
+      expect(result.status).toBe("WAITING_INSTALLER_RESPONSE");
+      expect(updateAssignment).toHaveBeenCalledWith({
+        where: { id: "assignment-accepted" },
+        data: expect.objectContaining({
+          status: "ADMIN_MANUAL_OVERRIDDEN",
+          cancelledByAdminId: "admin-1",
+          selectionSnapshot: {
+            manualOverride: {
+              adminId: "admin-1",
+              reason: "기존 기사 일정 불가",
+              overriddenAt: now.toISOString(),
+              reassignedToInstallerId: "installer-2",
+            },
+          },
+        }),
+      });
+      expect(findFirstAssignment).not.toHaveBeenCalled();
+      expect(createAssignment).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          installerId: "installer-2",
+          assignmentNumber: 2,
+          assignmentSource: "MANUAL_DIRECT",
+          status: "WAITING_INSTALLER_RESPONSE",
+        }),
+      });
+      expect(upsertNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: "installer-assignment-request:assignment-reassigned" },
+        }),
+      );
+      expect(updateOrder).toHaveBeenCalledWith({
+        where: { id: "order-1" },
+        data: expect.objectContaining({
+          activeAssignmentId: "assignment-reassigned",
+          currentInstallerId: "installer-2",
+          status: "WAITING_INSTALLER_RESPONSE",
+        }),
+      });
+      expect(createStatusEvent).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          fromStatus: "INSTALLER_ASSIGNED",
+          toStatus: "WAITING_INSTALLER_RESPONSE",
+          eventType: "ADMIN_REASSIGNED_INSTALLER",
+          reason: "기존 기사 일정 불가",
+          metadata: expect.objectContaining({
+            previousInstallerId: "installer-1",
+            previousAssignmentId: "assignment-accepted",
+            installerId: "installer-2",
+          }),
+        }),
+      });
+      expect(sendAssignmentPushToInstaller).toHaveBeenCalledWith(
+        "installer-1",
+        expect.objectContaining({ title: "설치 배정이 취소되었습니다" }),
+      );
+      expect(sendSms).toHaveBeenCalledWith("010-1111-2222", expect.stringContaining("배정이 취소되었습니다"));
+    });
+
+    it("can reassign while the current installer has not responded yet", async () => {
+      mockAssignedOrder({ status: "WAITING_INSTALLER_RESPONSE", activeAssignmentId: "assignment-waiting" });
+      findUniqueAssignment.mockResolvedValue({
+        id: "assignment-waiting",
+        status: "WAITING_INSTALLER_RESPONSE",
+        assignmentSource: "MANUAL_DIRECT",
+        selectionSnapshot: {},
+      });
+
+      await reassignInstallationOrderInstaller("order-1", {
+        installerId: "installer-2",
+        adminId: "admin-1",
+        reason: "응답 지연",
+        now,
+        baseUrl: "https://example.com",
+        tokenFactory: () => "reassign-token",
+      });
+
+      expect(updateAssignment).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "assignment-waiting" } }),
+      );
+      expect(createAssignment).toHaveBeenCalled();
+      expect(sendAssignmentPushToInstaller).toHaveBeenCalledWith("installer-1", expect.anything());
+    });
+
+    it("still succeeds when notifying the previous installer fails", async () => {
+      mockAssignedOrder();
+      sendAssignmentPushToInstaller.mockRejectedValue(new Error("fcm down"));
+      sendSms.mockRejectedValue(new Error("sms down"));
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(
+        reassignInstallationOrderInstaller("order-1", {
+          installerId: "installer-2",
+          adminId: "admin-1",
+          reason: "기존 기사 일정 불가",
+          now,
+          baseUrl: "https://example.com",
+          tokenFactory: () => "reassign-token",
+        }),
+      ).resolves.toMatchObject({ status: "WAITING_INSTALLER_RESPONSE" });
+      consoleError.mockRestore();
+    });
+
+    it.each([
+      ["a submitted completion awaiting review", { status: "WAITING_HQ_REVIEW" }],
+      ["a partner (PL) order", { partnerId: "partner-pl" }],
+      ["an order without a current installer", { currentInstallerId: null }],
+    ])("rejects reassignment of %s", async (_label, overrides) => {
+      mockAssignedOrder(overrides);
+
+      await expect(
+        reassignInstallationOrderInstaller("order-1", {
+          installerId: "installer-2",
+          adminId: "admin-1",
+          reason: "사유",
+          now,
+        }),
+      ).rejects.toThrow("ORDER_NOT_REASSIGNABLE");
+      expect(createAssignment).not.toHaveBeenCalled();
+      expect(sendAssignmentPushToInstaller).not.toHaveBeenCalled();
+    });
+
+    it("rejects reassignment to the installer already assigned", async () => {
+      mockAssignedOrder();
+
+      await expect(
+        reassignInstallationOrderInstaller("order-1", {
+          installerId: "installer-1",
+          adminId: "admin-1",
+          reason: "사유",
+          now,
+        }),
+      ).rejects.toThrow("REASSIGNMENT_SAME_INSTALLER");
+      expect(updateAssignment).not.toHaveBeenCalled();
+    });
+
+    it("requires a reason", async () => {
+      await expect(
+        reassignInstallationOrderInstaller("order-1", {
+          installerId: "installer-2",
+          adminId: "admin-1",
+          reason: "   ",
+          now,
+        }),
+      ).rejects.toThrow("REASSIGNMENT_REASON_REQUIRED");
+      expect(transaction).not.toHaveBeenCalled();
     });
   });
 

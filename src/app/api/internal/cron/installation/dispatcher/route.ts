@@ -20,16 +20,13 @@ import {
   timeoutExpiredInstallerAssignments,
 } from "@/lib/installation/installer/guards";
 import {
+  pushPendingInstallerAssignmentRequests,
   sendPendingInstallationNotifications,
   syncInstallationSmsDeliveryReports,
 } from "@/lib/installation/notifications/outbox";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { processPendingInstallationOrders } from "@/lib/installation/orders/processor";
-import {
-  isInstallationSmsSendWindowOpen,
-  isInstallerAssignmentFirstNotificationOpen,
-} from "@/lib/installation/notifications/sms-send-window";
-import { INSTALLER_RESPONSE_TIMEOUT_HOURS } from "@/lib/installation/installer/timing";
+import { isInstallationSmsSendWindowOpen } from "@/lib/installation/notifications/sms-send-window";
 import { remindUnrespondedAsAssignments } from "@/lib/installation/as/service";
 import { assignReadyOrdersToPartner } from "@/lib/installation/partner/service";
 
@@ -81,11 +78,6 @@ export async function GET(request: Request) {
       const smsSendWindowOpen = isInstallationSmsSendWindowOpen(
         startedAt,
         config.smsSendWindow,
-      );
-      const installerFirstNotificationOpen = isInstallerAssignmentFirstNotificationOpen(
-        startedAt,
-        config.smsSendWindow,
-        INSTALLER_RESPONSE_TIMEOUT_HOURS,
       );
       const metrics: Record<string, { durationMs: number }> = {};
       const results = {
@@ -152,14 +144,15 @@ export async function GET(request: Request) {
             smsSendWindowOpen
               ? sendPendingInstallationNotifications({
                   limit: config.limits.sendInstallationNotifications,
-                  holdInstallerFirstNotifications: !installerFirstNotificationOpen,
                 })
-              : Promise.resolve({
+              : // 발송 시간대 밖에도 기사 배정 요청 푸시는 바로 보낸다. 문자는 시간대가 열릴 때.
+                pushPendingInstallerAssignmentRequests({
+                  limit: config.limits.sendInstallationNotifications,
+                }).then((pushResult) => ({
                   sentCount: 0,
-                  failedCount: 0,
-                  pushedCount: 0,
+                  ...pushResult,
                   skippedQuietHours: true,
-                }),
+                })),
         ),
         alertOrphanedOrders: await runDispatcherStep("alertOrphanedOrders", metrics, () =>
           alertOrphanedInstallationOrders({

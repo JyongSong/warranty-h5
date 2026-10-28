@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   retrySmsNotification,
+  pushPendingInstallerAssignmentRequests,
   sendInstallationNotificationById,
   sendPendingInstallationNotifications,
   syncInstallationSmsDeliveryReports,
@@ -103,6 +104,7 @@ describe("sendPendingInstallationNotifications", () => {
     // 대부분의 기사는 아직 앱 미설치 상태라 기본은 문자 즉시 발송이다.
     listInstallerDeviceTokens.mockResolvedValue([]);
     sendAssignmentPushToInstaller.mockReset();
+    sendAssignmentPushToInstaller.mockResolvedValue(1);
     findUniqueAssignment.mockReset();
     findUniqueAssignment.mockResolvedValue({
       id: "assignment-1",
@@ -147,30 +149,6 @@ describe("sendPendingInstallationNotifications", () => {
     });
   });
 
-  it("leaves first installer assignment notifications out of the batch while they are held", async () => {
-    findMany.mockResolvedValue([]);
-
-    await sendPendingInstallationNotifications({
-      limit: 10,
-      now: new Date("2026-06-11T07:00:00.000Z"),
-      sendSms: vi.fn(),
-      holdInstallerFirstNotifications: true,
-    });
-
-    expect(findMany.mock.calls[0][0].where).toMatchObject({
-      status: "PENDING",
-      NOT: { smsType: "INSTALLER_ASSIGNMENT_REQUEST", pushSentAt: null },
-    });
-  });
-
-  it("does not hold installer assignment notifications by default", async () => {
-    findMany.mockResolvedValue([]);
-
-    await sendPendingInstallationNotifications({ limit: 10, now: new Date(), sendSms: vi.fn() });
-
-    expect(findMany.mock.calls[0][0].where).not.toHaveProperty("NOT");
-  });
-
   it("pushes instead of texting when the installer has a registered device", async () => {
     const sendSms = vi.fn();
     const now = new Date("2026-06-11T00:00:00.000Z");
@@ -199,6 +177,24 @@ describe("sendPendingInstallationNotifications", () => {
         }),
       }),
     );
+  });
+
+  it("texts immediately when every registered device rejects the push", async () => {
+    // 앱을 지운 기사는 토큰이 남아 있어도 FCM 이 전부 거부한다(예외는 없다).
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["stale-token"]);
+    sendAssignmentPushToInstaller.mockResolvedValue(0);
+    findMany.mockResolvedValue([assignmentRequestNotification()]);
+
+    const result = await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    expect(sendSms).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: { pushSentAt: now },
+    });
   });
 
   it("texts immediately when FCM is not configured, even with a registered device", async () => {
@@ -1436,6 +1432,115 @@ describe("sendPendingInstallationNotifications", () => {
 
     expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pushPendingInstallerAssignmentRequests", () => {
+  beforeEach(() => {
+    process.env.PII_ENCRYPTION_KEY = "test-pii-key";
+    findMany.mockReset();
+    update.mockReset();
+    isFcmConfiguredValue.current = true;
+    listInstallerDeviceTokens.mockReset();
+    sendAssignmentPushToInstaller.mockReset();
+    sendAssignmentPushToInstaller.mockResolvedValue(1);
+    updateAssignment.mockReset();
+    findUniqueAssignment.mockReset();
+    findUniqueAssignment.mockResolvedValue({
+      id: "assignment-1",
+      status: "WAITING_INSTALLER_RESPONSE",
+      installerId: "installer-1",
+      installerTokenExpiresAt: null,
+      installationOrder: {
+        status: "WAITING_INSTALLER_RESPONSE",
+        activeAssignmentId: "assignment-1",
+      },
+    });
+  });
+
+  it("only picks assignment requests that have not been pushed yet", async () => {
+    findMany.mockResolvedValue([]);
+
+    await pushPendingInstallerAssignmentRequests({ limit: 7 });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: "PENDING", smsType: "INSTALLER_ASSIGNMENT_REQUEST", pushSentAt: null },
+        take: 7,
+      }),
+    );
+  });
+
+  it("pushes to installers with the app and leaves the rest for the SMS window", async () => {
+    const now = new Date("2026-06-11T14:00:00.000Z"); // 23:00 KST
+    findMany.mockResolvedValue([
+      assignmentRequestNotification(),
+      assignmentRequestNotification({ id: "notification-2", assignmentAttemptId: "assignment-2" }),
+    ]);
+    listInstallerDeviceTokens.mockResolvedValueOnce(["fcm-token-1"]).mockResolvedValueOnce([]);
+
+    const result = await pushPendingInstallerAssignmentRequests({ now });
+
+    expect(result).toEqual({ pushedCount: 1, failedCount: 0 });
+    expect(sendAssignmentPushToInstaller).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: { pushSentAt: now },
+    });
+    // 기기 없는 기사 건은 PENDING 그대로 남아 아침에 문자로 나간다.
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "notification-2" } }),
+    );
+  });
+});
+
+describe("installer assignment timeout notice", () => {
+  beforeEach(() => {
+    process.env.PII_ENCRYPTION_KEY = "test-pii-key";
+    findMany.mockReset();
+    update.mockReset();
+    updateManyIssues.mockReset();
+    updateManyIssues.mockResolvedValue({ count: 0 });
+    sendAssignmentPushToInstaller.mockReset();
+    sendAssignmentPushToInstaller.mockResolvedValue(1);
+    findUniqueAssignment.mockReset();
+    findUniqueAssignment.mockResolvedValue({ installerId: "installer-1" });
+    updateAssignment.mockReset();
+  });
+
+  it("sends the cancel notice by SMS and also pushes it to the app", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    findMany.mockResolvedValue([
+      {
+        id: "notification-timeout",
+        installationOrderId: "order-1",
+        assignmentAttemptId: "assignment-1",
+        smsType: "INSTALLER_ASSIGNMENT_TIMEOUT",
+        smsTemplateKey: null,
+        recipientPhoneEncrypted: encryptPii("010-1111-2222"),
+        smsBody: "[Aqara 기사] 응답 기한이 지나 설치 배정이 취소되었습니다.",
+        retryCount: 0,
+        pushSentAt: null,
+      },
+    ]);
+
+    const result = await sendPendingInstallationNotifications({
+      now: new Date("2026-06-11T23:00:00.000Z"),
+      sendSms,
+    });
+
+    expect(result).toEqual({ sentCount: 1, failedCount: 0, pushedCount: 0 });
+    expect(sendSms).toHaveBeenCalledWith(
+      "010-1111-2222",
+      "[Aqara 기사] 응답 기한이 지나 설치 배정이 취소되었습니다.",
+      expect.anything(),
+    );
+    expect(sendAssignmentPushToInstaller).toHaveBeenCalledWith(
+      "installer-1",
+      expect.objectContaining({ title: "설치 배정이 취소되었습니다" }),
+    );
+    // 배정 요청 전용 후처리(마감 재설정)는 타지 않는다.
+    expect(updateAssignment).not.toHaveBeenCalled();
   });
 });
 

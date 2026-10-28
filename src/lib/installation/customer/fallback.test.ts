@@ -221,10 +221,11 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
         type: "CUSTOMER_INPUT_NOT_SUBMITTED",
         title: "고객 정보 확인 필요",
         description:
-          "고객 미입력 24시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.",
+          "고객 미입력 24시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다. (배송지 주소 해석 불가)",
         metadata: {
           customerRequestId: "request-1",
           fallbackUsed: false,
+          missingReasons: ["배송지 주소 해석 불가"],
         },
       }),
       select: { id: true },
@@ -233,6 +234,51 @@ describe("fallbackExpiredInstallationCustomerRequests", () => {
       where: { id: "order-1" },
       data: expect.objectContaining({
         status: "WAITING_CUSTOMER_INPUT",
+      }),
+    });
+  });
+
+  it("falls back without an install date when the source due date is out of range", async () => {
+    const now = new Date("2026-06-11T12:00:00.000Z");
+    findMany.mockResolvedValue([
+      {
+        id: "request-1",
+        installationOrderId: "order-1",
+        createdAt: new Date("2026-06-10T12:00:00.000Z"),
+        installationOrder: {
+          source: {
+            phoneEncrypted: "010-1234-5678",
+            addressEncrypted: "서울 강남구 테헤란로 1",
+            // 납기일이 이미 지났다 — 예전에는 이 때문에 폴백 전체가 실패했다.
+            dueDate: "20260610",
+          },
+        },
+      },
+    ]);
+    updateRequest.mockResolvedValue({ id: "request-1", status: "FALLBACK_USED" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "WAITING_CUSTOMER_INPUT" });
+    updateOrder.mockResolvedValue({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    const result = await fallbackExpiredInstallationCustomerRequests({ now, limit: 10 });
+
+    expect(result).toEqual({ fallbackCount: 1, manualRequiredCount: 0, skippedCount: 0 });
+    expect(createIssue).not.toHaveBeenCalled();
+    expect(updateRequest).toHaveBeenCalledWith({
+      where: { id: "request-1" },
+      data: expect.objectContaining({
+        installDate: null,
+        installTimeSlot: "상담 후 조율",
+        fallbackUsed: true,
+        status: "FALLBACK_USED",
+      }),
+    });
+    expect(createStatusEvent).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        toStatus: "READY_FOR_CANDIDATE_SELECTION",
+        eventType: "CUSTOMER_FALLBACK_USED",
+        reason:
+          "CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED_WITHOUT_DATE: 납기일 20260610 이 설치 가능 범위(D+2~D+30) 밖이라 일정은 기사·고객 협의",
       }),
     });
   });
