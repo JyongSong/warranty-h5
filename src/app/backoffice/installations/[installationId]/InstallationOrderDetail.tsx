@@ -1361,10 +1361,10 @@ function getStatusActions(
       buttonLabel: "수동 배정",
       resultStatusLabel: statusLabels.WAITING_INSTALLER_RESPONSE,
       description:
-        "관리자가 선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 기사가 수락하면 배정 확정으로 진행하고, 거절하거나 응답 시간이 만료되면 관리자 확인 대상이 됩니다.",
+        "관리자가 선택한 기사에게 설치 가능 여부 확인 SMS를 보냅니다. 기사가 수락하면 배정 확정으로 진행하고, 거절하거나 응답 시간이 만료되면 관리자 확인 대상이 됩니다. 고객 입력 대기 건은 주문 배송지·연락처로 진행하고 일정은 기사가 고객과 협의합니다.",
       tone: "primary",
       enabled: canManuallyAssign(status, hasOpenIssue, fallbackUsed),
-      disabledReason: "후보 선정 가능 또는 관리자 검토 대기 상태에서 직접 지정할 수 있습니다. 기사 응답 대기 상태는 열린 예외 또는 배송지 폴백 주문만 가능합니다.",
+      disabledReason: "고객 입력 대기, 후보 선정 가능 또는 관리자 검토 대기 상태에서 직접 지정할 수 있습니다. 기사 응답 대기 상태는 열린 예외 또는 배송지 폴백 주문만 가능합니다.",
       onClick: handlers.onManualAssign,
     },
     {
@@ -1977,6 +1977,9 @@ export function formatOperationalMessage(value: string | null | undefined) {
     CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED: "고객 미입력 24시간 경과 - 주문 정보 사용",
     CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED_WITHOUT_DATE: "고객 미입력 24시간 경과 - 주문 정보 사용(일정 미정)",
     CUSTOMER_NO_INPUT_24H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 24시간 경과 - 주문 정보 부족",
+    ADMIN_MANUAL_ASSIGNMENT_SOURCE_ORDER_USED: "관리자 직접 지정 - 주문 정보 사용",
+    ADMIN_MANUAL_ASSIGNMENT_SOURCE_ORDER_USED_WITHOUT_DATE: "관리자 직접 지정 - 주문 정보 사용(일정 미정)",
+    SOURCE_ORDER_INSUFFICIENT: "주문 정보가 부족해 직접 지정할 수 없음",
     CUSTOMER_INPUT_SMS_ALREADY_REQUESTED: "고객 입력 문자가 이미 요청됨",
     CUSTOMER_INPUT_SMS_INVALID_STATE: "현재 상태에서는 고객 입력 문자를 발송할 수 없음",
     CUSTOMER_INPUT_SMS_QUEUE_FAILED: "고객 입력 문자 발송 요청 실패",
@@ -2351,7 +2354,8 @@ function requiresManualAssignmentReason(
 }
 
 export function canManuallyAssign(status: string, hasOpenIssue: boolean, fallbackUsed = false) {
-  if (["READY_FOR_CANDIDATE_SELECTION", "WAITING_ADMIN_REVIEW"].includes(status)) {
+  // 고객 입력 대기 건은 주문 배송지·연락처로 고객 요청을 채운 뒤 지정한다.
+  if (["WAITING_CUSTOMER_INPUT", "READY_FOR_CANDIDATE_SELECTION", "WAITING_ADMIN_REVIEW"].includes(status)) {
     return true;
   }
 

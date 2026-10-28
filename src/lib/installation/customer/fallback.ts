@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   FALLBACK_AFTER_HOURS,
@@ -130,50 +131,105 @@ async function applyCustomerRequestFallback(
   fallbackData: CustomerRequestFallbackData,
   now: Date,
 ) {
-  // 납기일을 설치일로 쓸 수 없으면 날짜 없이 넘기고, 일정은 기사가 고객과 통화해 정한다.
-  const reasonCode = `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_SOURCE_ORDER_USED`;
-  await prisma.$transaction(async (tx) => {
-    await tx.installationCustomerRequest.update({
-      where: { id: request.id },
-      data: {
-        installAddressEncrypted: encryptNullablePii(fallbackData.installAddress),
-        installAddress1Encrypted: encryptNullablePii(fallbackData.installAddress1),
-        installAddress2Encrypted: encryptNullablePii(fallbackData.installAddress2),
-        installDate: fallbackData.installDate,
-        ...(fallbackData.installDate ? {} : { installTimeSlot: UNSCHEDULED_INSTALL_TIME_SLOT }),
-        customerPhoneEncrypted: encryptNullablePii(fallbackData.customerPhone),
-        customerPhoneHash: hmacPii(fallbackData.customerPhone),
-        customerPhoneSource: "ORDER",
-        customerNote: null,
-        customerSubmittedAt: now,
-        fallbackUsed: true,
-        status: "FALLBACK_USED",
-      },
-    });
+  await prisma.$transaction((tx) =>
+    writeCustomerRequestFallback(tx, request, fallbackData, {
+      now,
+      actorType: "SYSTEM",
+      reasonCode: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_SOURCE_ORDER_USED`,
+    }),
+  );
+}
 
-    await transitionInstallationOrderStatus(
-      request.installationOrderId,
-      INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
-      {
-        now,
-        event: {
-          eventType: "CUSTOMER_FALLBACK_USED",
-          actorType: "SYSTEM",
-          reason: fallbackData.installDateSkipReason
-            ? `${reasonCode}_WITHOUT_DATE: ${fallbackData.installDateSkipReason}`
-            : reasonCode,
-          metadata: {
-            customerRequestId: request.id,
-            sourceInstallDate: fallbackData.installDate,
-            ...(fallbackData.installDateSkipReason
-              ? { installDateSkipReason: fallbackData.installDateSkipReason }
-              : {}),
+// 관리자가 고객 입력을 기다리지 않고 기사를 바로 지정할 때, 아직 비어 있는 고객 요청을
+// 주문 배송지·연락처로 채워 후보 선정 가능 상태로 넘긴다. 날짜 규칙은 자동 폴백과 같다.
+export async function fillPendingCustomerRequestFromSourceOrder(
+  tx: Prisma.TransactionClient,
+  installationOrderId: string,
+  { now, adminId }: { now: Date; adminId: string },
+): Promise<{ ok: true } | { ok: false; missingReasons: string[] }> {
+  const request = await tx.installationCustomerRequest.findFirst({
+    where: { installationOrderId, status: "PENDING_INPUT", customerSubmittedAt: null },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      installationOrderId: true,
+      createdAt: true,
+      installationOrder: {
+        select: {
+          source: {
+            select: { phoneEncrypted: true, addressEncrypted: true, dueDate: true },
           },
         },
       },
-      tx as never,
-    );
+    },
   });
+  if (!request) return { ok: false, missingReasons: ["입력 대기 중인 고객 요청 없음"] };
+
+  const fallbackData = buildCustomerRequestFallbackData(request, now);
+  if (!fallbackData.ok) return fallbackData;
+
+  await writeCustomerRequestFallback(tx, request, fallbackData.data, {
+    now,
+    actorType: "ADMIN",
+    actorId: adminId,
+    reasonCode: "ADMIN_MANUAL_ASSIGNMENT_SOURCE_ORDER_USED",
+  });
+  return { ok: true };
+}
+
+async function writeCustomerRequestFallback(
+  tx: Prisma.TransactionClient,
+  request: Pick<FallbackCandidate, "id" | "installationOrderId">,
+  fallbackData: CustomerRequestFallbackData,
+  {
+    now,
+    actorType,
+    actorId = null,
+    reasonCode,
+  }: { now: Date; actorType: "SYSTEM" | "ADMIN"; actorId?: string | null; reasonCode: string },
+) {
+  // 납기일을 설치일로 쓸 수 없으면 날짜 없이 넘기고, 일정은 기사가 고객과 통화해 정한다.
+  await tx.installationCustomerRequest.update({
+    where: { id: request.id },
+    data: {
+      installAddressEncrypted: encryptNullablePii(fallbackData.installAddress),
+      installAddress1Encrypted: encryptNullablePii(fallbackData.installAddress1),
+      installAddress2Encrypted: encryptNullablePii(fallbackData.installAddress2),
+      installDate: fallbackData.installDate,
+      ...(fallbackData.installDate ? {} : { installTimeSlot: UNSCHEDULED_INSTALL_TIME_SLOT }),
+      customerPhoneEncrypted: encryptNullablePii(fallbackData.customerPhone),
+      customerPhoneHash: hmacPii(fallbackData.customerPhone),
+      customerPhoneSource: "ORDER",
+      customerNote: null,
+      customerSubmittedAt: now,
+      fallbackUsed: true,
+      status: "FALLBACK_USED",
+    },
+  });
+
+  await transitionInstallationOrderStatus(
+    request.installationOrderId,
+    INSTALLATION_ORDER_STATUSES.READY_FOR_CANDIDATE_SELECTION,
+    {
+      now,
+      event: {
+        eventType: "CUSTOMER_FALLBACK_USED",
+        actorType,
+        actorId,
+        reason: fallbackData.installDateSkipReason
+          ? `${reasonCode}_WITHOUT_DATE: ${fallbackData.installDateSkipReason}`
+          : reasonCode,
+        metadata: {
+          customerRequestId: request.id,
+          sourceInstallDate: fallbackData.installDate,
+          ...(fallbackData.installDateSkipReason
+            ? { installDateSkipReason: fallbackData.installDateSkipReason }
+            : {}),
+        },
+      },
+    },
+    tx as never,
+  );
 }
 
 async function moveCustomerRequestToManualRequired(
@@ -235,7 +291,7 @@ type CustomerRequestFallbackData = {
 };
 
 function buildCustomerRequestFallbackData(
-  request: FallbackCandidate,
+  request: Pick<FallbackCandidate, "installationOrder">,
   now: Date,
 ): { ok: true; data: CustomerRequestFallbackData } | { ok: false; missingReasons: string[] } {
   const source = request.installationOrder.source;

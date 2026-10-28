@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getInstallerContact } from "@/lib/installation/installer/source";
 import { findBestMatchingInstallers } from "@/lib/installation/installer/matcher";
 import { createInstallationIssue } from "@/lib/installation/orders/issues/create";
+import { fillPendingCustomerRequestFromSourceOrder } from "@/lib/installation/customer/fallback";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
 import {
@@ -134,7 +135,7 @@ async function createManualAssignmentAttempt(
   mode: "ASSIGN" | "REASSIGN",
 ) {
   return prisma.$transaction(async (tx) => {
-    const order = await tx.installationOrder.findUnique({
+    const loadOrder = () => tx.installationOrder.findUnique({
       where: { id: orderId },
       select: {
         id: true,
@@ -164,6 +165,19 @@ async function createManualAssignmentAttempt(
         },
       },
     });
+    let order = await loadOrder();
+
+    // 고객 입력 대기 건(입력 미제출로 예외가 난 건 포함)은 주문 배송지·연락처로
+    // 고객 요청을 채운 뒤 기사를 지정한다. 일정은 기사가 고객과 통화해 정한다.
+    if (mode === "ASSIGN" && order?.status === INSTALLATION_ORDER_STATUSES.WAITING_CUSTOMER_INPUT) {
+      const prepared = await fillPendingCustomerRequestFromSourceOrder(tx as never, orderId, { now, adminId });
+      if (!prepared.ok) {
+        throw new InstallationManualOperationError(
+          `SOURCE_ORDER_INSUFFICIENT: ${prepared.missingReasons.join(", ")}`,
+        );
+      }
+      order = await loadOrder();
+    }
 
     if (!order) {
       throw new InstallationManualOperationError("ORDER_NOT_FOUND");

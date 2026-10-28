@@ -26,6 +26,7 @@ const {
   countIssues,
   createStatusEvent,
   updateCustomerRequest,
+  findFirstCustomerRequest,
   sendAssignmentPushToInstaller,
   sendSms,
   findUniqueInstallerOutsideTx,
@@ -47,6 +48,7 @@ const {
   countIssues: vi.fn(),
   createStatusEvent: vi.fn(),
   updateCustomerRequest: vi.fn(),
+  findFirstCustomerRequest: vi.fn(),
   sendAssignmentPushToInstaller: vi.fn(),
   sendSms: vi.fn(),
   findUniqueInstallerOutsideTx: vi.fn(),
@@ -72,6 +74,7 @@ function createTx() {
     },
     installationCustomerRequest: {
       update: updateCustomerRequest,
+      findFirst: findFirstCustomerRequest,
     },
     installer: {
       findUnique: findUniqueInstaller,
@@ -119,6 +122,7 @@ describe("installation manual operations", () => {
     countIssues.mockReset();
     createStatusEvent.mockReset();
     updateCustomerRequest.mockReset();
+    findFirstCustomerRequest.mockReset();
     sendAssignmentPushToInstaller.mockReset();
     sendSms.mockReset();
     findUniqueInstallerOutsideTx.mockReset();
@@ -133,7 +137,7 @@ describe("installation manual operations", () => {
     const now = new Date("2026-06-11T06:00:00.000Z");
     findUniqueOrder.mockResolvedValue({
       id: "order-1",
-      status: "WAITING_CUSTOMER_INPUT",
+      status: "WAITING_HQ_REVIEW",
       hasOpenIssue: false,
       activeCustomerRequestId: "request-1",
       activeAssignmentId: null,
@@ -147,6 +151,125 @@ describe("installation manual operations", () => {
 
     expect(createAssignment).not.toHaveBeenCalled();
     expect(updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("fills a waiting customer request from the source order before a manual direct assignment", async () => {
+    const now = new Date("2026-06-11T06:00:00.000Z");
+    findUniqueOrder
+      // 1) 지정 전 주문 조회
+      .mockResolvedValueOnce({
+        id: "order-1",
+        status: "WAITING_CUSTOMER_INPUT",
+        hasOpenIssue: false,
+        source: { memo: "설치비 (K100) x1" },
+        activeCustomerRequestId: "request-1",
+        activeAssignmentId: null,
+        customerRequests: [],
+      })
+      // 2) 고객 요청 폴백 상태 전이
+      .mockResolvedValueOnce({ id: "order-1", status: "WAITING_CUSTOMER_INPUT" })
+      // 3) 폴백 후 주문 재조회
+      .mockResolvedValueOnce({
+        id: "order-1",
+        status: "READY_FOR_CANDIDATE_SELECTION",
+        hasOpenIssue: false,
+        source: { memo: "설치비 (K100) x1" },
+        activeCustomerRequestId: "request-1",
+        activeAssignmentId: null,
+        customerRequests: [
+          { id: "request-1", installAddressEncrypted: null, fallbackUsed: true, status: "FALLBACK_USED" },
+        ],
+      })
+      // 4) 기사 응답 대기 상태 전이
+      .mockResolvedValueOnce({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    findFirstCustomerRequest.mockResolvedValue({
+      id: "request-1",
+      installationOrderId: "order-1",
+      createdAt: new Date("2026-06-09T06:00:00.000Z"),
+      installationOrder: {
+        source: {
+          phoneEncrypted: "010-1234-5678",
+          addressEncrypted: "서울 강남구 테헤란로 1",
+          dueDate: "20260609",
+        },
+      },
+    });
+    findUniqueInstaller.mockResolvedValue({
+      id: "installer-2",
+      name: "서울강남기사",
+      phone: "010-2222-3333",
+      active: true,
+      capabilities: ["DOORLOCK"],
+      aqaraAppCapability: "NONE",
+      serviceAreas: ["서울 강남구"],
+    });
+    countAssignments.mockResolvedValue(0);
+    createAssignment.mockResolvedValue({ id: "assignment-1" });
+    upsertNotification.mockResolvedValue({ id: "notification-1" });
+    updateOrder.mockResolvedValue({ id: "order-1" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    await createManualInstallerAssignment("order-1", {
+      installerId: "installer-2",
+      adminId: "admin-1",
+      now,
+      baseUrl: "https://example.com",
+      tokenFactory: () => "manual-token",
+    });
+
+    expect(updateCustomerRequest).toHaveBeenCalledWith({
+      where: { id: "request-1" },
+      data: expect.objectContaining({
+        installDate: null,
+        installTimeSlot: "상담 후 조율",
+        customerPhoneSource: "ORDER",
+        status: "FALLBACK_USED",
+      }),
+    });
+    expect(createStatusEvent).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        toStatus: "READY_FOR_CANDIDATE_SELECTION",
+        eventType: "CUSTOMER_FALLBACK_USED",
+        actorType: "ADMIN",
+        actorId: "admin-1",
+      }),
+    });
+    expect(createAssignment).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        installerId: "installer-2",
+        assignmentSource: "MANUAL_DIRECT",
+        status: "WAITING_INSTALLER_RESPONSE",
+      }),
+    });
+  });
+
+  it("rejects manual direct assignment from a waiting customer input order without a usable source phone", async () => {
+    const now = new Date("2026-06-11T06:00:00.000Z");
+    findUniqueOrder.mockResolvedValue({
+      id: "order-1",
+      status: "WAITING_CUSTOMER_INPUT",
+      hasOpenIssue: true,
+      activeCustomerRequestId: "request-1",
+      activeAssignmentId: null,
+      customerRequests: [],
+    });
+    findFirstCustomerRequest.mockResolvedValue({
+      id: "request-1",
+      installationOrderId: "order-1",
+      createdAt: new Date("2026-06-09T06:00:00.000Z"),
+      installationOrder: {
+        source: { phoneEncrypted: null, addressEncrypted: "서울 강남구 테헤란로 1", dueDate: null },
+      },
+    });
+
+    await expect(createManualInstallerAssignment("order-1", {
+      installerId: "installer-2",
+      adminId: "admin-1",
+      now,
+    })).rejects.toThrow("SOURCE_ORDER_INSUFFICIENT: 휴대전화번호 없음 또는 형식 오류");
+
+    expect(updateCustomerRequest).not.toHaveBeenCalled();
+    expect(createAssignment).not.toHaveBeenCalled();
   });
 
   it("creates a manual direct assignment from a candidate selection order without an open issue", async () => {
