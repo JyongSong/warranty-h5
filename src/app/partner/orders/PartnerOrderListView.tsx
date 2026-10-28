@@ -2,9 +2,12 @@ import Link from "next/link";
 import { formatPartnerStatus } from "@/lib/installation/partner/routing";
 import {
   PARTNER_ORDER_VIEWS,
+  type PartnerCompletedRange,
+  type PartnerCompletedSummary,
   type PartnerOrderSummary,
   type PartnerOrderView,
 } from "@/lib/installation/partner/views";
+import PartnerCompletedSection from "./PartnerCompletedSection";
 import PartnerHeader from "./PartnerHeader";
 import { formatClaimAmount, formatInstallSchedule, formatPartnerDateTime, formatPartnerPhone } from "./format";
 
@@ -14,12 +17,15 @@ export default function PartnerOrderListView({
   view,
   orders,
   counts,
+  completed,
   basePath = "/partner/orders",
 }: {
   partnerName: string;
   view: PartnerOrderView;
   orders: PartnerOrderSummary[];
   counts: Record<PartnerOrderView, number>;
+  /** 완료 탭일 때만: 조회 기간과 합계 */
+  completed?: { range: PartnerCompletedRange; summary: PartnerCompletedSummary; today: string };
   basePath?: string;
 }) {
   return (
@@ -43,7 +49,14 @@ export default function PartnerOrderListView({
           ))}
         </nav>
 
-        {orders.length === 0 ? (
+        {view === "completed" && completed ? (
+          <PartnerCompletedSection
+            basePath={basePath}
+            range={completed.range}
+            summary={completed.summary}
+            today={completed.today}
+          />
+        ) : orders.length === 0 ? (
           <p className="rounded-lg border border-dashed border-zinc-300 bg-white px-4 py-10 text-center text-sm text-zinc-500">
             {PARTNER_ORDER_VIEWS[view].label} 건이 없습니다.
           </p>

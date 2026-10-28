@@ -24,6 +24,7 @@ export function normalizePartnerOrderView(value: string | string[] | undefined):
 const ORDER_SELECT = {
   id: true,
   status: true,
+  statusChangedAt: true,
   partnerId: true,
   partnerStatus: true,
   partnerAssignedAt: true,
@@ -58,6 +59,7 @@ const ORDER_SELECT = {
 type OrderRow = {
   id: string;
   status: string;
+  statusChangedAt: Date;
   partnerId: string | null;
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
@@ -88,6 +90,8 @@ type OrderRow = {
 export type PartnerOrderSummary = {
   id: string;
   status: string;
+  /** 본사 검수 승인으로 완료된 시각. 완료 건만 값이 있다. */
+  completedAt: Date | null;
   partnerStatus: string | null;
   partnerAssignedAt: Date | null;
   partnerStatusChangedAt: Date | null;
@@ -116,6 +120,7 @@ function shapeOrder(order: OrderRow): PartnerOrderSummary {
   return {
     id: order.id,
     status: order.status,
+    completedAt: order.status === INSTALLATION_ORDER_STATUSES.COMPLETED ? order.statusChangedAt : null,
     partnerStatus: order.partnerStatus,
     partnerAssignedAt: order.partnerAssignedAt,
     partnerStatusChangedAt: order.partnerStatusChangedAt,
@@ -143,6 +148,78 @@ export async function listPartnerOrders(partnerId: string, view: PartnerOrderVie
     select: ORDER_SELECT,
   });
   return orders.map(shapeOrder);
+}
+
+// ── 완료 탭: 기간별 이력 · 청구 합계 ───────────────────────────────────
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export type PartnerCompletedRange = { from: string; to: string };
+
+export function toKstYmd(date: Date) {
+  return new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** 완료 탭 기간. 값이 없거나 이상하면 이번 달 1일 ~ 오늘(KST). 시작이 끝보다 늦으면 바꿔 준다. */
+export function normalizePartnerCompletedRange(
+  rawFrom: string | string[] | undefined,
+  rawTo: string | string[] | undefined,
+  now = new Date(),
+): PartnerCompletedRange {
+  const today = toKstYmd(now);
+  const pick = (value: string | string[] | undefined) => {
+    const raw = Array.isArray(value) ? value[0] : value;
+    return raw && YMD_PATTERN.test(raw) && !Number.isNaN(Date.parse(`${raw}T00:00:00Z`)) ? raw : null;
+  };
+  const from = pick(rawFrom) ?? `${today.slice(0, 7)}-01`;
+  const to = pick(rawTo) ?? today;
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+function kstDayStart(ymd: string) {
+  return new Date(Date.parse(`${ymd}T00:00:00Z`) - KST_OFFSET_MS);
+}
+
+export type PartnerCompletedSummary = {
+  orders: PartnerOrderSummary[];
+  totalAmount: number;
+  /** 본사 검수 중이라 아직 합계에 들어가지 않은 건 (기간 무관) */
+  pendingReviewCount: number;
+  pendingReviewAmount: number;
+};
+
+/** 본사 승인(완료) 일자가 기간 안에 드는 협력사 완료 건과 청구 금액 합계. */
+export async function getPartnerCompletedSummary(
+  partnerId: string,
+  range: PartnerCompletedRange,
+): Promise<PartnerCompletedSummary> {
+  const end = new Date(kstDayStart(range.to).getTime() + 24 * 60 * 60 * 1000);
+  const [orders, pending] = await Promise.all([
+    prisma.installationOrder.findMany({
+      where: {
+        partnerId,
+        status: INSTALLATION_ORDER_STATUSES.COMPLETED,
+        statusChangedAt: { gte: kstDayStart(range.from), lt: end },
+      },
+      orderBy: { statusChangedAt: "desc" },
+      take: 500,
+      select: ORDER_SELECT,
+    }),
+    prisma.installationOrder.aggregate({
+      where: { partnerId, status: INSTALLATION_ORDER_STATUSES.WAITING_HQ_REVIEW },
+      _count: { _all: true },
+      _sum: { partnerClaimAmount: true },
+    }),
+  ]);
+  const shaped = orders.map(shapeOrder);
+
+  return {
+    orders: shaped,
+    totalAmount: shaped.reduce((sum, order) => sum + (order.claimAmount ?? 0), 0),
+    pendingReviewCount: pending._count._all,
+    pendingReviewAmount: pending._sum.partnerClaimAmount ?? 0,
+  };
 }
 
 export async function countPartnerOrdersByView(partnerId: string) {
