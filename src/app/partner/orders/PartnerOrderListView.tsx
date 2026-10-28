@@ -9,6 +9,7 @@ import {
 } from "@/lib/installation/partner/views";
 import PartnerCompletedSection from "./PartnerCompletedSection";
 import PartnerHeader from "./PartnerHeader";
+import PartnerInstallItems from "./PartnerInstallItems";
 import RowCell from "./PartnerRowCell";
 import {
   formatClaimAmount,
@@ -78,7 +79,7 @@ export default function PartnerOrderListView({
                   <th className="px-4 py-3">연락처</th>
                   <th className="px-4 py-3">설치 주소</th>
                   <th className="px-4 py-3">설치 희망</th>
-                  <th className="px-4 py-3">주문 상품</th>
+                  <th className="px-4 py-3">설치 품목</th>
                   <th className="px-4 py-3 text-right">청구 금액</th>
                   <th className="px-4 py-3">담당 기사</th>
                   <th className="px-4 py-3">배정 일시</th>
@@ -104,9 +105,9 @@ export default function PartnerOrderListView({
                       <RowCell href={href} className="whitespace-nowrap">
                         {formatInstallSchedule(order.installDate, order.installTimeSlot)}
                       </RowCell>
-                      <RowCell href={href} className="max-w-[320px] text-zinc-600">
-                        <span className="line-clamp-2 break-keep" title={order.memo ?? undefined}>
-                          {order.memo ?? "-"}
+                      <RowCell href={href} className="max-w-[320px]">
+                        <span title={order.memo ?? undefined}>
+                          <PartnerInstallItems memo={order.memo} compact />
                         </span>
                       </RowCell>
                       <RowCell

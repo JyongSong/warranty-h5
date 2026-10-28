@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PartnerCompletedRange, PartnerCompletedSummary } from "@/lib/installation/partner/views";
 import { formatClaimAmount } from "./format";
+import PartnerInstallItems from "./PartnerInstallItems";
 import RowCell from "./PartnerRowCell";
 
 // 협력사 완료 탭: 기사 앱의 이력/정산처럼 기간 합계와 건별 내역을 보여준다.
@@ -103,7 +104,7 @@ export default function PartnerCompletedSection({
                 <th className="px-4 py-3">완료일</th>
                 <th className="px-4 py-3">고객명</th>
                 <th className="px-4 py-3">설치 주소</th>
-                <th className="px-4 py-3">주문 상품</th>
+                <th className="px-4 py-3">설치 품목</th>
                 <th className="px-4 py-3">담당 기사</th>
                 <th className="px-4 py-3 text-right">청구 금액</th>
               </tr>
@@ -122,8 +123,8 @@ export default function PartnerCompletedSection({
                     <RowCell href={href} className="max-w-[280px]">
                       <span className="line-clamp-2 break-keep">{order.address ?? "-"}</span>
                     </RowCell>
-                    <RowCell href={href} className="max-w-[320px] text-zinc-600">
-                      <span className="line-clamp-2 break-keep">{order.memo ?? "-"}</span>
+                    <RowCell href={href} className="max-w-[320px]">
+                      <PartnerInstallItems memo={order.memo} compact />
                     </RowCell>
                     <RowCell href={href} className="whitespace-nowrap">{order.installer ?? "-"}</RowCell>
                     <RowCell href={href} className="whitespace-nowrap text-right font-bold text-zinc-950">
