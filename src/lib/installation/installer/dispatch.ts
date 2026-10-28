@@ -139,9 +139,11 @@ export async function dispatchReadyInstallationOrders({
       customerRequests: {
         some: {
           status: { in: ["SUBMITTED", "FALLBACK_USED"] },
-          installDate: {
-            lte: dispatchWindowEnd,
-          },
+          // 주문 정보로 폴백했는데 납기일을 쓸 수 없던 건은 날짜 없이 배정한다.
+          OR: [
+            { installDate: { lte: dispatchWindowEnd } },
+            { status: "FALLBACK_USED", installDate: null },
+          ],
         },
       },
     },
@@ -159,9 +161,11 @@ export async function dispatchReadyInstallationOrders({
       customerRequests: {
         where: {
           status: { in: ["SUBMITTED", "FALLBACK_USED"] },
-          installDate: {
-            lte: dispatchWindowEnd,
-          },
+          // 주문 정보로 폴백했는데 납기일을 쓸 수 없던 건은 날짜 없이 배정한다.
+          OR: [
+            { installDate: { lte: dispatchWindowEnd } },
+            { status: "FALLBACK_USED", installDate: null },
+          ],
         },
         orderBy: { updatedAt: "desc" },
         select: {

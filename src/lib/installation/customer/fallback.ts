@@ -37,6 +37,9 @@ type FallbackCandidate = {
   };
 };
 
+// 고객 입력 화면의 "상담 후 조율" 과 같은 값이다.
+const UNSCHEDULED_INSTALL_TIME_SLOT = "상담 후 조율";
+
 export type FallbackExpiredInstallationCustomerRequestsResult = {
   fallbackCount: number;
   manualRequiredCount: number;
@@ -108,14 +111,14 @@ export async function fallbackExpiredInstallationCustomerRequests({
     }
 
     const fallbackData = buildCustomerRequestFallbackData(request, now);
-    if (!fallbackData) {
-      await moveCustomerRequestToManualRequired(request, now);
+    if (!fallbackData.ok) {
+      await moveCustomerRequestToManualRequired(request, fallbackData.missingReasons, now);
       manualRequiredCount += 1;
       skippedCount += 1;
       continue;
     }
 
-    await applyCustomerRequestFallback(request, fallbackData, now);
+    await applyCustomerRequestFallback(request, fallbackData.data, now);
     fallbackCount += 1;
   }
 
@@ -124,15 +127,11 @@ export async function fallbackExpiredInstallationCustomerRequests({
 
 async function applyCustomerRequestFallback(
   request: FallbackCandidate,
-  fallbackData: {
-    installAddress: string;
-    installAddress1: string | null;
-    installAddress2: string | null;
-    customerPhone: string;
-    installDate: string;
-  },
+  fallbackData: CustomerRequestFallbackData,
   now: Date,
 ) {
+  // 납기일을 설치일로 쓸 수 없으면 날짜 없이 넘기고, 일정은 기사가 고객과 통화해 정한다.
+  const reasonCode = `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_SOURCE_ORDER_USED`;
   await prisma.$transaction(async (tx) => {
     await tx.installationCustomerRequest.update({
       where: { id: request.id },
@@ -141,6 +140,7 @@ async function applyCustomerRequestFallback(
         installAddress1Encrypted: encryptNullablePii(fallbackData.installAddress1),
         installAddress2Encrypted: encryptNullablePii(fallbackData.installAddress2),
         installDate: fallbackData.installDate,
+        ...(fallbackData.installDate ? {} : { installTimeSlot: UNSCHEDULED_INSTALL_TIME_SLOT }),
         customerPhoneEncrypted: encryptNullablePii(fallbackData.customerPhone),
         customerPhoneHash: hmacPii(fallbackData.customerPhone),
         customerPhoneSource: "ORDER",
@@ -159,10 +159,15 @@ async function applyCustomerRequestFallback(
         event: {
           eventType: "CUSTOMER_FALLBACK_USED",
           actorType: "SYSTEM",
-          reason: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_SOURCE_ORDER_USED`,
+          reason: fallbackData.installDateSkipReason
+            ? `${reasonCode}_WITHOUT_DATE: ${fallbackData.installDateSkipReason}`
+            : reasonCode,
           metadata: {
             customerRequestId: request.id,
             sourceInstallDate: fallbackData.installDate,
+            ...(fallbackData.installDateSkipReason
+              ? { installDateSkipReason: fallbackData.installDateSkipReason }
+              : {}),
           },
         },
       },
@@ -173,8 +178,10 @@ async function applyCustomerRequestFallback(
 
 async function moveCustomerRequestToManualRequired(
   request: FallbackCandidate,
+  missingReasons: string[],
   now: Date,
 ) {
+  const missingSummary = missingReasons.join(", ");
   await prisma.$transaction(async (tx) => {
     const issue = await createInstallationIssue(
       {
@@ -182,10 +189,11 @@ async function moveCustomerRequestToManualRequired(
         type: "CUSTOMER_INPUT_NOT_SUBMITTED",
         title: "고객 정보 확인 필요",
         description:
-          `고객 미입력 ${FALLBACK_AFTER_HOURS}시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다.`,
+          `고객 미입력 ${FALLBACK_AFTER_HOURS}시간 경과 후 주문 배송지와 연락처를 폴백할 수 없어 확인이 필요합니다. (${missingSummary})`,
         metadata: {
           customerRequestId: request.id,
           fallbackUsed: false,
+          missingReasons,
         },
         now,
       },
@@ -204,10 +212,11 @@ async function moveCustomerRequestToManualRequired(
         event: {
           eventType: "CUSTOMER_FALLBACK_FAILED",
           actorType: "SYSTEM",
-          reason: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_INSUFFICIENT_SOURCE_ORDER`,
+          reason: `CUSTOMER_NO_INPUT_${FALLBACK_AFTER_HOURS}H_INSUFFICIENT_SOURCE_ORDER: ${missingSummary}`,
           metadata: {
             customerRequestId: request.id,
             issueId: issue.id,
+            missingReasons,
           },
         },
       },
@@ -216,28 +225,52 @@ async function moveCustomerRequestToManualRequired(
   });
 }
 
-function buildCustomerRequestFallbackData(request: FallbackCandidate, now: Date) {
-  const installAddress = decryptNullablePii(request.installationOrder.source?.addressEncrypted)?.trim();
-  const customerPhone = request.installationOrder.source?.phoneEncrypted
-    ? normalizePhone11(decryptNullablePii(request.installationOrder.source.phoneEncrypted) ?? "")
+type CustomerRequestFallbackData = {
+  installAddress: string;
+  installAddress1: string | null;
+  installAddress2: string | null;
+  customerPhone: string;
+  installDate: string | null;
+  installDateSkipReason: string | null;
+};
+
+function buildCustomerRequestFallbackData(
+  request: FallbackCandidate,
+  now: Date,
+): { ok: true; data: CustomerRequestFallbackData } | { ok: false; missingReasons: string[] } {
+  const source = request.installationOrder.source;
+  const installAddress = decryptNullablePii(source?.addressEncrypted)?.trim();
+  const customerPhone = source?.phoneEncrypted
+    ? normalizePhone11(decryptNullablePii(source.phoneEncrypted) ?? "")
     : null;
-  const sourceInstallDate = normalizeValidSourceInstallDate(
-    request.installationOrder.source?.dueDate ?? null,
-    now,
-  );
   const parsedAddress = installAddress ? parseInstallationAddress(installAddress) : null;
   const splitAddress = installAddress ? splitInstallationSourceAddress(installAddress) : null;
 
-  if (!installAddress || !parsedAddress || !customerPhone || !sourceInstallDate) {
-    return null;
+  const missingReasons: string[] = [];
+  if (!installAddress) missingReasons.push("배송지 주소 없음");
+  else if (!parsedAddress) missingReasons.push("배송지 주소 해석 불가");
+  if (!customerPhone) missingReasons.push("휴대전화번호 없음 또는 형식 오류");
+  if (!installAddress || !customerPhone || missingReasons.length > 0) {
+    return { ok: false, missingReasons };
   }
 
+  const sourceDueDate = source?.dueDate ?? null;
+  const sourceInstallDate = normalizeValidSourceInstallDate(sourceDueDate, now);
+
   return {
-    installAddress,
-    installAddress1: splitAddress?.address1 ?? null,
-    installAddress2: splitAddress?.address2 ?? null,
-    customerPhone,
-    installDate: sourceInstallDate,
+    ok: true,
+    data: {
+      installAddress,
+      installAddress1: splitAddress?.address1 ?? null,
+      installAddress2: splitAddress?.address2 ?? null,
+      customerPhone,
+      installDate: sourceInstallDate,
+      installDateSkipReason: sourceInstallDate
+        ? null
+        : sourceDueDate?.trim()
+          ? `납기일 ${sourceDueDate.trim()} 이 설치 가능 범위(D+2~D+30) 밖이라 일정은 기사·고객 협의`
+          : "납기일 없음, 일정은 기사·고객 협의",
+    },
   };
 }
 

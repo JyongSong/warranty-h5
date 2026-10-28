@@ -295,7 +295,8 @@ export default function InstallationOrderDetail({
       ? [{ label: "CJ 주문번호", value: formatText(item.sourceExternalOrderNo ?? null) }]
       : []),
     { label: "ERP 주문번호", value: item.sourceErpOrderNo },
-    { label: "주문일", value: formatBackofficeDateTime(item.sourceOrderDate) },
+    // 자사 건의 이 값은 ERP 납기일자다. 고객 미입력 폴백 때 설치일 후보로 쓰인다.
+    { label: isCjOrder ? "주문일" : "납기일자", value: formatBackofficeDateTime(item.sourceOrderDate) },
     { label: "주문번호", value: item.sourceErpOrderNo },
   ];
 
@@ -1973,6 +1974,9 @@ export function formatOperationalMessage(value: string | null | undefined) {
     ACTIVE_ASSIGNMENT_EXISTS: "이미 진행 중인 기사 배정 있음",
     CUSTOMER_NO_INPUT_96H_SOURCE_ORDER_USED: "고객 미입력 96시간 경과 - 주문 정보 사용",
     CUSTOMER_NO_INPUT_96H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 96시간 경과 - 주문 정보 부족",
+    CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED: "고객 미입력 24시간 경과 - 주문 정보 사용",
+    CUSTOMER_NO_INPUT_24H_SOURCE_ORDER_USED_WITHOUT_DATE: "고객 미입력 24시간 경과 - 주문 정보 사용(일정 미정)",
+    CUSTOMER_NO_INPUT_24H_INSUFFICIENT_SOURCE_ORDER: "고객 미입력 24시간 경과 - 주문 정보 부족",
     CUSTOMER_INPUT_SMS_ALREADY_REQUESTED: "고객 입력 문자가 이미 요청됨",
     CUSTOMER_INPUT_SMS_INVALID_STATE: "현재 상태에서는 고객 입력 문자를 발송할 수 없음",
     CUSTOMER_INPUT_SMS_QUEUE_FAILED: "고객 입력 문자 발송 요청 실패",

@@ -224,9 +224,10 @@ describe("dispatchReadyInstallationOrders", () => {
         customerRequests: {
           some: {
             status: { in: ["SUBMITTED", "FALLBACK_USED"] },
-            installDate: {
-              lte: "2026-06-21",
-            },
+            OR: [
+              { installDate: { lte: "2026-06-21" } },
+              { status: "FALLBACK_USED", installDate: null },
+            ],
           },
         },
       },
