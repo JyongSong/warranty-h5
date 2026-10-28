@@ -21,7 +21,8 @@ ALTER TABLE "installation_orders"
   ADD COLUMN IF NOT EXISTS "partner_status" TEXT,
   ADD COLUMN IF NOT EXISTS "partner_status_changed_at" TIMESTAMPTZ(6),
   ADD COLUMN IF NOT EXISTS "partner_routing" TEXT,
-  ADD COLUMN IF NOT EXISTS "partner_claim_amount" INTEGER;
+  ADD COLUMN IF NOT EXISTS "partner_claim_amount" INTEGER,
+  ADD COLUMN IF NOT EXISTS "partner_installer" TEXT;
 CREATE INDEX IF NOT EXISTS "installation_orders_partner_id_partner_status_idx"
   ON "installation_orders"("partner_id", "partner_status");
 DO $$ BEGIN

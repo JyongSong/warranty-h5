@@ -35,6 +35,7 @@ import {
   assignReadyOrdersToPartner,
   reviewPartnerCompletion,
   setPartnerClaimAmount,
+  setPartnerInstaller,
   submitPartnerCompletion,
   reportPartnerUnable,
   switchOrderToInhouse,
@@ -217,6 +218,31 @@ describe("installation partner service", () => {
     expect(db.installationPartnerNote.create.mock.calls[1][0].data.body).toBe(
       "청구 금액 150,000원 → 180,000원\n현장 배선 추가",
     );
+  });
+
+  it("records the 담당 기사 PL types in, logging each change", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "INSTALLER_ASSIGNED",
+      partnerId: "partner-pl",
+      partnerStatus: "ACCEPTED",
+      partnerClaimAmount: 150000,
+      partnerInstaller: "홍길동",
+    });
+
+    await expect(
+      setPartnerInstaller("order-1", { partnerId: "partner-pl", userId: "acc-1", installer: "  " }),
+    ).rejects.toThrow("INSTALLER_REQUIRED");
+
+    await setPartnerInstaller("order-1", { partnerId: "partner-pl", userId: "acc-1", installer: " 김철수  010-1111-2222 " });
+    expect(db.installationOrder.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: { partnerInstaller: "김철수 010-1111-2222" },
+    });
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      kind: "INSTALLER",
+      body: "담당 기사 홍길동 → 김철수 010-1111-2222",
+    });
   });
 
   it("does not let the amount change after completion was submitted", async () => {

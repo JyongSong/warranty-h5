@@ -76,6 +76,7 @@ export default function PartnerOrderListView({
                     <span className={order.claimAmount == null ? "font-semibold text-amber-700" : undefined}>
                       청구 {formatClaimAmount(order.claimAmount)}
                     </span>
+                    {order.installer ? <span>기사 {order.installer}</span> : null}
                   </div>
                 </Link>
               </li>

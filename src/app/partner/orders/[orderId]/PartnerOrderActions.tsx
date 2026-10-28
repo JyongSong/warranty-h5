@@ -6,6 +6,7 @@ import { useState, type ChangeEvent } from "react";
 import { compressImage } from "@/lib/installer/image";
 import {
   addPartnerNoteAction,
+  setPartnerInstallerAction,
   getPartnerUploadTargetsAction,
   setPartnerClaimAmountAction,
   submitPartnerCompletionAction,
@@ -19,6 +20,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ORDER_NOT_FOUND: "주문을 찾을 수 없습니다.",
   ORDER_NOT_WORKABLE: "이미 완료 등록되었거나 진행할 수 없는 건입니다.",
   REASON_REQUIRED: "설치 불가 사유를 적어 주세요.",
+  INSTALLER_REQUIRED: "담당 기사를 입력해 주세요.",
+  INSTALLER_TOO_LONG: "담당 기사는 100자 이내로 입력해 주세요.",
   NOTE_REQUIRED: "메모 내용을 입력해 주세요.",
   NOTE_TOO_LONG: "메모가 너무 깁니다. (2000자 이하)",
   CLAIM_AMOUNT_INVALID: "청구 금액을 숫자로 입력해 주세요. (1,000만 원 이하)",
@@ -41,26 +44,29 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
-// 협력사가 하는 일은 셋뿐이다: 청구 금액을 넣어 접수, 설치 완료 등록, (못 맡으면) 설치 불가.
-// 기사 배정·일정은 협력사가 알아서 하고 이 화면에 남기지 않는다.
+// 협력사가 하는 일: 청구 금액을 넣어 접수, 담당 기사·메모, 설치 완료 등록, (못 맡으면) 설치 불가.
+// 기사 배정 과정·일정은 협력사가 알아서 하고, 본사에는 누가 맡았는지만 남긴다.
 export default function PartnerOrderActions({
   orderId,
   claimAmount,
+  installer,
 }: {
   orderId: string;
   claimAmount: number | null;
+  installer: string | null;
 }) {
   const router = useRouter();
   const [amountInput, setAmountInput] = useState(claimAmount != null ? String(claimAmount) : "");
   const [amountReason, setAmountReason] = useState("");
   const [unableReason, setUnableReason] = useState("");
+  const [installerInput, setInstallerInput] = useState(installer ?? "");
   const [noteBody, setNoteBody] = useState("");
   const [completionBody, setCompletionBody] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
-  const [busy, setBusy] = useState<"amount" | "unable" | "note" | "completion" | null>(null);
+  const [busy, setBusy] = useState<"amount" | "installer" | "unable" | "note" | "completion" | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  async function run(kind: "amount" | "unable" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
+  async function run(kind: "amount" | "installer" | "unable" | "note" | "completion", operation: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
     setBusy(kind);
     setMessage(null);
     try {
@@ -103,6 +109,14 @@ export default function PartnerOrderActions({
       "본사에 설치 불가를 알렸습니다.",
     );
     if (ok) setUnableReason("");
+  }
+
+  async function handleInstaller() {
+    await run(
+      "installer",
+      () => setPartnerInstallerAction({ orderId, installer: installerInput }),
+      "담당 기사를 저장했습니다.",
+    );
   }
 
   async function handleNote() {
@@ -248,7 +262,25 @@ export default function PartnerOrderActions({
       ) : null}
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-base font-bold">메모</h2>
+        <h2 className="mb-3 text-base font-bold">담당 기사</h2>
+        <div className="flex gap-2">
+          <input
+            value={installerInput}
+            onChange={(event) => setInstallerInput(event.target.value)}
+            placeholder="예) 홍길동 010-1234-5678"
+            className="h-10 min-w-0 flex-1 rounded-md border border-zinc-300 px-3 text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleInstaller}
+            disabled={busy !== null || installerInput.trim() === (installer ?? "")}
+            className="h-10 shrink-0 rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy === "installer" ? "저장 중…" : "저장"}
+          </button>
+        </div>
+
+        <h2 className="mb-3 mt-5 text-base font-bold">메모</h2>
         <textarea
           value={noteBody}
           onChange={(event) => setNoteBody(event.target.value)}

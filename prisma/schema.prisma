@@ -524,6 +524,8 @@ model InstallationOrder {
   partnerRouting          String?                                  @map("partner_routing")
   // 협력사가 본사에 청구하는 시공비(원). 접수 때 입력하고 완료 등록 전까지 고칠 수 있다. 이력은 partnerNotes(kind AMOUNT).
   partnerClaimAmount      Int?                                     @map("partner_claim_amount")
+  // 협력사가 직접 적는 담당 기사 (이름·연락처 자유 입력). 변경 이력은 partnerNotes(kind INSTALLER).
+  partnerInstaller        String?                                  @map("partner_installer")
   partnerNotes            InstallationPartnerNote[]
 
   @@index([status, createdAt])

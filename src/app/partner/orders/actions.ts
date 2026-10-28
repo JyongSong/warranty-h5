@@ -10,6 +10,7 @@ import {
   PARTNER_COMPLETION_PHOTO_MAX,
   reportPartnerUnable,
   setPartnerClaimAmount,
+  setPartnerInstaller,
   submitPartnerCompletion,
 } from "@/lib/installation/partner/service";
 import { getPartnerOrderDetail } from "@/lib/installation/partner/views";
@@ -55,6 +56,18 @@ export async function setPartnerClaimAmountAction(input: {
       amount: input.amount,
       reason: input.reason,
     }),
+  );
+}
+
+export async function setPartnerInstallerAction(input: {
+  orderId: string;
+  installer: string;
+}): Promise<PartnerActionResult> {
+  const user = await requirePartnerUser();
+  if (!user) return { ok: false, error: "UNAUTHORIZED" };
+
+  return run(input.orderId, () =>
+    setPartnerInstaller(input.orderId, { partnerId: user.partnerId, userId: user.id, installer: input.installer }),
   );
 }
 

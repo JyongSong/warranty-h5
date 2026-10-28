@@ -113,9 +113,10 @@ export default function PartnerAssignmentPanel({
           {formatPartnerStatus(detail?.partnerStatus)}
         </span>
       </div>
-      <dl className="mb-4 grid grid-cols-3 gap-2 text-sm">
+      <dl className="mb-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <PartnerFact label="접수" value={detail?.acceptedAt ? formatPartnerDateTime(detail.acceptedAt) : "접수 전"} warn={!detail?.acceptedAt} />
         <PartnerFact label="청구 금액" value={formatClaimAmount(detail?.claimAmount)} warn={detail?.claimAmount == null} />
+        <PartnerFact label="담당 기사" value={detail?.installer ?? "미입력"} warn={!detail?.installer} />
         <PartnerFact
           label="완료 등록"
           value={detail?.completionSubmittedAt ? formatPartnerDateTime(detail.completionSubmittedAt) : "-"}

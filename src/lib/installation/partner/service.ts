@@ -315,7 +315,14 @@ export async function switchOrderToInhouse(
 async function loadPartnerOrderForUpdate(tx: Tx, orderId: string, partnerId: string) {
   const order = await tx.installationOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true, partnerId: true, partnerStatus: true, partnerClaimAmount: true },
+    select: {
+      id: true,
+      status: true,
+      partnerId: true,
+      partnerStatus: true,
+      partnerClaimAmount: true,
+      partnerInstaller: true,
+    },
   });
   // 다른 협력사 주문은 존재 여부도 알려주지 않는다.
   if (!order || order.partnerId !== partnerId) throw new InstallationPartnerError("ORDER_NOT_FOUND");
@@ -455,6 +462,47 @@ export async function setPartnerClaimAmount(
         ]
           .filter(Boolean)
           .join("\n"),
+        createdAt: now,
+      },
+    });
+  });
+}
+
+const PARTNER_INSTALLER_MAX = 100;
+
+/** 협력사가 이 건의 담당 기사를 적는다(이름·연락처 자유 입력). 고칠 때마다 기록이 남는다. */
+export async function setPartnerInstaller(
+  orderId: string,
+  {
+    partnerId,
+    userId,
+    installer,
+    now = new Date(),
+  }: { partnerId: string; userId: string; installer: string; now?: Date },
+) {
+  const normalized = installer.trim().replace(/\s+/g, " ");
+  if (!normalized) throw new InstallationPartnerError("INSTALLER_REQUIRED");
+  if (normalized.length > PARTNER_INSTALLER_MAX) throw new InstallationPartnerError("INSTALLER_TOO_LONG");
+
+  return prisma.$transaction(async (tx) => {
+    const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
+    assertPartnerWorkable(order);
+
+    const previous = order.partnerInstaller;
+    if (previous === normalized) return;
+
+    await tx.installationOrder.update({
+      where: { id: orderId },
+      data: { partnerInstaller: normalized },
+    });
+    await tx.installationPartnerNote.create({
+      data: {
+        installationOrderId: orderId,
+        partnerId,
+        authorUserId: userId,
+        authorType: "PARTNER",
+        kind: "INSTALLER",
+        body: previous ? `담당 기사 ${previous} → ${normalized}` : `담당 기사 ${normalized}`,
         createdAt: now,
       },
     });

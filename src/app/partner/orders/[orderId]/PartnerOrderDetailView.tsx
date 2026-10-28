@@ -59,6 +59,8 @@ export default function PartnerOrderDetailView({
             <dd>{order.orderNumber ?? "-"}</dd>
             <dt className="whitespace-nowrap text-zinc-500">청구 금액</dt>
             <dd className="font-semibold">{formatClaimAmount(order.claimAmount)}</dd>
+            <dt className="whitespace-nowrap text-zinc-500">담당 기사</dt>
+            <dd>{order.installer ?? "미입력"}</dd>
             <dt className="whitespace-nowrap text-zinc-500">배정 일시</dt>
             <dd>{formatPartnerDateTime(order.partnerAssignedAt)}</dd>
             <dt className="whitespace-nowrap text-zinc-500">접수 일시</dt>
@@ -67,7 +69,7 @@ export default function PartnerOrderDetailView({
         </section>
 
         {workable ? (
-          <PartnerOrderActions orderId={order.id} claimAmount={order.claimAmount} />
+          <PartnerOrderActions orderId={order.id} claimAmount={order.claimAmount} installer={order.installer} />
         ) : (
           <p className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
             {order.status === "WAITING_HQ_REVIEW"
