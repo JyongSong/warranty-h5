@@ -91,6 +91,8 @@ const installationAssignmentAttemptListSelect = {
       name: true,
       phone: true,
       branch: true,
+      // 기사 앱(푸시 토큰) 등록 여부를 목록에서 바로 보여주기 위해.
+      _count: { select: { devices: true } },
     },
   },
   assignmentNumber: true,
