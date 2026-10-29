@@ -50,6 +50,7 @@ type ResponseInput = {
   now?: Date;
   tokenIsHash?: boolean;
   // 앱에서 수락했으면 고객 정보가 이미 앱 화면에 열려 있으므로 해피콜 안내 문자를 보내지 않는다.
+  // 문자 링크로 수락해도 앱 기기가 등록된 기사면 보내지 않는다 (acceptAssignment 참고).
   acceptedInApp?: boolean;
   baseUrl?: string;
   tokenFactory?: () => string;
@@ -135,6 +136,7 @@ type InstallerResponseTransaction = {
     findMany: (args: unknown) => Promise<unknown[]>;
   };
   installationNotification: { upsert: (args: unknown) => Promise<unknown> };
+  installerDevice: { count: (args: unknown) => Promise<number> };
 };
 
 export async function getInstallerAssignmentByToken(
@@ -320,7 +322,13 @@ async function acceptAssignment(
     });
   }
 
-  if (sendHappycallSms && installer?.phone) {
+  // 앱 기기가 등록된 기사는 어디서 수락했든 앱에서 고객 정보를 보므로 해피콜 안내 문자를 보내지 않는다.
+  // 앱을 지우면 다음 푸시 때 FCM 이 토큰을 거부해 기기 행이 지워지고, 그 뒤로는 다시 문자가 나간다.
+  const hasAppDevice =
+    sendHappycallSms &&
+    (await tx.installerDevice.count({ where: { installerId: assignment.installerId } })) > 0;
+
+  if (sendHappycallSms && !hasAppDevice && installer?.phone) {
     const customerRequest = assignment.installationOrder.customerRequests[0] ?? null;
     const normalizedInstallerPhone = normalizePhone11(installer.phone);
     const smsContent = buildInstallerHappycallGuideSmsContent({

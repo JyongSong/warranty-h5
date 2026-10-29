@@ -87,7 +87,16 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
 
         <div style={ui.card}>
           <Row label="주문번호" value={item.erpOrderNo || "-"} />
-          {item.productSummary ? <Row label="제품" value={item.productSummary} /> : null}
+          {item.installItems.length > 0 ? (
+            <Row
+              label="설치 품목"
+              value={item.installItems
+                .map((i) => `${i.name} ×${i.quantity}${i.onsitePayment ? " (현장결제)" : ""}`)
+                .join("\n")}
+            />
+          ) : item.productSummary ? (
+            <Row label="제품" value={item.productSummary} />
+          ) : null}
           <Row label="희망 일정" value={[item.installDate, item.installTimeSlot].filter(Boolean).join(" ") || "-"} />
           <Row label="주소" value={item.address ?? "-"} />
           {item.customerName ? <Row label="고객명" value={item.customerName} /> : null}
@@ -192,7 +201,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 8, padding: "5px 0" }}>
       <div style={ui.rowLabel}>{label}</div>
-      <div style={ui.rowValue}>{value}</div>
+      <div style={{ ...ui.rowValue, whiteSpace: "pre-line" }}>{value}</div>
     </div>
   );
 }
