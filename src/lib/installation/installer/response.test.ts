@@ -26,6 +26,7 @@ const {
   updateManyIssues,
   countIssues,
   createStatusEvent,
+  countInstallerDevices,
 } = vi.hoisted(() => ({
   findUniqueAssignment: vi.fn(),
   transaction: vi.fn(),
@@ -45,6 +46,7 @@ const {
   updateManyIssues: vi.fn(),
   countIssues: vi.fn(),
   createStatusEvent: vi.fn(),
+  countInstallerDevices: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -68,6 +70,9 @@ function createTx() {
     },
     installationNotification: {
       upsert: upsertNotification,
+    },
+    installerDevice: {
+      count: countInstallerDevices,
     },
     installer: {
       findMany: findManyInstallers,
@@ -134,6 +139,8 @@ describe("installation installer response", () => {
     countAssignments.mockReset();
     createAssignment.mockReset();
     upsertNotification.mockReset();
+    countInstallerDevices.mockReset();
+    countInstallerDevices.mockResolvedValue(0);
     findManyInstallers.mockReset();
     findUniqueInstaller.mockReset();
     findUniqueOrder.mockReset();
@@ -258,6 +265,28 @@ describe("installation installer response", () => {
       now,
     });
 
+    const smsTypes = upsertNotification.mock.calls.map(([arg]) => arg.create.smsType);
+    expect(smsTypes).toContain("CUSTOMER_ASSIGNMENT_CONFIRMED");
+    expect(smsTypes).not.toContain("INSTALLER_HAPPYCALL_GUIDE");
+  });
+
+  it("skips the installer happycall SMS when an installer with an app device accepts via the SMS link", async () => {
+    const now = new Date("2026-06-11T02:00:00.000Z");
+    findUniqueAssignment.mockResolvedValue(assignment);
+    updateAssignment.mockResolvedValue({ id: "assignment-1", status: "INSTALLER_ACCEPTED" });
+    findUniqueInstaller.mockResolvedValue({ id: "installer-1", phone: "010-1111-2222" });
+    countInstallerDevices.mockResolvedValue(1);
+    upsertNotification.mockResolvedValue({ id: "notification-1" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "WAITING_INSTALLER_RESPONSE" });
+    updateOrder.mockResolvedValue({ id: "order-1", status: "INSTALLER_ASSIGNED" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    await respondInstallerAssignment("installer-token", {
+      response: "ACCEPT",
+      now,
+    });
+
+    expect(countInstallerDevices).toHaveBeenCalledWith({ where: { installerId: "installer-1" } });
     const smsTypes = upsertNotification.mock.calls.map(([arg]) => arg.create.smsType);
     expect(smsTypes).toContain("CUSTOMER_ASSIGNMENT_CONFIRMED");
     expect(smsTypes).not.toContain("INSTALLER_HAPPYCALL_GUIDE");
