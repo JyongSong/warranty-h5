@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
+import { deriveInstallItemsFromMemo, type PartnerInstallItem } from "@/lib/installation/partner/install-items";
 
 // REVIEW = 완료 등록 후 본사 승인 대기. A/S 쪽과 같은 취급이다.
 export type InstallerOrderStatus =
@@ -16,6 +17,8 @@ export type InstallerOrderItem = {
   status: InstallerOrderStatus;
   erpOrderNo: string;
   productSummary: string;
+  // 주문 상품의 용역 품목을 이카운트 품목명으로 정리한 것 (PL 화면과 같은 기준). 없으면 빈 배열.
+  installItems: PartnerInstallItem[];
   installDate: string | null;
   installTimeSlot: string | null;
   address: string | null;
@@ -125,6 +128,7 @@ function shapeOrder(
     status,
     erpOrderNo: order.source?.sourceKey ?? "",
     productSummary: summarizeProducts(order.source?.memo),
+    installItems: deriveInstallItemsFromMemo(order.source?.memo),
     installDate: req?.installDate ?? null,
     installTimeSlot: req?.installTimeSlot ?? null,
     address,
