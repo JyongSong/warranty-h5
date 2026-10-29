@@ -637,6 +637,10 @@ function createTx() {
         return notification;
       },
     },
+    // 골든 플로우의 기사는 앱 기기가 없다 → 문자 링크 수락 시 해피콜 안내 문자가 나간다.
+    installerDevice: {
+      count: async () => 0,
+    },
     installationOrderStatusEvent: {
       create: async ({ data }: { data: unknown }) => {
         state.statusEvents.push(data);
