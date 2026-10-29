@@ -139,6 +139,11 @@ const menuItems: MenuItem[] = [
     icon: "query",
   },
   {
+    href: "/backoffice/registrations/cj-links",
+    label: "CJ 2년 등록 링크 문자",
+    icon: "query",
+  },
+  {
     href: "/backoffice/registrations?tab=survey",
     label: "만족도 조사 대시보드",
     icon: "survey",

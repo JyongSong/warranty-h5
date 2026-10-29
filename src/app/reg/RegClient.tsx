@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import QrScanModal from "./QrScanModal";
 import SnLocationModal from "./SnLocationModal";
+import { inputStyle, primaryButtonStyle, snHelpLinkStyle } from "./regStyles";
 import { getErrorMessage } from "@/lib/error";
 import { formatKrPhone, normalizePhone } from "@/lib/phone";
 
@@ -668,27 +669,6 @@ export default function RegClient({ initialSn = "" }: { initialSn?: string }) {
   );
 }
 
-const snHelpLinkStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  padding: 0,
-  color: "#1d3129",
-  textDecoration: "underline",
-  fontSize: 12,
-  cursor: "pointer",
-};
-
-const inputStyle: React.CSSProperties = {
-  height: 40,
-  padding: "0 12px",
-  border: "1px solid #d4d4d8",
-  borderRadius: 10,
-  background: "#fff",
-  fontSize: 14,
-  color: "#111",
-  outline: "none",
-};
-
 // 选中按钮的灯光效果：品牌深绿 #1d3129 的亮一阶版本，从底部向上发散
 const SELECTED_GLOW =
   "inset 0 -22px 30px -10px rgba(74,138,114,0.6), inset 0 -2px 0 rgba(74,138,114,0.95)";
@@ -704,25 +684,6 @@ function typeButtonStyle(active: boolean): React.CSSProperties {
     cursor: "pointer",
     boxShadow: active ? SELECTED_GLOW : "none",
     transition: "box-shadow 200ms ease",
-  };
-}
-
-const PRIMARY_BUTTON_SHADOW =
-  "0 12px 28px rgba(29,49,41,0.45), 0 4px 10px rgba(29,49,41,0.25)";
-
-function primaryButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    height: 44,
-    borderRadius: 12,
-    border: "1px solid #1d3129",
-    background: "#1d3129",
-    color: "#fff",
-    fontWeight: 700,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.6 : 1,
-    boxShadow: disabled ? "none" : PRIMARY_BUTTON_SHADOW,
-    transform: disabled ? "none" : "translateY(-1px)",
-    transition: "background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
   };
 }
 
