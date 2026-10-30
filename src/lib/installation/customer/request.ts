@@ -154,6 +154,36 @@ export async function submitInstallationCustomerRequest(token: string, input: Su
       tx as never,
     );
 
+    // A submit proves the customer got the link even if the link SMS was reported
+    // undelivered (e.g. 050 안심번호), so that issue must not keep blocking dispatch.
+    const resolvedSmsIssues = await tx.installationIssue.updateMany({
+      where: {
+        installationOrderId: request.installationOrderId,
+        type: "CUSTOMER_INPUT_LINK_SMS_SEND_FAILED",
+        status: "OPEN",
+      },
+      data: {
+        status: "RESOLVED",
+        resolvedAt: now,
+        resolutionNote: "고객이 예약 정보를 제출해 고객 입력 SMS 예외를 자동 해결했습니다.",
+        updatedAt: now,
+      },
+    });
+    if (resolvedSmsIssues.count > 0) {
+      const remainingOpenIssueCount = await tx.installationIssue.count({
+        where: {
+          installationOrderId: request.installationOrderId,
+          status: "OPEN",
+        },
+      });
+      if (remainingOpenIssueCount === 0) {
+        await tx.installationOrder.update({
+          where: { id: request.installationOrderId },
+          data: { hasOpenIssue: false },
+        });
+      }
+    }
+
     return {
       request: updatedRequest,
       installationOrderId: request.installationOrderId,

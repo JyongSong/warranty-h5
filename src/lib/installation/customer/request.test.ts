@@ -12,6 +12,8 @@ const {
   createStatusEvent,
   findUniqueOrder,
   updateOrder,
+  updateManyIssues,
+  countIssues,
   dispatchReadyInstallationOrders,
 } = vi.hoisted(() => ({
   transaction: vi.fn(),
@@ -20,6 +22,8 @@ const {
   createStatusEvent: vi.fn(),
   findUniqueOrder: vi.fn(),
   updateOrder: vi.fn(),
+  updateManyIssues: vi.fn(),
+  countIssues: vi.fn(),
   dispatchReadyInstallationOrders: vi.fn(),
 }));
 
@@ -49,6 +53,10 @@ function createTx() {
     installationOrderStatusEvent: {
       create: createStatusEvent,
     },
+    installationIssue: {
+      updateMany: updateManyIssues,
+      count: countIssues,
+    },
   };
 }
 
@@ -61,6 +69,9 @@ describe("installation customer request", () => {
     createStatusEvent.mockReset();
     findUniqueOrder.mockReset();
     updateOrder.mockReset();
+    updateManyIssues.mockReset();
+    updateManyIssues.mockResolvedValue({ count: 0 });
+    countIssues.mockReset();
     dispatchReadyInstallationOrders.mockReset();
     dispatchReadyInstallationOrders.mockResolvedValue({
       dispatchedCount: 0,
@@ -379,6 +390,42 @@ describe("installation customer request", () => {
         },
         createdAt: now,
       },
+    });
+  });
+
+  it("resolves an open customer link SMS failure on submit so dispatch is not blocked", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    findUniqueRequest.mockResolvedValue({
+      id: "request-1",
+      installationOrderId: "order-1",
+      customerTokenExpiresAt: new Date("2026-06-12T00:00:00.000Z"),
+      customerSubmittedAt: null,
+      status: "PENDING_INPUT",
+    });
+    updateRequest.mockResolvedValue({ id: "request-1", status: "SUBMITTED" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "WAITING_CUSTOMER_INPUT" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+    updateManyIssues.mockResolvedValue({ count: 1 });
+    countIssues.mockResolvedValue(0);
+
+    await submitInstallationCustomerRequest("raw-token", {
+      installAddress: "서울 강남구 봉은사로 10",
+      installDate: "2026-06-20",
+      customerPhone: "010-9999-0000",
+      now,
+    });
+
+    expect(updateManyIssues).toHaveBeenCalledWith({
+      where: {
+        installationOrderId: "order-1",
+        type: "CUSTOMER_INPUT_LINK_SMS_SEND_FAILED",
+        status: "OPEN",
+      },
+      data: expect.objectContaining({ status: "RESOLVED", resolvedAt: now }),
+    });
+    expect(updateOrder).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: { hasOpenIssue: false },
     });
   });
 

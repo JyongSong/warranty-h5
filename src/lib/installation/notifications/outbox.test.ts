@@ -1038,6 +1038,46 @@ describe("sendPendingInstallationNotifications", () => {
     });
   });
 
+  it("skips the customer input issue when the final delivery failure arrives after the customer submitted", async () => {
+    const now = new Date("2026-06-11T00:10:00.000Z");
+    findMany.mockResolvedValue([
+      {
+        id: "notification-1",
+        installationOrderId: "order-1",
+        customerRequestId: "request-1",
+        assignmentAttemptId: null,
+        smsType: "CUSTOMER_INPUT_LINK",
+        recipientPhoneEncrypted: "050-1234-5678",
+        retryCount: 1,
+        providerMessageId: "message-1",
+      },
+    ]);
+    findUniqueCustomerRequest.mockResolvedValue({
+      status: "SUBMITTED",
+      installationOrder: {
+        status: "READY_FOR_CANDIDATE_SELECTION",
+        activeCustomerRequestId: "request-1",
+      },
+    });
+
+    await syncInstallationSmsDeliveryReports({
+      now,
+      getDeliveryReport: async () => ({
+        messageId: "message-1",
+        status: "FAILED",
+        statusCode: "3104",
+        reason: "카카오톡 미사용자",
+        dateReported: "2026-06-11T00:09:00.000Z",
+      }),
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "notification-1" },
+      data: expect.objectContaining({ status: "FAILED", retryCount: 2 }),
+    });
+    expect(createInstallationIssue).not.toHaveBeenCalled();
+  });
+
   it("marks installer assignment delivery failures as retry pending", async () => {
     const now = new Date("2026-06-11T00:10:00.000Z");
     findMany.mockResolvedValue([
