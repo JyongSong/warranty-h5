@@ -23,6 +23,13 @@ import {
   normalizePhone11,
 } from "@/lib/piiCrypto";
 
+const IN_PROGRESS_ASSIGNMENT_STATUSES = [
+  "WAITING_ADMIN_REVIEW",
+  "WAITING_INSTALLER_RESPONSE",
+  "INSTALLER_ACCEPTED",
+  "SYSTEM_SMS_RETRY_PENDING",
+] as const;
+
 type AdminOperationOptions = {
   adminId: string;
   now?: Date;
@@ -221,12 +228,15 @@ async function createManualAssignmentAttempt(
     }
 
     // 재배정은 이전에 거절했거나 교체된 기사에게 다시 보내는 경우도 있어 중복 검사를 건너뛴다.
+    // 직접 지정도 이전 요청이 끝난 기사(무응답·거절·교체·발송 실패)에게는 다시 보낼 수 있고,
+    // 아직 진행 중인 요청이 있는 기사만 막는다.
     const duplicateAssignment = isReassign
       ? null
       : await tx.installationInstallerAssignmentAttempt.findFirst({
           where: {
             installationOrderId: orderId,
             installerId,
+            status: { in: [...IN_PROGRESS_ASSIGNMENT_STATUSES] },
           },
           select: { id: true },
         });

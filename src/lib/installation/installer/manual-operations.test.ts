@@ -781,7 +781,7 @@ describe("installation manual operations", () => {
     });
   });
 
-  it("rejects manual direct assignment when the same installer was already requested for the order", async () => {
+  it("rejects manual direct assignment when the same installer still has an in-progress request for the order", async () => {
     const now = new Date("2026-06-11T06:00:00.000Z");
     findUniqueOrder.mockResolvedValue({
       id: "order-1",
@@ -819,6 +819,14 @@ describe("installation manual operations", () => {
       where: {
         installationOrderId: "order-1",
         installerId: "installer-2",
+        status: {
+          in: [
+            "WAITING_ADMIN_REVIEW",
+            "WAITING_INSTALLER_RESPONSE",
+            "INSTALLER_ACCEPTED",
+            "SYSTEM_SMS_RETRY_PENDING",
+          ],
+        },
       },
       select: { id: true },
     });
