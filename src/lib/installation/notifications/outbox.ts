@@ -78,6 +78,7 @@ type InstallationNotificationForSend = {
 type InstallationNotificationForDeliveryReport = {
   id: string;
   installationOrderId: string | null;
+  customerRequestId?: string | null;
   assignmentAttemptId: string | null;
   smsType: string;
   recipientPhoneEncrypted: string | null;
@@ -291,6 +292,7 @@ export async function syncInstallationSmsDeliveryReports({
     select: {
       id: true,
       installationOrderId: true,
+      customerRequestId: true,
       assignmentAttemptId: true,
       smsType: true,
       recipientPhoneEncrypted: true,
@@ -806,7 +808,12 @@ async function skipStaleNotification(notification: InstallationNotificationForSe
   return true;
 }
 
-async function getStaleNotificationReason(notification: InstallationNotificationForSend) {
+async function getStaleNotificationReason(
+  notification: Pick<
+    InstallationNotificationForSend,
+    "installationOrderId" | "customerRequestId" | "assignmentAttemptId" | "smsType"
+  >,
+) {
   if (notification.smsType === "CUSTOMER_INPUT_LINK") {
     if (!notification.customerRequestId || !notification.installationOrderId) {
       return null;
@@ -1196,6 +1203,16 @@ async function createSmsDeliveryFailedIssue(
 ) {
   if (!notification.installationOrderId) {
     throw new Error("INSTALLATION_ORDER_ID_REQUIRED_FOR_SMS_ISSUE");
+  }
+
+  // 안심번호 links usually land, but the number can expire before the final
+  // delivery report comes back. Once the customer has submitted, later messages
+  // go to the phone they entered, so the old link failure needs no admin.
+  if (
+    notification.smsType === "CUSTOMER_INPUT_LINK" &&
+    (await getStaleNotificationReason(notification))
+  ) {
+    return null;
   }
 
   const existingIssue = await prisma.installationIssue.findFirst({
