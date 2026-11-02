@@ -25,7 +25,12 @@ export function formatDistanceKm(meters: number) {
  * 있어 전체 문자열이 실패하면 도로명+건물번호(없으면 지번)까지만 잘라 다시 찾는다.
  */
 export function buildGeocodeQueries(address: string) {
-  const cleaned = address.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  // 기사 주소에는 앞에 우편번호가 붙은 경우가 많은데, 붙어 있으면 네이버가 찾지 못한다.
+  const cleaned = address
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\d{5}\s+/, "");
   if (!cleaned) return [];
 
   const roadAddress = cleaned.match(/^.*(?:로|길)\s*\d+(?:-\d+)?/)?.[0];

@@ -37,6 +37,13 @@ describe("installation distance geo helpers", () => {
     ]);
   });
 
+  it("drops a leading postal code", () => {
+    expect(buildGeocodeQueries("06641 서울 서초구 반포대로 100 2층")).toEqual([
+      "서울 서초구 반포대로 100 2층",
+      "서울 서초구 반포대로 100",
+    ]);
+  });
+
   it("returns no query for a blank address", () => {
     expect(buildGeocodeQueries("  ")).toEqual([]);
   });
