@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import { getErrorMessage } from "@/lib/error";
+import { formatDistanceKm } from "@/lib/installation/distance/geo";
+import type { InstallerDistance } from "@/lib/installation/distance/service";
+import { getOrderInstallerDistancesAction } from "../distance-actions";
 import {
   formatBackofficeDateTime,
   formatBackofficePhone,
@@ -710,6 +713,7 @@ export default function InstallationOrderDetail({
       </div>
       {dialog ? (
         <AdminActionDialog
+          orderId={item.id}
           dialog={dialog}
           error={dialogError}
           installerCandidates={
@@ -732,6 +736,7 @@ export default function InstallationOrderDetail({
 }
 
 function AdminActionDialog({
+  orderId,
   dialog,
   error,
   installerCandidates,
@@ -740,6 +745,7 @@ function AdminActionDialog({
   onChange,
   onSubmit,
 }: {
+  orderId: string;
   dialog: AdminDialogState;
   error: string | null;
   installerCandidates: InstallationOrderDetailItem["installerCandidates"];
@@ -752,6 +758,27 @@ function AdminActionDialog({
   const description = getAdminDialogDescription(dialog);
   const submitLabel = getAdminDialogSubmitLabel(dialog);
   const tone = getAdminDialogTone(dialog);
+  const picksInstaller = dialog.kind === "manualAssignment" || dialog.kind === "reassignInstaller";
+  const [distanceLookup, setDistanceLookup] = useState<ManualAssignmentDistanceLookup>({ status: "LOADING" });
+
+  useEffect(() => {
+    if (!picksInstaller) return;
+
+    let cancelled = false;
+    getOrderInstallerDistancesAction(orderId)
+      .catch(() => null)
+      .then((result) => {
+        if (cancelled) return;
+        setDistanceLookup(
+          result?.ok && result.status === "OK"
+            ? { status: "READY", byInstallerId: new Map(result.distances.map((row) => [row.installerId, row])) }
+            : { status: "UNAVAILABLE" },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, picksInstaller]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6" role="presentation">
@@ -773,6 +800,7 @@ function AdminActionDialog({
             <ManualAssignmentInstallerSelector
               candidates={installerCandidates}
               disabled={pending}
+              distanceLookup={distanceLookup}
               selectedInstallerId={dialog.installerId}
               onSelectInstaller={(installerId) => onChange({ ...dialog, installerId })}
             />
@@ -783,6 +811,7 @@ function AdminActionDialog({
               <ManualAssignmentInstallerSelector
                 candidates={installerCandidates}
                 disabled={pending}
+                distanceLookup={distanceLookup}
                 selectedInstallerId={dialog.installerId}
                 onSelectInstaller={(installerId) => onChange({ ...dialog, installerId })}
               />
@@ -866,11 +895,13 @@ function AdminActionDialog({
 export function ManualAssignmentInstallerSelector({
   candidates,
   disabled,
+  distanceLookup = { status: "UNAVAILABLE" },
   selectedInstallerId,
   onSelectInstaller,
 }: {
   candidates: InstallationOrderDetailItem["installerCandidates"];
   disabled: boolean;
+  distanceLookup?: ManualAssignmentDistanceLookup;
   selectedInstallerId: string;
   onSelectInstaller: (installerId: string) => void;
 }) {
@@ -878,9 +909,10 @@ export function ManualAssignmentInstallerSelector({
   const [matchOnly, setMatchOnly] = useState(false);
   const [hubOnly, setHubOnly] = useState(false);
   const [sort, setSort] = useState<ManualAssignmentInstallerSort>("recommended");
+  const distanceByInstallerId = distanceLookup.status === "READY" ? distanceLookup.byInstallerId : undefined;
   const filteredCandidates = useMemo(
-    () => filterManualAssignmentInstallers(candidates, { query, matchOnly, hubOnly, sort }),
-    [candidates, hubOnly, matchOnly, query, sort],
+    () => filterManualAssignmentInstallers(candidates, { query, matchOnly, hubOnly, sort, distanceByInstallerId }),
+    [candidates, distanceByInstallerId, hubOnly, matchOnly, query, sort],
   );
 
   return (
@@ -941,6 +973,9 @@ export function ManualAssignmentInstallerSelector({
                   className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 outline-none transition focus:border-zinc-950 disabled:bg-zinc-100"
                 >
                   <option value="recommended">지역 매칭 우선</option>
+                  <option value="distance" disabled={!distanceByInstallerId}>
+                    거리 가까운 순
+                  </option>
                   <option value="monthlyDispatchCount">월 배정 적은 순</option>
                   <option value="name">이름순</option>
                 </select>
@@ -981,6 +1016,9 @@ export function ManualAssignmentInstallerSelector({
                   <span className="mt-1 block break-words text-xs text-zinc-600">
                     {formatText(candidate.region)} / {formatList(candidate.serviceAreas)} / 월 {candidate.monthlyDispatchCount}건
                   </span>
+                  <span className="mt-1 block text-xs font-semibold text-zinc-800">
+                    {formatManualAssignmentDistance(distanceLookup, candidate.installerId)}
+                  </span>
                 </span>
               </label>
             ))}
@@ -992,7 +1030,30 @@ export function ManualAssignmentInstallerSelector({
 }
 
 type ManualAssignmentInstaller = InstallationOrderDetailItem["installerCandidates"][number];
-type ManualAssignmentInstallerSort = "recommended" | "monthlyDispatchCount" | "name";
+type ManualAssignmentInstallerSort = "recommended" | "distance" | "monthlyDispatchCount" | "name";
+type ManualAssignmentDistanceLookup =
+  | { status: "LOADING" | "UNAVAILABLE" }
+  | { status: "READY"; byInstallerId: Map<string, InstallerDistance> };
+
+function formatManualAssignmentDistance(lookup: ManualAssignmentDistanceLookup, installerId: string) {
+  if (lookup.status === "LOADING") return "거리 확인 중";
+  if (lookup.status !== "READY") return "거리 확인 불가";
+
+  const distance = lookup.byInstallerId.get(installerId);
+  if (!distance) return "기사 주소 없음";
+  // 경로는 가까운 기사 몇 명만 조회하므로 나머지는 직선거리임을 밝혀 보여 준다.
+  return distance.drivingMeters !== null
+    ? `거리 ${formatDistanceKm(distance.drivingMeters)}`
+    : `직선 ${formatDistanceKm(distance.straightMeters)}`;
+}
+
+function getManualAssignmentDistanceMeters(
+  installerId: string,
+  distanceByInstallerId: Map<string, InstallerDistance> | undefined,
+) {
+  const distance = distanceByInstallerId?.get(installerId);
+  return distance?.drivingMeters ?? distance?.straightMeters ?? Number.POSITIVE_INFINITY;
+}
 
 export function filterManualAssignmentInstallers(
   candidates: ManualAssignmentInstaller[],
@@ -1001,6 +1062,7 @@ export function filterManualAssignmentInstallers(
     matchOnly: boolean;
     hubOnly: boolean;
     sort: ManualAssignmentInstallerSort;
+    distanceByInstallerId?: Map<string, InstallerDistance>;
   },
 ) {
   const normalizedQuery = normalizeManualAssignmentSearchText(options.query);
@@ -1021,14 +1083,24 @@ export function filterManualAssignmentInstallers(
         ].join(" "),
       ).includes(normalizedQuery);
     })
-    .sort((left, right) => compareManualAssignmentInstallers(left, right, options.sort));
+    .sort((left, right) =>
+      compareManualAssignmentInstallers(left, right, options.sort, options.distanceByInstallerId),
+    );
 }
 
 function compareManualAssignmentInstallers(
   left: ManualAssignmentInstaller,
   right: ManualAssignmentInstaller,
   sort: ManualAssignmentInstallerSort,
+  distanceByInstallerId?: Map<string, InstallerDistance>,
 ) {
+  if (sort === "distance") {
+    const leftMeters = getManualAssignmentDistanceMeters(left.installerId, distanceByInstallerId);
+    const rightMeters = getManualAssignmentDistanceMeters(right.installerId, distanceByInstallerId);
+    if (leftMeters !== rightMeters) return leftMeters < rightMeters ? -1 : 1;
+    return left.installerName.localeCompare(right.installerName, "ko");
+  }
+
   if (sort === "name") {
     return left.installerName.localeCompare(right.installerName, "ko") || left.installerId.localeCompare(right.installerId);
   }

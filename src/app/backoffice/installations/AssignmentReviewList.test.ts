@@ -9,6 +9,11 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("./distance-actions", () => ({
+  getAssignmentDistanceAction: vi.fn(async () => ({ ok: false, error: "DISTANCE_LOOKUP_FAILED" })),
+  getOrderInstallerDistancesAction: vi.fn(async () => ({ ok: false, error: "DISTANCE_LOOKUP_FAILED" })),
+}));
+
 vi.mock("./actions", () => ({
   approveInstallationAssignmentAction: vi.fn(),
   approveInstallationAssignmentsAction: vi.fn(),

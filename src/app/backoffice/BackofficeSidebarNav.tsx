@@ -83,6 +83,11 @@ const menuItems: MenuItem[] = [
         icon: "installer",
       },
       {
+        href: "/backoffice/installers/map",
+        label: "기사 지도",
+        icon: "installer",
+      },
+      {
         href: "/backoffice/installers/new",
         label: "기사 추가",
         icon: "installer",
