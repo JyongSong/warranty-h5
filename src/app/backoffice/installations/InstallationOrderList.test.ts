@@ -6,6 +6,10 @@ import InstallationOrderList, {
   type InstallationOrderListItem,
 } from "./InstallationOrderList";
 
+vi.mock("./distance-actions", () => ({
+  getAssignmentDistanceAction: vi.fn(async () => ({ ok: false, error: "DISTANCE_LOOKUP_FAILED" })),
+}));
+
 vi.mock("./actions", () => ({
   approveInstallationAssignmentsAction: vi.fn(),
   sendCustomerInputSmsForInstallationOrdersAction: vi.fn(),

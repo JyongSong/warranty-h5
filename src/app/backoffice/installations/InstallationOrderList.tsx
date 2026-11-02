@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
+import AssignmentDistanceCell from "./AssignmentDistanceCell";
 import {
   formatBackofficeDateTime,
   formatBackofficePhone,
@@ -487,6 +488,20 @@ export default function InstallationOrderList({
             );
           },
           sortingFn: "alphanumeric",
+        },
+        {
+          id: "assignedInstallerDistance",
+          header: "배정-거리",
+          enableSorting: false,
+          size: 220,
+          minSize: 140,
+          // 경로 조회 비용 때문에 승인이 필요한 건에서만 조회한다.
+          cell: ({ row }) =>
+            isAssignmentApprovalSelectable(row.original) && row.original.assignment ? (
+              <AssignmentDistanceCell orderId={row.original.id} installerId={row.original.assignment.installerId} />
+            ) : (
+              "-"
+            ),
         },
         {
           id: "assignedInstallerBranch",
