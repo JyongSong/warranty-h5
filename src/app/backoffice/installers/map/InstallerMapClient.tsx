@@ -197,29 +197,6 @@ export default function InstallerMapClient({
         </LoadingButton>
       </form>
 
-      {searchError ? <p className="text-sm text-red-700">{searchError}</p> : null}
-      {nearest ? (
-        <div className="rounded-md border border-zinc-200 bg-white">
-          {nearest.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-zinc-500">경로를 찾은 기사가 없습니다.</p>
-          ) : null}
-          {nearest.map((installer, index) => (
-            <div
-              key={installer.installerId}
-              className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 text-sm last:border-b-0"
-            >
-              <span className="min-w-0 text-zinc-800">
-                {index + 1}. <span className="font-semibold text-zinc-950">{installer.installerName}</span>
-                {installer.installerBranch ? ` · ${installer.installerBranch}` : ""}
-              </span>
-              <span className="font-semibold text-zinc-950">
-                {formatDistanceKm(installer.drivingMeters as number)}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       {clientId ? (
         <Script
           src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`}
@@ -233,7 +210,32 @@ export default function InstallerMapClient({
           지도를 불러오지 못했습니다. 네이버 지도 설정을 확인해 주세요.
         </p>
       ) : null}
-      <div ref={mapElement} className="h-[640px] w-full rounded-md border border-zinc-200 bg-zinc-100" />
+      {/* 결과가 지도를 밀어내면 지도가 기억한 위치와 어긋나 마커 클릭이 빗나간다. 지도 위에 띄운다. */}
+      <div className="relative">
+        <div ref={mapElement} className="h-[640px] w-full rounded-md border border-zinc-200 bg-zinc-100" />
+        {searchError || nearest ? (
+          <div className="absolute left-3 top-3 z-10 w-80 max-w-[calc(100%-1.5rem)] rounded-md border border-zinc-200 bg-white shadow-md">
+            {searchError ? <p className="px-4 py-3 text-sm text-red-700">{searchError}</p> : null}
+            {nearest?.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-zinc-500">경로를 찾은 기사가 없습니다.</p>
+            ) : null}
+            {nearest?.map((installer, index) => (
+              <div
+                key={installer.installerId}
+                className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 text-sm last:border-b-0"
+              >
+                <span className="min-w-0 text-zinc-800">
+                  {index + 1}. <span className="font-semibold text-zinc-950">{installer.installerName}</span>
+                  {installer.installerBranch ? ` · ${installer.installerBranch}` : ""}
+                </span>
+                <span className="shrink-0 font-semibold text-zinc-950">
+                  {formatDistanceKm(installer.drivingMeters as number)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
