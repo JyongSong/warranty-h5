@@ -11,6 +11,7 @@ import {
   formatInstallationMatchTier,
 } from "@/lib/backoffice/table-formatting";
 import installationStatusLabels from "@/lib/installation/orders/views/label-installation-status.json";
+import AssignmentDistanceCell from "./AssignmentDistanceCell";
 import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
@@ -180,6 +181,16 @@ export default function AssignmentReviewList({
         minSize: 120,
         cell: ({ row }) => <div className="font-semibold text-zinc-950">{row.original.order.erpOrderNo}</div>,
         sortingFn: "alphanumeric",
+      },
+      {
+        id: "installerDistance",
+        header: "기사-거리",
+        enableSorting: false,
+        size: 220,
+        minSize: 140,
+        cell: ({ row }) => (
+          <AssignmentDistanceCell orderId={row.original.orderId} installerId={row.original.installerId} />
+        ),
       },
       {
         id: "installerName",
@@ -425,6 +436,12 @@ export default function AssignmentReviewList({
                   <MobileDetail label="고객 메모" value={formatText(item.request?.customerNote)} />
                   <MobileDetail label="기사" value={`${formatText(item.installerName)} · ${formatText(item.installerPhone)}`} />
                   <MobileDetail label="기사 ID" value={formatText(item.installerId)} />
+                  <div>
+                    <dt className="text-xs font-semibold text-zinc-500">기사 거리</dt>
+                    <dd className="mt-1">
+                      <AssignmentDistanceCell orderId={item.orderId} installerId={item.installerId} />
+                    </dd>
+                  </div>
                   <MobileDetail label="배정 출처" value={formatAssignmentSource(item.assignmentSource)} />
                   <MobileDetail label="지역 매칭 단계" value={formatInstallationMatchTier(item.matchTier)} />
                   <MobileDetail label="후보 순위" value={String(item.candidateRank ?? "-")} />

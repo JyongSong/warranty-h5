@@ -81,6 +81,13 @@ model Installer {
   // 기사가 /installer/me/edit 에서 본인 정보를 확인·제출한 시각.
   // 비어 있으면 아직 응답하지 않은 사람이라 재발송 대상이 된다.
   profileConfirmedAt      DateTime?                              @map("profile_confirmed_at") @db.Timestamptz(6)
+  // 기사 주소를 지오코딩한 좌표. geocoded_address 가 현재 address 와 다르면 다시 변환해야 한다.
+  // 변환을 시도했지만 찾지 못한 주소는 좌표 없이 geocoded_address 만 남는다.
+  latitude                Float?                                 @map("latitude")
+  longitude               Float?                                 @map("longitude")
+  geocodedAddress         String?                                @map("geocoded_address")
+  geocodedAt              DateTime?                              @map("geocoded_at") @db.Timestamptz(6)
+  drivingDistances        InstallerDrivingDistance[]
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
@@ -1100,4 +1107,29 @@ model SeminarRegistration {
   @@index([seminarId, cancelledAt])
   @@index([installerId])
   @@map("seminar_registrations")
+}
+
+// 고객 주소 지오코딩 결과. 주소 원문 대신 HMAC 만 키로 둔다. 좌표가 비어 있으면 찾지 못한 주소다.
+model AddressGeocodeCache {
+  addressHash String   @id @map("address_hash")
+  latitude    Float?   @map("latitude")
+  longitude   Float?   @map("longitude")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("address_geocode_cache")
+}
+
+// 기사-고객 주소 간 자동차 경로 거리. 기사 좌표가 바뀌면 installer_latitude/longitude 가 달라져
+// 다시 조회한다. distance_meters 가 비어 있으면 경로를 찾지 못한 조합이다.
+model InstallerDrivingDistance {
+  installerId         String   @map("installer_id")
+  customerAddressHash String   @map("customer_address_hash")
+  installerLatitude   Float    @map("installer_latitude")
+  installerLongitude  Float    @map("installer_longitude")
+  distanceMeters      Int?     @map("distance_meters")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  installer           Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+
+  @@id([installerId, customerAddressHash])
+  @@map("installer_driving_distances")
 }
