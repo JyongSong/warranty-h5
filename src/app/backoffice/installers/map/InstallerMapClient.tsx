@@ -212,7 +212,7 @@ export default function InstallerMapClient({
       ) : null}
       {/* 결과가 지도를 밀어내면 지도가 기억한 위치와 어긋나 마커 클릭이 빗나간다. 지도 위에 띄운다. */}
       <div className="relative">
-        <div ref={mapElement} className="h-[640px] w-full rounded-md border border-zinc-200 bg-zinc-100" />
+        <div ref={mapElement} className="h-[calc(100dvh-280px)] min-h-[480px] w-full rounded-md border border-zinc-200 bg-zinc-100" />
         {searchError || nearest ? (
           <div className="absolute left-3 top-3 z-10 w-80 max-w-[calc(100%-1.5rem)] rounded-md border border-zinc-200 bg-white shadow-md">
             {searchError ? <p className="px-4 py-3 text-sm text-red-700">{searchError}</p> : null}
