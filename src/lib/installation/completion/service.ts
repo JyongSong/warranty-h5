@@ -29,12 +29,44 @@ export type SubmitCompletionInput = {
   extraClaimAmount?: number | null;
   extraClaimReason?: string | null;
   extraClaimPhotoPaths?: string[];
+  /**
+   * 앱/허브 연동 화면 사진. 연동을 골랐으면 1장 이상 있어야 한다.
+   * undefined 는 이 항목이 생기기 전 화면(또는 그때 대기열에 들어간 건)에서 온 제출이라
+   * 필수 검사를 하지 않는다 — 그때는 연동 사진을 설치 사진에 섞어 올렸다.
+   */
+  linkagePhotoPaths?: string[];
+  /** 월패드 연동 사진(선택). 월패드 연동을 안 했으면 버린다. */
+  wallpadPhotoPaths?: string[];
   installEndAt: Date;
   photoPaths: string[];
 };
 
 export const EXTRA_CLAIM_REASON_MAX_LENGTH = 500;
 export const EXTRA_CLAIM_PHOTO_MAX = 4;
+export const LINKAGE_PHOTO_MAX = 4;
+export const WALLPAD_PHOTO_MAX = 4;
+
+/** 연동 사진·월패드 사진을 저장할 값으로 다듬는다. 해당 항목을 안 골랐으면 사진도 버린다. */
+function normalizeOptionPhotos(input: SubmitCompletionInput): {
+  linkagePhotoPaths: string[];
+  wallpadPhotoPaths: string[];
+} {
+  const linked = input.achievedAqaraAppCapability !== "NONE";
+  const linkagePhotoPaths = linked ? (input.linkagePhotoPaths ?? []) : [];
+  if (linked && input.linkagePhotoPaths !== undefined && linkagePhotoPaths.length < 1) {
+    throw new InstallationCompletionError("LINKAGE_PHOTO_REQUIRED");
+  }
+  if (linkagePhotoPaths.length > LINKAGE_PHOTO_MAX) {
+    throw new InstallationCompletionError("LINKAGE_PHOTO_COUNT_INVALID");
+  }
+
+  const wallpadPhotoPaths = input.wallpadLinked ? (input.wallpadPhotoPaths ?? []) : [];
+  if (wallpadPhotoPaths.length > WALLPAD_PHOTO_MAX) {
+    throw new InstallationCompletionError("WALLPAD_PHOTO_COUNT_INVALID");
+  }
+
+  return { linkagePhotoPaths, wallpadPhotoPaths };
+}
 
 /**
  * 기타 청구 입력을 저장할 값으로 다듬는다.
@@ -91,6 +123,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
     throw new InstallationCompletionError("PHOTO_COUNT_INVALID");
   }
   const extraClaim = normalizeExtraClaim(input);
+  const optionPhotos = normalizeOptionPhotos(input);
 
   await prisma.$transaction(async (tx) => {
     await tx.installationCompletion.upsert({
@@ -103,6 +136,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         wallpadAmount: input.wallpadAmount,
         longDistanceAmount: input.longDistanceAmount,
         ...extraClaim,
+        ...optionPhotos,
         installEndAt: input.installEndAt,
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
@@ -116,6 +150,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         longDistanceAmount: input.longDistanceAmount,
         // 재제출은 기타 청구도 통째로 바꾼다. 이번에 비워서 올렸으면 청구를 철회한 것이다.
         ...extraClaim,
+        ...optionPhotos,
         // installEndAt 은 덮어쓰지 않는다. 이제 기사가 입력하는 값이 아니라 제출
         // 시각이라, 반려 후 재제출 때 바꾸면 설치일과 정산 월이 재제출일로 밀린다.
         photoPaths: input.photoPaths,
@@ -301,6 +336,8 @@ export type InstallationCompletionView = {
   extraClaimAmount: number | null;
   extraClaimReason: string | null;
   extraClaimPhotos: CompletionPhoto[];
+  linkagePhotos: CompletionPhoto[];
+  wallpadPhotos: CompletionPhoto[];
   installEndAt: string;
   reviewStatus: string;
   rejectionReason: string | null;
@@ -325,6 +362,8 @@ export async function getInstallationCompletionForOrder(
     extraClaimAmount: c.extraClaimAmount,
     extraClaimReason: c.extraClaimReason,
     extraClaimPhotos: await getCompletionPhotoSignedUrls(c.extraClaimPhotoPaths),
+    linkagePhotos: await getCompletionPhotoSignedUrls(c.linkagePhotoPaths),
+    wallpadPhotos: await getCompletionPhotoSignedUrls(c.wallpadPhotoPaths),
     installEndAt: c.installEndAt.toISOString(),
     reviewStatus: c.reviewStatus,
     rejectionReason: c.rejectionReason,

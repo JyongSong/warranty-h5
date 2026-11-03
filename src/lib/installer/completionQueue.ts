@@ -29,6 +29,10 @@ export type QueuedCompletionInput = {
   extraClaimAmount?: number | null;
   extraClaimReason?: string | null;
   extraClaimPhotos?: Blob[];
+  // 앱/허브 연동 화면 사진, 월패드 사진. 역시 옛 대기열 항목에는 없다.
+  // linkagePhotos 가 없는 항목은 서버가 연동 사진 필수 검사를 하지 않는다.
+  linkagePhotos?: Blob[];
+  wallpadPhotos?: Blob[];
   installEndAt: string;
   photos: Blob[];
 };
@@ -171,29 +175,22 @@ export async function uploadAndSubmitCompletion(
     }
 
     // 기타 청구 증빙 사진. 금액이 없으면 올리지 않는다(서버도 버린다).
-    const extraClaimPhotos = entry.extraClaimAmount ? (entry.extraClaimPhotos ?? []) : [];
-    const extraClaimPaths: string[] = [];
-    if (extraClaimPhotos.length > 0) {
-      const extraTargets = await getCompletionUploadTargetsAction(
-        entry.orderId,
-        extraClaimPhotos.length,
-      );
-      if (!extraTargets.ok) {
-        return {
-          ok: false,
-          retriable: extraTargets.error === "UNAUTHORIZED",
-          error: extraTargets.error,
-        };
-      }
-      for (let i = 0; i < extraClaimPhotos.length; i++) {
-        const target = extraTargets.targets[i];
-        const up = await supabase.storage
-          .from(extraTargets.bucket)
-          .uploadToSignedUrl(target.path, target.token, extraClaimPhotos[i]);
-        if (up.error) throw up.error;
-        extraClaimPaths.push(target.path);
-      }
-    }
+    const extraClaim = await uploadExtraPhotos(
+      entry.orderId,
+      entry.extraClaimAmount ? (entry.extraClaimPhotos ?? []) : [],
+    );
+    if (!extraClaim.ok) return extraClaim;
+    // 연동 사진은 연동을 골랐을 때만, 월패드 사진은 월패드 연동을 했을 때만.
+    const linkage = await uploadExtraPhotos(
+      entry.orderId,
+      entry.capability !== "NONE" ? (entry.linkagePhotos ?? []) : [],
+    );
+    if (!linkage.ok) return linkage;
+    const wallpad = await uploadExtraPhotos(
+      entry.orderId,
+      entry.wallpadLinked ? (entry.wallpadPhotos ?? []) : [],
+    );
+    if (!wallpad.ok) return wallpad;
 
     const res = await submitCompletionAction({
       orderId: entry.orderId,
@@ -203,7 +200,9 @@ export async function uploadAndSubmitCompletion(
       longDistanceAmount: entry.longDistanceAmount,
       extraClaimAmount: entry.extraClaimAmount ?? null,
       extraClaimReason: entry.extraClaimReason ?? null,
-      extraClaimPhotoPaths: extraClaimPaths,
+      extraClaimPhotoPaths: extraClaim.paths,
+      linkagePhotoPaths: entry.linkagePhotos ? linkage.paths : undefined,
+      wallpadPhotoPaths: wallpad.paths,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });
@@ -214,6 +213,32 @@ export async function uploadAndSubmitCompletion(
     // (용량 초과 같은 건 몇 번을 보내도 같으므로 바로 멈춘다).
     return { ok: false, ...classifyUploadError(error) };
   }
+}
+
+/**
+ * 설치 사진 외의 첨부(기타 청구 증빙, 연동 사진, 월패드 사진)를 올린다.
+ * 업로드 자체가 터지면 예외를 그대로 던져 uploadAndSubmitCompletion 이 분류하게 둔다.
+ */
+async function uploadExtraPhotos(
+  orderId: string,
+  blobs: Blob[],
+): Promise<{ ok: true; paths: string[] } | { ok: false; retriable: boolean; error: string }> {
+  if (blobs.length === 0) return { ok: true, paths: [] };
+  const targets = await getCompletionUploadTargetsAction(orderId, blobs.length);
+  if (!targets.ok) {
+    return { ok: false, retriable: targets.error === "UNAUTHORIZED", error: targets.error };
+  }
+  const supabase = getSupabaseBrowser();
+  const paths: string[] = [];
+  for (let i = 0; i < blobs.length; i++) {
+    const target = targets.targets[i];
+    const up = await supabase.storage
+      .from(targets.bucket)
+      .uploadToSignedUrl(target.path, target.token, blobs[i]);
+    if (up.error) throw up.error;
+    paths.push(target.path);
+  }
+  return { ok: true, paths };
 }
 
 /**

@@ -12,6 +12,7 @@ import { compressImage } from "@/lib/installer/image";
 import ConfirmAmountDialog, { type AmountLine } from "../../../ConfirmAmountDialog";
 import { previewInstallSettlementAction, type SettlementPreview } from "./actions";
 import PhotoPicker from "../../../PhotoPicker";
+import LinkageGuideDialog, { type LinkageCapability } from "./LinkageGuideDialog";
 import * as ui from "../../../ui";
 
 const CAPABILITIES = [
@@ -36,6 +37,9 @@ const ERR: Record<string, string> = {
   EXTRA_CLAIM_REASON_TOO_LONG: "기타 청구 사유는 500자 이내로 입력해 주세요.",
   EXTRA_CLAIM_AMOUNT_INVALID: "기타 청구 금액을 확인해 주세요.",
   EXTRA_CLAIM_PHOTO_COUNT_INVALID: "증빙 사진은 최대 4장까지 첨부할 수 있습니다.",
+  LINKAGE_PHOTO_REQUIRED: "앱/허브 연동 화면 사진을 1장 이상 첨부해 주세요.",
+  LINKAGE_PHOTO_COUNT_INVALID: "연동 화면 사진은 최대 4장까지 첨부할 수 있습니다.",
+  WALLPAD_PHOTO_COUNT_INVALID: "월패드 사진은 최대 4장까지 첨부할 수 있습니다.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
@@ -62,6 +66,9 @@ export default function CompleteClient({
   const [extraClaimAmount, setExtraClaimAmount] = useState("");
   const [extraClaimReason, setExtraClaimReason] = useState("");
   const [extraClaimPhotos, setExtraClaimPhotos] = useState<File[]>([]);
+  const [linkagePhotos, setLinkagePhotos] = useState<File[]>([]);
+  const [wallpadPhotos, setWallpadPhotos] = useState<File[]>([]);
+  const [guideFor, setGuideFor] = useState<LinkageCapability | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   // 입력 → 설치 사진, 두 화면으로 나눈다. 입력한 값과 고른 사진이 화면을 오가도
   // 남아 있어야 해서 경로를 나누지 않고 한 컴포넌트 안에서 바꾼다.
@@ -80,7 +87,10 @@ export default function CompleteClient({
   // 0 은 청구가 없는 것으로 본다(서버도 같은 기준).
   const hasExtraClaim = (toNumberOrNull(extraClaimAmount) ?? 0) > 0;
   const extraClaimReasonMissing = hasExtraClaim && !extraClaimReason.trim();
-  const canGoToPhotos = !extraClaimReasonMissing && !busy && !compressing;
+  // 연동을 골랐으면 연동 화면 사진이 있어야 넘어간다. 연동비 승인의 근거다.
+  const linked = capability !== "NONE";
+  const linkagePhotoMissing = linked && linkagePhotos.length === 0;
+  const canGoToPhotos = !extraClaimReasonMissing && !linkagePhotoMissing && !busy && !compressing;
   const canSubmit = photos.length >= 1 && photos.length <= 4 && canGoToPhotos;
 
   // 사진 화면은 히스토리에 한 칸을 쌓아 둔다. 기기의 뒤로 가기가 주문 화면으로
@@ -104,22 +114,24 @@ export default function CompleteClient({
     setStep("photos");
   }
 
-  async function addPhotos(list: FileList | null) {
+  // 압축해서 담는다. 어느 첨부든 4장까지.
+  async function addTo(
+    list: FileList | null,
+    current: File[],
+    setter: (update: (prev: File[]) => File[]) => void,
+  ) {
     if (!list) return;
     setCompressing(true);
-    const incoming = Array.from(list).slice(0, 4 - photos.length);
+    const incoming = Array.from(list).slice(0, 4 - current.length);
     const compressed = await Promise.all(incoming.map(compressImage));
-    setPhotos((prev) => [...prev, ...compressed].slice(0, 4));
+    setter((prev) => [...prev, ...compressed].slice(0, 4));
     setCompressing(false);
   }
 
-  async function addExtraClaimPhotos(list: FileList | null) {
-    if (!list) return;
-    setCompressing(true);
-    const incoming = Array.from(list).slice(0, 4 - extraClaimPhotos.length);
-    const compressed = await Promise.all(incoming.map(compressImage));
-    setExtraClaimPhotos((prev) => [...prev, ...compressed].slice(0, 4));
-    setCompressing(false);
+  function chooseCapability(value: string) {
+    setCapability(value);
+    // 연동을 고르면 어떤 화면을 올려야 하는지 바로 띄운다.
+    if (value !== "NONE") setGuideFor(value as LinkageCapability);
   }
 
   // 제출 버튼은 곧바로 보내지 않고 금액을 먼저 계산해 보여준다.
@@ -158,6 +170,9 @@ export default function CompleteClient({
       extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
       extraClaimReason: hasExtraClaim ? extraClaimReason.trim() : null,
       extraClaimPhotos: hasExtraClaim ? extraClaimPhotos : [],
+      // 고르지 않은 항목의 사진은 보내지 않는다(서버도 버린다).
+      linkagePhotos: linked ? linkagePhotos : [],
+      wallpadPhotos: wallpadLinked ? wallpadPhotos : [],
       // 설치 종료 시각 = 지금 제출을 누른 시각. 오프라인 대기열에 들어가도
       // 나중에 전송된 시각이 아니라 이 시각이 남는다.
       installEndAt: new Date().toISOString(),
@@ -220,17 +235,32 @@ export default function CompleteClient({
                     type="radio"
                     name="capability"
                     checked={capability === c.value}
-                    onChange={() => setCapability(c.value)}
+                    onChange={() => chooseCapability(c.value)}
                   />
                   <span style={optionLabel}>{c.label}</span>
                   <OptionAmount amount={linkageFees[c.value]} />
                 </label>
               ))}
-              {/* 앱 화면 사진이 없으면 연동비가 승인되지 않는다. 놓치지 않게 경고색으로 둔다. */}
-              <div style={{ ...helpText, margin: "6px 0 0", color: "#b42318" }}>
-                연동하신 경우 반드시 앱 화면을 사진으로 올려 주세요. 본사에서 확인되어야 해당 비용이
-                승인됩니다.
-              </div>
+              {linked ? (
+                <>
+                  <PhotoPicker
+                    embedded
+                    label="연동 화면 사진 (필수, 최대 4장)"
+                    photos={linkagePhotos}
+                    busy={compressing}
+                    onAdd={(files) => void addTo(files, linkagePhotos, setLinkagePhotos)}
+                    onRemove={(index) => setLinkagePhotos(linkagePhotos.filter((_, i) => i !== index))}
+                  />
+                  <button style={guideLink} onClick={() => setGuideFor(capability as LinkageCapability)}>
+                    어떤 화면을 올려야 하나요?
+                  </button>
+                  {linkagePhotoMissing ? (
+                    <div style={{ fontSize: 12, color: "#b42318", marginTop: 6 }}>
+                      연동 화면 사진을 올려야 다음으로 넘어갈 수 있습니다.
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
             </div>
 
             <div style={ui.card}>
@@ -243,13 +273,23 @@ export default function CompleteClient({
                 <span>월패드 연동함 (현장 결제)</span>
               </label>
               {wallpadLinked ? (
-                <div style={{ marginTop: 10 }}>
-                  <MoneyInput
-                    value={wallpadAmount}
-                    onChange={setWallpadAmount}
-                    placeholder="현장 금액 (선택)"
+                <>
+                  <div style={{ marginTop: 10 }}>
+                    <MoneyInput
+                      value={wallpadAmount}
+                      onChange={setWallpadAmount}
+                      placeholder="현장 금액 (선택)"
+                    />
+                  </div>
+                  <PhotoPicker
+                    embedded
+                    label="월패드 사진 (선택, 최대 4장)"
+                    photos={wallpadPhotos}
+                    busy={compressing}
+                    onAdd={(files) => void addTo(files, wallpadPhotos, setWallpadPhotos)}
+                    onRemove={(index) => setWallpadPhotos(wallpadPhotos.filter((_, i) => i !== index))}
                   />
-                </div>
+                </>
               ) : null}
             </div>
 
@@ -304,7 +344,7 @@ export default function CompleteClient({
                     label="청구 증빙 사진 (선택, 최대 4장)"
                     photos={extraClaimPhotos}
                     busy={compressing}
-                    onAdd={(files) => void addExtraClaimPhotos(files)}
+                    onAdd={(files) => void addTo(files, extraClaimPhotos, setExtraClaimPhotos)}
                     onRemove={(index) => setExtraClaimPhotos(extraClaimPhotos.filter((_, i) => i !== index))}
                   />
                 </>
@@ -328,17 +368,11 @@ export default function CompleteClient({
               {address ? ` · ${address}` : ""}
             </p>
 
-            {capability !== "NONE" ? (
-              <div style={{ ...helpText, color: "#b42318" }}>
-                앱/허브 연동을 선택하셨습니다. 앱 화면 사진을 반드시 포함해 주세요.
-              </div>
-            ) : null}
-
             <PhotoPicker
               label="설치 사진 (필수, 1~4장)"
               photos={photos}
               busy={compressing}
-              onAdd={(files) => void addPhotos(files)}
+              onAdd={(files) => void addTo(files, photos, setPhotos)}
               onRemove={(index) => setPhotos(photos.filter((_, i) => i !== index))}
             />
 
@@ -352,6 +386,12 @@ export default function CompleteClient({
           </>
         )}
       </div>
+
+      <LinkageGuideDialog
+        selected={guideFor}
+        fees={{ DOORLOCK_AND_APP: linkageAppFee, DOORLOCK_AND_APP_AND_HUB: linkageHubFee }}
+        onClose={() => setGuideFor(null)}
+      />
 
       <ConfirmAmountDialog
         open={confirming}
@@ -448,6 +488,17 @@ const backLink: CSSProperties = {
   fontWeight: 600,
   padding: "4px 0",
   marginBottom: 8,
+  cursor: "pointer",
+};
+
+const guideLink: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#2563eb",
+  fontSize: 13,
+  fontWeight: 600,
+  padding: "8px 0 0",
+  textDecoration: "underline",
   cursor: "pointer",
 };
 

@@ -562,6 +562,10 @@ model InstallationCompletion {
   extraClaimAmount           Int?              @map("extra_claim_amount")
   extraClaimReason           String?           @map("extra_claim_reason")
   extraClaimPhotoPaths       String[]          @default([]) @map("extra_claim_photo_paths")
+  // 앱/허브 연동 화면 사진. 연동을 골랐으면 1장 이상 필수(연동비 승인 근거).
+  linkagePhotoPaths          String[]          @default([]) @map("linkage_photo_paths")
+  // 월패드 연동 사진(선택).
+  wallpadPhotoPaths          String[]          @default([]) @map("wallpad_photo_paths")
   installEndAt               DateTime          @map("install_end_at") @db.Timestamptz(6)
   photoPaths                 String[]          @default([]) @map("photo_paths")
   reviewStatus               String            @default("PENDING") @map("review_status")

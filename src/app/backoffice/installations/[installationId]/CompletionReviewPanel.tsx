@@ -124,6 +124,17 @@ export default function CompletionReviewPanel({
         <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
       </div>
 
+      {completion.achievedAqaraAppCapability !== "NONE" ? (
+        <OptionPhotos
+          title="연동 화면 사진"
+          photos={completion.linkagePhotos}
+          emptyText="연동 화면 사진 없음 (설치 사진에서 확인)"
+        />
+      ) : null}
+      {completion.wallpadLinked && completion.wallpadPhotos.length > 0 ? (
+        <OptionPhotos title="월패드 사진" photos={completion.wallpadPhotos} emptyText="" />
+      ) : null}
+
       {completion.extraClaimAmount != null || completion.extraClaimReason ? (
         <div style={extraClaimBox}>
           <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>기타 청구 (기사 신고)</div>
@@ -301,6 +312,43 @@ function Field({
         {value}
         {warn && warnText ? <span style={{ fontSize: 12, marginLeft: 6 }}>⚠ {warnText}</span> : null}
       </div>
+    </div>
+  );
+}
+
+// 설치 사진과 따로 올라오는 첨부(연동 화면, 월패드). 비어 있으면 emptyText 를 보여 준다.
+// 연동 사진 칸이 생기기 전 제출은 연동 화면이 설치 사진에 섞여 있다.
+function OptionPhotos({
+  title,
+  photos,
+  emptyText,
+}: {
+  title: string;
+  photos: InstallationCompletionView["photos"];
+  emptyText: string;
+}) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: "#71717a", fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      {photos.length > 0 ? (
+        <div style={photoRow}>
+          {photos.map((p, i) =>
+            p.url ? (
+              <a key={p.path} href={p.url} target="_blank" rel="noreferrer" style={{ display: "block" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt={`${title}-${i + 1}`} style={photo} />
+              </a>
+            ) : (
+              <div key={p.path} style={photoMissing} title={p.path}>
+                ⚠<br />
+                불러오지 못함
+              </div>
+            ),
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#a1a1aa" }}>{emptyText}</div>
+      )}
     </div>
   );
 }
