@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { BACKOFFICE_READ_ONLY_ERROR, canEditBackoffice } from "@/lib/login/backofficeRoles";
 import {
   AdminCustomerRequestEditError,
   updateCustomerRequestByAdmin,
@@ -15,7 +16,7 @@ async function requireAdmin(): Promise<{ ok: true; adminId: string } | { ok: fal
   try {
     const admin = await getCurrentBackofficeUser();
     if (!admin) return { ok: false, error: "UNAUTHORIZED" };
-    if (admin.level < 1) return { ok: false, error: "FORBIDDEN" };
+    if (!canEditBackoffice(admin.level)) return { ok: false, error: BACKOFFICE_READ_ONLY_ERROR };
     return { ok: true, adminId: admin.id };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "AUTH_ERROR" };

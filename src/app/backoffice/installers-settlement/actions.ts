@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { BACKOFFICE_READ_ONLY_ERROR, canEditBackoffice } from "@/lib/login/backofficeRoles";
 import {
   SettlementError,
   collectLinesIntoPeriod,
@@ -15,7 +16,7 @@ export type SettlementActionResult = { ok: true } | { ok: false; error: string }
 async function requireAdmin(): Promise<{ ok: true; adminId: string } | { ok: false; error: string }> {
   const admin = await getCurrentBackofficeUser();
   if (!admin) return { ok: false, error: "UNAUTHORIZED" };
-  if (admin.level < 1) return { ok: false, error: "FORBIDDEN" };
+  if (!canEditBackoffice(admin.level)) return { ok: false, error: BACKOFFICE_READ_ONLY_ERROR };
   return { ok: true, adminId: admin.id };
 }
 

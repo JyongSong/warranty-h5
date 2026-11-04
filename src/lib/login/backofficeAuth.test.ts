@@ -170,7 +170,7 @@ describe("signInBackofficeWithPassword", () => {
     });
     expect(findFirstMock).toHaveBeenCalledWith({
       where: { supabaseUserId: null, emailHash: expect.any(String) },
-      select: { id: true, supabaseUserId: true, emailEncrypted: true, level: true },
+      select: { id: true, supabaseUserId: true, emailEncrypted: true, name: true, level: true },
     });
     expect(updateMock).toHaveBeenCalledWith({
       where: { id: "user-1" },
@@ -180,7 +180,7 @@ describe("signInBackofficeWithPassword", () => {
         emailHash: expect.any(String),
         lastLoginAt: expect.any(Date),
       },
-      select: { id: true, supabaseUserId: true, emailEncrypted: true, level: true },
+      select: { id: true, supabaseUserId: true, emailEncrypted: true, name: true, level: true },
     });
   });
 

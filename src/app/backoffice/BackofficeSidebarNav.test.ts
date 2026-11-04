@@ -288,7 +288,7 @@ describe("isBackofficeMenuItemActive", () => {
     const mobileNavSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeMobileNav.tsx"), "utf8");
     const userMenuSource = readFileSync(join(process.cwd(), "src", "app", "backoffice", "BackofficeUserMenu.tsx"), "utf8");
 
-    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} />");
+    expect(layoutSource).toContain("<BackofficeDesktopSidebar userEmail={user.email} userLevel={user.level} />");
     expect(desktopSidebarSource).toContain("<BackofficeUserMenu email={userEmail} iconOnly={collapsed} openUpward />");
     expect(desktopSidebarSource).toContain('"mt-auto border-t border-slate-200 bg-white"');
     expect(mobileNavSource).toContain("<BackofficeUserMenu email={userEmail} compact />");

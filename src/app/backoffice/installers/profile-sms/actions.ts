@@ -36,7 +36,7 @@ function whereForScope(scope: RecipientScope) {
 export async function listProfileSmsRecipientsAction(
   scope: RecipientScope,
 ): Promise<{ ok: true; recipients: Recipient[] } | { ok: false; error: string }> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const rows = await prisma.installer.findMany({
@@ -75,7 +75,7 @@ export async function sendProfileSmsAction(input: {
   installerIds: string[];
   body: string;
 }): Promise<SendResult | { ok: false; error: string }> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const ids = Array.isArray(input.installerIds) ? input.installerIds.filter(Boolean) : [];

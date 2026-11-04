@@ -8,6 +8,7 @@ import {
   type InstallerImportRow,
 } from "@/lib/backoffice/data-import";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { canManageBackofficeSettings } from "@/lib/login/backofficeRoles";
 import { initialDataImportActionState, type DataImportActionState } from "./state";
 
 const DATA_IMPORT_PATH = "/backoffice/settings/data-import";
@@ -50,7 +51,7 @@ export async function importBackofficeDataAction(
 async function requireImporter(): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await getCurrentBackofficeUser();
   if (!user) return { ok: false, error: "UNAUTHORIZED" };
-  if (user.level < 1) return { ok: false, error: "FORBIDDEN" };
+  if (!canManageBackofficeSettings(user.level)) return { ok: false, error: "FORBIDDEN" };
   return { ok: true };
 }
 

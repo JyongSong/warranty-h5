@@ -18,7 +18,7 @@ function fmtKstDate(iso: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return errorResponse;
 
   const sp = new URL(req.url).searchParams;

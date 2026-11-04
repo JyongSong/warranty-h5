@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { getCurrentBackofficeUser, type BackofficeAuthUser } from "@/lib/login/backofficeAuth";
+import { recordBackofficeAudit } from "@/lib/backoffice/audit";
+import { canManageBackofficeSettings } from "@/lib/login/backofficeRoles";
 import { SYSTEM_SETTING_KEYS, validateSystemSettingValue } from "@/lib/backoffice/system-settings";
 
 const SYSTEM_SETTINGS_PATH = "/backoffice/settings/system-settings";
@@ -31,6 +33,7 @@ export async function updateSystemSettingAction(
   }
 
   try {
+    const previous = await prisma.backofficeSetting.findUnique({ where: { key }, select: { value: true } });
     await prisma.backofficeSetting.upsert({
       where: { key },
       create: {
@@ -43,6 +46,15 @@ export async function updateSystemSettingAction(
         updatedBy: auth.admin.id,
       },
     });
+    await recordBackofficeAudit({
+      actor: auth.admin,
+      entityType: "system_setting",
+      entityId: key,
+      entityLabel: key,
+      action: "update",
+      before: { value: previous?.value ?? null },
+      after: { value: validatedValue.value },
+    });
     revalidatePath(SYSTEM_SETTINGS_PATH);
     return { ok: true, key };
   } catch (error) {
@@ -52,11 +64,11 @@ export async function updateSystemSettingAction(
 }
 
 async function requireSystemSettingAdmin(): Promise<
-  | { ok: true; admin: { id: string } }
+  | { ok: true; admin: BackofficeAuthUser }
   | { ok: false; error: string }
 > {
   const admin = await getCurrentBackofficeUser();
   if (!admin) return { ok: false, error: "UNAUTHORIZED" };
-  if (admin.level < 1) return { ok: false, error: "FORBIDDEN" };
+  if (!canManageBackofficeSettings(admin.level)) return { ok: false, error: "FORBIDDEN" };
   return { ok: true, admin };
 }

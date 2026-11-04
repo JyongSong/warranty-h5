@@ -14,7 +14,7 @@ import { fetchCjDispatchRows } from "@/lib/installation/cj/dispatch-rows";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return errorResponse;
 
   const sp = new URL(req.url).searchParams;

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listBackofficeUsers } from "@/lib/backoffice/users";
 import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import { BackofficeUserCreateDialog } from "./BackofficeUserCreateDialog";
+import { BackofficeUserEditForm } from "./BackofficeUserEditForm";
 import { BackofficeUserPasswordResetForm } from "./BackofficeUserPasswordResetForm";
 import { DeleteBackofficeUserForm } from "./DeleteBackofficeUserForm";
 import BackofficeUsersPage from "./page";
@@ -39,6 +40,8 @@ function user(supabaseUserId: string | null = "supabase-user-1") {
     id: "user-1",
     supabaseUserId,
     email: "user@example.com",
+    name: "홍길동",
+    phone: "01012345678",
     level: 1,
     lastLoginAt: date,
     createdAt: date,
@@ -47,6 +50,27 @@ function user(supabaseUserId: string | null = "supabase-user-1") {
 }
 
 describe("BackofficeUsersPage", () => {
+  it("separates pending signups into an approval list", async () => {
+    vi.mocked(listBackofficeUsers).mockResolvedValue([
+      user(),
+      { ...user("supabase-user-2"), id: "user-2", email: "new@example.com", name: null, level: 0 },
+    ]);
+    const element = await BackofficeUsersPage({});
+    const text = textOf(element);
+
+    expect(text).toContain("승인 대기 1명");
+    const approveForms = collect(
+      element,
+      (item) => item.type === BackofficeUserEditForm && (item.props as { mode?: string }).mode === "approve",
+    );
+    expect(approveForms).toHaveLength(1);
+    const rejectForms = collect(
+      element,
+      (item) => item.type === DeleteBackofficeUserForm && (item.props as { mode?: string }).mode === "reject",
+    );
+    expect(rejectForms).toHaveLength(1);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listBackofficeUsers).mockResolvedValue([]);
@@ -60,13 +84,14 @@ describe("BackofficeUsersPage", () => {
       "utf8",
     );
 
-    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice/settings/users", 1);
+    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice/settings/users", "settings");
     expect(createDialog).toHaveLength(1);
     expect(createDialog[0].props).toHaveProperty("action");
     expect(createDialogSource).toContain('role="dialog"');
     expect(createDialogSource).toContain('aria-modal="true"');
     expect(createDialogSource).toContain('name="email"');
-    expect(createDialogSource).toContain('name="level"');
+    expect(createDialogSource).toContain("<BackofficeLevelSelect");
+    expect(createDialogSource).toContain('name="name"');
     expect(createDialogSource).toContain('name="password"');
     expect(createDialogSource).toContain('name="confirmPassword"');
     expect(textOf(element)).not.toContain("초대");

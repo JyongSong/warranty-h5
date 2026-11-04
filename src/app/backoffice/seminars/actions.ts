@@ -10,7 +10,7 @@ export async function setSeminarManuallyClosedAction(
   seminarId: string,
   manuallyClosed: boolean,
 ): Promise<ActionResult> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const { count } = await prisma.seminar.updateMany({
@@ -25,7 +25,7 @@ export async function setSeminarManuallyClosedAction(
  * 본인 취소와 달리 마감 시각 뒤에도 할 수 있다. 문자는 보내지 않는다.
  */
 export async function cancelSeminarRegistrationAction(registrationId: string): Promise<ActionResult> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const { count } = await prisma.seminarRegistration.updateMany({

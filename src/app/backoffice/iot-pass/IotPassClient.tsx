@@ -1,5 +1,6 @@
 "use client";
 
+import { canEditBackoffice } from "@/lib/login/backofficeRoles";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -26,7 +27,7 @@ const TABLE_PREFS_KEY = "backoffice.iotPass.table";
 type ShippedFilter = "" | "SHIPPED" | "UNKNOWN";
 
 export default function IotPassClient({ admin }: { admin: AuthAdmin }) {
-  const canManage = admin.level >= 1;
+  const canManage = canEditBackoffice(admin.level);
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");

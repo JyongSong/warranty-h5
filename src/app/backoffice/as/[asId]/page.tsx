@@ -11,7 +11,7 @@ export default async function AsAdminDetailPage({
   params: Promise<{ asId: string }>;
 }) {
   const { asId } = await params;
-  await requireBackofficeUserPage(`/backoffice/as/${asId}`, 1);
+  await requireBackofficeUserPage(`/backoffice/as/${asId}`);
   const detail = await getAsOrderForAdmin(asId);
   if (!detail) notFound();
 

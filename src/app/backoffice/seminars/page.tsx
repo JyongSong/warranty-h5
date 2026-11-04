@@ -14,7 +14,7 @@ export default async function BackofficeSeminarsPage({
   searchParams: Promise<{ id?: string }>;
 }) {
   // 접수 닫기·신청 취소 액션이 등급 1 을 요구하므로 화면도 같은 등급으로 막는다.
-  await requireAdminPage("/backoffice/seminars", 1);
+  await requireAdminPage("/backoffice/seminars");
 
   const seminars = await prisma.seminar.findMany({ orderBy: { createdAt: "desc" } });
   if (seminars.length === 0) {

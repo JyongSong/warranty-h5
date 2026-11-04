@@ -453,6 +453,10 @@ model BackofficeUser {
   supabaseUserId String?  @unique @map("supabase_user_id")
   emailEncrypted String   @unique @map("email_encrypted")
   emailHash      String?  @unique @map("email_hash")
+  // 최고 관리자가 승인할 때 붙여 주는 이름. 처리자 표시에 이메일 대신 쓴다.
+  name           String?
+  // 회원가입 때 문자 인증을 통과한 휴대폰 번호 (암호화)
+  phoneEncrypted String?  @map("phone_encrypted")
   level          Int      @default(0)
   lastLoginAt    DateTime @default(now()) @map("last_login_at")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -460,6 +464,26 @@ model BackofficeUser {
 
   @@index([level])
   @@map("backoffice_users")
+}
+
+// 백오피스 변경 이력. 상태 이벤트 테이블이 없는 데이터(기사·IoT Pass·유저·
+// 설정·SMS 템플릿)를 누가 언제 어떻게 바꿨는지 남긴다.
+model BackofficeAuditLog {
+  id          String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  actorId     String?  @map("actor_id")
+  // 처리 당시의 이름/이메일. 유저가 삭제돼도 누가 했는지 남도록 따로 적는다.
+  actorLabel  String   @map("actor_label")
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  entityLabel String?  @map("entity_label")
+  action      String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@map("backoffice_audit_logs")
 }
 
 // 설치를 통째로 맡기는 외부 협력사 (조명·월패드 설치 → PL).

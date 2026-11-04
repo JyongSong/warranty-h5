@@ -1,3 +1,4 @@
+import { canEditBackoffice } from "@/lib/login/backofficeRoles";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/adminAuth";
 import BackofficePageHeader from "../../BackofficePageHeader";
@@ -6,7 +7,7 @@ import InstallerForm from "../InstallerForm";
 
 export default async function BackofficeInstallerCreatePage() {
   // 생성 API(POST /api/installers)가 등급 1 을 요구한다.
-  const admin = await requireAdminPage("/backoffice/installers/new", 1);
+  const admin = await requireAdminPage("/backoffice/installers/new", "edit");
 
   return (
     <div>
@@ -18,7 +19,7 @@ export default async function BackofficeInstallerCreatePage() {
           </Link>
         }
       />
-      <InstallerForm item={null} canManage={admin.level >= 1} />
+      <InstallerForm item={null} canManage={canEditBackoffice(admin.level)} />
     </div>
   );
 }

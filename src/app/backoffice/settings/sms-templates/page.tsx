@@ -4,7 +4,7 @@ import BackofficePageHeader from "../../BackofficePageHeader";
 import SmsTemplateClient from "./SmsTemplateClient";
 
 export default async function SmsTemplatePreviewPage() {
-  await requireBackofficeUserPage("/backoffice/settings/sms-templates", 1);
+  await requireBackofficeUserPage("/backoffice/settings/sms-templates", "settings");
   const templates = getInstallationSmsTemplatePreviews();
 
   return (

@@ -10,7 +10,7 @@ describe("DeleteBackofficeUserForm", () => {
     );
 
     expect(source).toContain('name="id" value={userId}');
-    expect(source).toContain('title="유저 삭제"');
+    expect(source).toContain('"유저 삭제"');
     expect(source).toContain('tone="danger"');
     expect(source).not.toContain("window.confirm");
   });

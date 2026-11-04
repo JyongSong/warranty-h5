@@ -76,7 +76,7 @@ describe("SystemSettingsPage", () => {
     const text = getRenderedText(element);
     const editorProps = findPropsByComponentName(element, "SystemSettingsEditor");
 
-    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice/settings/system-settings", 1);
+    expect(requireBackofficeUserPage).toHaveBeenCalledWith("/backoffice/settings/system-settings", "settings");
     expect(listSystemSettings).toHaveBeenCalledOnce();
     expect(editorProps?.settings).toEqual([
       {

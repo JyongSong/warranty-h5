@@ -8,7 +8,7 @@ import { SURVEY_SEND_DELAY_DAYS } from "@/lib/survey/send";
 
 export async function GET(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { errorResponse } = await requireAdminApi("view");
     if (errorResponse) return errorResponse;
 
     const { searchParams } = new URL(req.url);

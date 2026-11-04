@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/adminAuth";
+import { recordBackofficeAudit, toBackofficeAuditActor } from "@/lib/backoffice/audit";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_ASSIGNMENT_SMS_TEMPLATE,
@@ -28,7 +29,7 @@ function getDefault(key: string): string | null {
 type Ctx = { params: Promise<{ key: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return errorResponse;
 
   const { key } = await ctx.params;
@@ -69,7 +70,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  const { admin, errorResponse } = await requireAdminApi(1);
+  const { admin, errorResponse } = await requireAdminApi("settings");
   if (errorResponse) return errorResponse;
 
   const { key } = await ctx.params;
@@ -92,10 +93,20 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "body too long (max 1000 chars)" }, { status: 400 });
   }
 
+  const previous = await prisma.smsTemplate.findUnique({ where: { key }, select: { body: true } });
   const saved = await prisma.smsTemplate.upsert({
     where: { key },
     create: { key, body, updatedBy: admin!.id },
     update: { body, updatedBy: admin!.id },
+  });
+  await recordBackofficeAudit({
+    actor: toBackofficeAuditActor(admin!),
+    entityType: "sms_template",
+    entityId: key,
+    entityLabel: key,
+    action: "update",
+    before: { body: previous?.body ?? fallback },
+    after: { body: saved.body },
   });
 
   return NextResponse.json({

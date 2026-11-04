@@ -20,7 +20,7 @@ export default async function InstallationOrderSourcePage({ searchParams }: Page
   const resolvedSearchParams = await searchParams;
   const nextPath = "/backoffice/installation-order-source";
 
-  await requireBackofficeUserPage(nextPath, 1);
+  await requireBackofficeUserPage(nextPath);
 
   const today = formatErpDateForDateInput(getTodayKstOrderDate());
   const from = normalizeDateSearchParam(resolvedSearchParams.from) ?? today;

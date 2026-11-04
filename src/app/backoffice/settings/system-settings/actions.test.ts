@@ -12,10 +12,15 @@ vi.mock("@/lib/login/backofficeAuth", () => ({
   getCurrentBackofficeUser: vi.fn(),
 }));
 
+vi.mock("@/lib/backoffice/audit", () => ({
+  recordBackofficeAudit: vi.fn(),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     backofficeSetting: {
       upsert: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue(null),
     },
   },
 }));

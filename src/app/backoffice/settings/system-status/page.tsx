@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 type CronJob = Awaited<ReturnType<typeof getBackofficeSystemStatusSummary>>["cronJobs"][number];
 
 export default async function SystemStatusPage() {
-  await requireBackofficeUserPage("/backoffice/settings/system-status", 1);
+  await requireBackofficeUserPage("/backoffice/settings/system-status", "settings");
   const summary = await getBackofficeSystemStatusSummary();
 
   return (

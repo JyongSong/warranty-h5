@@ -27,7 +27,7 @@ export default async function AsSearchPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireBackofficeUserPage("/backoffice/as/search", 1);
+  await requireBackofficeUserPage("/backoffice/as/search");
   const params = await searchParams;
   const status = typeof params.status === "string" ? params.status : "";
   const items = await listAsOrders(status ? { status } : undefined);

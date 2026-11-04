@@ -1,5 +1,6 @@
 "use client";
 
+import { canEditBackoffice } from "@/lib/login/backofficeRoles";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -28,7 +29,7 @@ type RosterFilter = "" | "IN" | "OUT";
 type ActiveFilter = "" | "ACTIVE" | "INACTIVE";
 
 export default function InstallersClient({ admin }: { admin: AuthAdmin }) {
-  const canManage = admin.level >= 1;
+  const canManage = canEditBackoffice(admin.level);
 
   const [query, setQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("");

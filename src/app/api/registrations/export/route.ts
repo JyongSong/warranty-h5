@@ -47,7 +47,7 @@ function formatDateTime(value: Date | string | null) {
 
 export async function GET(req: NextRequest) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { errorResponse } = await requireAdminApi("view");
     if (errorResponse) return errorResponse;
 
     const sp = new URL(req.url).searchParams;

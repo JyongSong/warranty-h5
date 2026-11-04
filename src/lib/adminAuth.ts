@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +12,9 @@ type SessionPayload = {
 export type AuthAdmin = {
   id: string;
   name: string;
+  // 백오피스(Supabase) 로그인일 때만 채워진다. 예전 관리 쿠키 로그인(getCurrentAdmin)에는 없다.
+  email?: string;
+  displayName?: string | null;
   level: number;
 };
 
@@ -87,28 +89,30 @@ export async function getCurrentAdmin(): Promise<AuthAdmin | null> {
 }
 
 import { getCurrentBackofficeUser, requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
+import {
+  BACKOFFICE_READ_ONLY_ERROR,
+  hasBackofficeAccess,
+  type BackofficeAccess,
+} from "@/lib/login/backofficeRoles";
 
 export const requirePortalUserPage = requireBackofficeUserPage;
 
-export async function requireAdminPage(nextPath: string, minLevel = 0): Promise<AuthAdmin> {
-  const user = await getCurrentBackofficeUser();
-
-  if (!user) {
-    redirect(`/login?redirect_url=${encodeURIComponent(nextPath)}`);
-  }
-
-  if (user.level < minLevel) {
-    redirect(`/login?redirect_url=${encodeURIComponent(nextPath)}&error=forbidden`);
-  }
-
+export async function requireAdminPage(
+  nextPath: string,
+  access: BackofficeAccess = "view",
+): Promise<AuthAdmin> {
+  const user = await requireBackofficeUserPage(nextPath, access);
   return {
     id: user.id,
-    name: user.email.split("@")[0] || "Admin",
+    name: user.name || user.email.split("@")[0] || "Admin",
+    email: user.email,
+    displayName: user.name ?? null,
     level: user.level,
   };
 }
 
-export async function requireAdminApi(minLevel = 1) {
+// access 기본값은 "edit". 조회(GET·엑셀)만 하는 라우트는 "view" 를 넘긴다.
+export async function requireAdminApi(access: BackofficeAccess = "edit") {
   try {
     const user = await getCurrentBackofficeUser();
 
@@ -119,19 +123,26 @@ export async function requireAdminApi(minLevel = 1) {
       };
     }
 
-    if (user.level < minLevel) {
+    if (!hasBackofficeAccess(user.level, access)) {
+      const readOnly = access === "edit" && hasBackofficeAccess(user.level, "view");
       return {
         admin: null,
-        errorResponse: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }),
+        errorResponse: NextResponse.json(
+          { error: readOnly ? BACKOFFICE_READ_ONLY_ERROR : "FORBIDDEN" },
+          { status: 403 },
+        ),
       };
     }
 
+    const admin: AuthAdmin = {
+      id: user.id,
+      name: user.name || user.email.split("@")[0] || "Admin",
+      email: user.email,
+      displayName: user.name ?? null,
+      level: user.level,
+    };
     return {
-      admin: {
-        id: user.id,
-        name: user.email.split("@")[0] || "Admin",
-        level: user.level,
-      },
+      admin,
       errorResponse: null,
     };
   } catch (error) {

@@ -29,7 +29,7 @@ export type ParseResult =
   | { ok: false; error: string };
 
 export async function parseCjRegLinkFileAction(formData: FormData): Promise<ParseResult> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const file = formData.get("file");
@@ -85,7 +85,7 @@ export async function sendCjRegLinksAction(input: {
   tokens: string[];
   body: string;
 }): Promise<SendResult | { ok: false; error: string }> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   const body = String(input.body ?? "").trim();

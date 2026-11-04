@@ -6,7 +6,13 @@ import { usePathname } from "next/navigation";
 import BackofficeSidebarNav from "./BackofficeSidebarNav";
 import BackofficeUserMenu from "./BackofficeUserMenu";
 
-export default function BackofficeMobileNav({ userEmail }: { userEmail?: string }) {
+export default function BackofficeMobileNav({
+  userEmail,
+  userLevel,
+}: {
+  userEmail?: string;
+  userLevel: number;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -56,7 +62,7 @@ export default function BackofficeMobileNav({ userEmail }: { userEmail?: string 
             onClick={() => setOpen(false)}
           />
           <div className="relative h-full w-72 max-w-[82vw] border-r border-slate-200 bg-white shadow-xl">
-            <BackofficeSidebarNav className="space-y-1.5 px-3 py-3" onNavigate={() => setOpen(false)} />
+            <BackofficeSidebarNav className="space-y-1.5 px-3 py-3" onNavigate={() => setOpen(false)} level={userLevel} />
           </div>
         </div>
       ) : null}
