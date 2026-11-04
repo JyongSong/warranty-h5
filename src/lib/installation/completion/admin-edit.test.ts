@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   updateAttempt: vi.fn(),
   createStatusEvent: vi.fn(),
   findInstaller: vi.fn(),
+  deleteWallpadCases: vi.fn(),
+  upsertWallpadCase: vi.fn(),
   push: vi.fn(),
   sms: vi.fn(),
 }));
@@ -32,6 +34,7 @@ function createTx() {
     installationInstallerAssignmentAttempt: { findFirst: mocks.findFirstAttempt, update: mocks.updateAttempt },
     installationOrderStatusEvent: { create: mocks.createStatusEvent },
     installationIssue: { updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
+    wallpadSiteCase: { deleteMany: mocks.deleteWallpadCases, upsert: mocks.upsertWallpadCase },
   };
 }
 
@@ -113,6 +116,10 @@ describe("approved completion admin operations", () => {
       });
       expect(mocks.push).toHaveBeenCalled();
       expect(mocks.sms).toHaveBeenCalledWith("01011112222", expect.stringContaining("승인이 취소"));
+      // 월패드 호환 DB 에 남긴 이 주문의 사례도 지운다(다시 승인되면 새로 남는다).
+      expect(mocks.deleteWallpadCases).toHaveBeenCalledWith({
+        where: { installationOrderId: "order-1", source: "COMPLETION" },
+      });
     });
 
     it("refuses when the line is already in a settled period", async () => {
@@ -173,6 +180,35 @@ describe("approved completion admin operations", () => {
         "longDistanceAmount",
       ]);
       expect(mocks.updateOrder).not.toHaveBeenCalled();
+    });
+
+    it("leaves the wallpad case alone when the wallpad value did not change", async () => {
+      mocks.findLine.mockResolvedValue({ id: "line-1", periodId: "period-1", period: { status: "OPEN" } });
+
+      await editApprovedCompletion(editInput);
+
+      expect(mocks.updateCompletion.mock.calls[0][0].data).not.toHaveProperty("wallpadResult");
+      expect(mocks.deleteWallpadCases).not.toHaveBeenCalled();
+      expect(mocks.upsertWallpadCase).not.toHaveBeenCalled();
+    });
+
+    it("turns a wallpad success into 'not attempted' but keeps a recorded failure", async () => {
+      mocks.findLine.mockResolvedValue({ id: "line-1", periodId: "period-1", period: { status: "OPEN" } });
+      mocks.findCompletion.mockResolvedValue({ ...approvedCompletion, wallpadLinked: true, wallpadResult: "SUCCESS" });
+
+      await editApprovedCompletion({ ...editInput, achievedAqaraAppCapability: "DOORLOCK_AND_APP" });
+
+      expect(mocks.updateCompletion.mock.calls[0][0].data).toMatchObject({
+        wallpadLinked: false,
+        wallpadResult: "NOT_ATTEMPTED",
+        wallpadPhotoPaths: [],
+      });
+      expect(mocks.deleteWallpadCases).toHaveBeenCalled();
+
+      mocks.updateCompletion.mockReset();
+      mocks.findCompletion.mockResolvedValue({ ...approvedCompletion, wallpadLinked: false, wallpadResult: "FAIL" });
+      await editApprovedCompletion({ ...editInput, wallpadLinked: true, achievedAqaraAppCapability: "DOORLOCK_AND_APP" });
+      expect(mocks.updateCompletion.mock.calls[0][0].data).toMatchObject({ wallpadLinked: true, wallpadResult: "SUCCESS" });
     });
 
     it("requires a reason for a non-zero extra claim", async () => {

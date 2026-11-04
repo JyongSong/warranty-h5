@@ -31,8 +31,8 @@ function trimOrNull(value: unknown): string | null {
 // ─── 완료 등록 → 현장 사례 ───────────────────────────────────────────────
 
 /**
- * 승인된 완료 등록의 월패드 연동 결과를 현장 사례로 남긴다. approveInstallerCompletion 의 트랜잭션 안에서 부른다.
- * 성공·실패만 남기고(연동 안 함·옛 제출은 건너뜀), 주문 하나에 사례 하나다.
+ * 승인된 완료 등록의 월패드 연동 결과를 현장 사례로 남긴다. 승인·승인 후 수정의 트랜잭션 안에서 부른다.
+ * 성공·실패만 남기고(연동 안 함·옛 제출이면 이 주문의 사례를 지운다), 주문 하나에 사례 하나다.
  *
  * 단지명은 주소의 "(동, 아파트명)" 에서 꺼내고, 없으면 일단 도로명 주소를 넣어 둔다.
  * 네이버 건물명 조회는 트랜잭션 밖에서 fillCompletionCaseSiteName 이 한다.
@@ -58,6 +58,7 @@ export async function recordCompletionWallpadCase(tx: Tx, orderId: string): Prom
   });
   const completion = order?.completion;
   if (!completion || (completion.wallpadResult !== "SUCCESS" && completion.wallpadResult !== "FAIL")) {
+    await removeCompletionWallpadCase(tx, orderId);
     return null;
   }
 
@@ -87,6 +88,13 @@ export async function recordCompletionWallpadCase(tx: Tx, orderId: string): Prom
     select: { id: true },
   });
   return !nameFromAddress && siteAddress ? saved.id : null;
+}
+
+/** 승인 취소 등으로 이 주문의 완료 등록 사례를 지운다. 관리자가 직접 넣은 사례는 건드리지 않는다. */
+export async function removeCompletionWallpadCase(tx: Tx, orderId: string): Promise<void> {
+  await tx.wallpadSiteCase.deleteMany({
+    where: { installationOrderId: orderId, source: "COMPLETION" satisfies WallpadCaseSource },
+  });
 }
 
 /** 도로명 주소로만 남긴 사례의 단지명을 네이버 건물명으로 바꾼다. 실패해도 승인에는 영향이 없다. */
