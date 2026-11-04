@@ -37,6 +37,7 @@ export async function listActiveInstallerRequestAssignments({ limit = 50 }: { li
           source: {
             select: {
               sourceKey: true,
+              orderNumbers: true,
               customerNameEncrypted: true,
               phoneEncrypted: true,
               addressEncrypted: true,
@@ -84,6 +85,7 @@ export async function listActiveInstallerRequestAssignments({ limit = 50 }: { li
       installationOrder: {
         ...installationOrderFields,
         sourceErpOrderNo: source?.sourceKey ?? "",
+        sourceExternalOrderNumbers: source?.orderNumbers ?? null,
         sourceCustomerName: decryptNullablePii(source?.customerNameEncrypted),
         sourcePhone: decryptNullablePii(source?.phoneEncrypted),
         sourceAddress: decryptNullablePii(source?.addressEncrypted),
