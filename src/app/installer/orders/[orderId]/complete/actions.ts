@@ -87,6 +87,12 @@ export async function submitCompletionAction(input: {
   /** 없으면(옛 화면·옛 대기열) 연동 사진 필수 검사를 건너뛴다. service 참고. */
   linkagePhotoPaths?: string[];
   wallpadPhotoPaths?: string[];
+  /** 없으면(옛 화면·옛 대기열) wallpadLinked 만 받는다. service 참고. */
+  wallpadResult?: string;
+  wallpadBrand?: string | null;
+  wallpadModel?: string | null;
+  wallpadFailReason?: string | null;
+  wallpadNote?: string | null;
   installEndAt?: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
@@ -161,6 +167,11 @@ export async function submitCompletionAction(input: {
       extraClaimPhotoPaths,
       linkagePhotoPaths,
       wallpadPhotoPaths,
+      wallpadResult: typeof input.wallpadResult === "string" ? input.wallpadResult : undefined,
+      wallpadBrand: input.wallpadBrand ?? null,
+      wallpadModel: input.wallpadModel ?? null,
+      wallpadFailReason: input.wallpadFailReason ?? null,
+      wallpadNote: input.wallpadNote ?? null,
       installEndAt,
       photoPaths,
     });

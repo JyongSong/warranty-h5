@@ -11,6 +11,11 @@ import {
 } from "@/lib/installation/settlement/snapshot";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
+import {
+  fillCompletionCaseSiteName,
+  recordCompletionWallpadCase,
+  removeCompletionWallpadCase,
+} from "@/lib/installation/wallpad/service";
 import { EXTRA_CLAIM_REASON_MAX_LENGTH, InstallationCompletionError } from "./service";
 
 const ACHIEVED_CAPABILITIES = ["NONE", "DOORLOCK_AND_APP", "DOORLOCK_AND_APP_AND_HUB"];
@@ -50,6 +55,9 @@ export async function revertApprovedCompletion(input: {
   const installerId = await prisma.$transaction(async (tx) => {
     const { order, completion } = await getApprovedCompletionOrder(tx, input.orderId);
     const installerId = order.currentInstallerId ?? completion.submittedInstallerId;
+
+    // 다시 승인되면 그때 사례를 새로 남긴다.
+    await removeCompletionWallpadCase(tx, input.orderId);
 
     try {
       await removeInstallSettlementSnapshot(tx, input.orderId);
@@ -148,7 +156,7 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
     throw new InstallationCompletionError("EXTRA_CLAIM_REASON_TOO_LONG");
   }
 
-  await prisma.$transaction(async (tx) => {
+  const caseNeedingSiteName = await prisma.$transaction(async (tx) => {
     const { order, completion } = await getApprovedCompletionOrder(tx, input.orderId);
 
     const before = {
@@ -172,16 +180,32 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
       .map((key) => ({ field: key, from: before[key] ?? null, to: after[key] ?? null }));
     if (changes.length === 0) throw new InstallationCompletionError("NOTHING_CHANGED");
 
+    // 월패드 연동 결과도 체크와 맞춘다. 연동함 → 성공. 연동 안 함으로 바꾸면 성공이던 건만 "안 함" 이 되고,
+    // 실패로 남긴 건은 그대로 둔다(실패도 연동하지 않은 것이다). 옛 제출(결과 없음)은 그대로 비워 둔다.
+    const wallpadChanged = before.wallpadLinked !== after.wallpadLinked;
+    const wallpadResult = !wallpadChanged
+      ? completion.wallpadResult
+      : after.wallpadLinked
+        ? "SUCCESS"
+        : completion.wallpadResult === "SUCCESS"
+          ? "NOT_ATTEMPTED"
+          : completion.wallpadResult;
+    const keepWallpadPhotos = after.wallpadLinked || wallpadResult === "FAIL";
+
     await tx.installationCompletion.update({
       where: { installationOrderId: input.orderId },
       data: {
         ...after,
+        ...(wallpadChanged ? { wallpadResult } : {}),
         // 연동/월패드를 없음으로 바꾸면 그 증빙 사진도 의미가 없다. 기사 제출 때와 같은 규칙.
         ...(after.achievedAqaraAppCapability === "NONE" ? { linkagePhotoPaths: [] } : {}),
-        ...(after.wallpadLinked ? {} : { wallpadPhotoPaths: [] }),
+        ...(keepWallpadPhotos ? {} : { wallpadPhotoPaths: [] }),
         ...(extraClaimAmount ? {} : { extraClaimPhotoPaths: [] }),
       },
     });
+
+    // 월패드 결과가 바뀐 때만 현장 사례를 다시 남긴다. 관리자가 호환 DB 에서 고친 단지명을 덮지 않게.
+    const wallpadCaseId = wallpadChanged ? await recordCompletionWallpadCase(tx, input.orderId) : null;
 
     try {
       await rebuildInstallSettlementSnapshot(tx, { orderId: input.orderId, adminId: input.adminId });
@@ -205,7 +229,11 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
         metadata: { changes },
       },
     });
+
+    return wallpadCaseId;
   });
+
+  if (caseNeedingSiteName) await fillCompletionCaseSiteName(caseNeedingSiteName);
 }
 
 async function notifyInstallerOfRevert(installerId: string, reason: string) {

@@ -36,6 +36,14 @@ export async function geocodeAddress(query: string): Promise<GeoPoint | null> {
   return { latitude, longitude };
 }
 
+/** 도로명 주소의 건물명(아파트 단지명). 건물명이 없는 주소면 null 이다. */
+export async function geocodeBuildingName(query: string): Promise<string | null> {
+  const body = await fetchNaverMaps("/map-geocode/v2/geocode", { query, count: "1" });
+  const elements: Array<{ types?: string[]; longName?: string }> = body?.addresses?.[0]?.addressElements ?? [];
+  const name = elements.find((element) => element.types?.includes("BUILDING_NAME"))?.longName?.trim();
+  return name || null;
+}
+
 /** 자동차 경로 거리(미터). 경로가 없으면 null 이다. */
 export async function getDrivingDistanceMeters(from: GeoPoint, to: GeoPoint): Promise<number | null> {
   const body = await fetchNaverMaps("/map-direction/v1/driving", {

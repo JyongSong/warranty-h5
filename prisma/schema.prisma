@@ -566,6 +566,13 @@ model InstallationCompletion {
   linkagePhotoPaths          String[]          @default([]) @map("linkage_photo_paths")
   // 월패드 연동 사진(선택).
   wallpadPhotoPaths          String[]          @default([]) @map("wallpad_photo_paths")
+  // 월패드 연동 결과: SUCCESS / FAIL / NOT_ATTEMPTED. 비어 있으면 이 항목이 생기기 전 제출이라
+  // wallpadLinked 만 믿을 수 있다. 승인 때 SUCCESS·FAIL 이면 월패드 호환 현장 사례로 남긴다.
+  wallpadResult              String?           @map("wallpad_result")
+  wallpadBrand               String?           @map("wallpad_brand")
+  wallpadModel               String?           @map("wallpad_model")
+  wallpadFailReason          String?           @map("wallpad_fail_reason")
+  wallpadNote                String?           @map("wallpad_note")
   installEndAt               DateTime          @map("install_end_at") @db.Timestamptz(6)
   photoPaths                 String[]          @default([]) @map("photo_paths")
   reviewStatus               String            @default("PENDING") @map("review_status")
@@ -1136,4 +1143,66 @@ model InstallerDrivingDistance {
 
   @@id([installerId, customerAddressHash])
   @@map("installer_driving_distances")
+}
+
+// RF447 월패드 호환 DB: 월패드 모델. 판정(verdict)은 관리자가 정하고, 현장 사례 집계는 화면에서 따로 보여 준다.
+// modelKey 는 대소문자·공백·하이픈을 뺀 모델명이다. 같은 모델이 두 번 들어가지 않게 하고,
+// 현장 사례의 모델명도 같은 키로 맞춰 묶는다(외래키를 두지 않는다).
+model WallpadModel {
+  id               String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  brand            String
+  model            String
+  modelKey         String            @unique @map("model_key")
+  aliases          String[]          @default([])
+  verdict          String            @default("UNVERIFIED")
+  note             String?           @db.Text
+  sourceType       String?           @map("source_type")
+  sourceUrl        String?           @map("source_url")
+  verifiedOn       String?           @map("verified_on")
+  updatedByAdminId String?           @map("updated_by_admin_id")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([brand])
+  @@map("wallpad_models")
+}
+
+// 단지별 현장 사례. 완료 등록 승인(COMPLETION), 관리자 입력(ADMIN), 기존 자료 이관(IMPORT) 세 경로로 쌓인다.
+// siteKey 는 도로명+건물번호로 줄인 주소라 같은 단지의 사례를 묶는 데 쓴다. 주소를 모르는 사례는 비어 있다.
+model WallpadSiteCase {
+  id                  String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  siteName            String        @map("site_name")
+  siteKey             String?       @map("site_key")
+  siteAddress         String?       @map("site_address")
+  brand               String?
+  model               String?
+  // SUCCESS / FAIL / SPECIAL(일반 설치 불가 · 특수 시공 성공)
+  result              String
+  failReason          String?       @map("fail_reason")
+  note                String?       @db.Text
+  source              String
+  sourceUrl           String?       @map("source_url")
+  installationOrderId String?       @unique @map("installation_order_id")
+  createdByAdminId    String?       @map("created_by_admin_id")
+  occurredOn          String?       @map("occurred_on")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([siteKey])
+  @@map("wallpad_site_cases")
+}
+
+// 제조사(BRAND)·시공사(BUILDER) 단위 현장 의견. keywords 중 하나가 검색어와 맞으면 결과에 함께 보여 준다.
+model WallpadCompatNote {
+  id         String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  kind       String
+  title      String
+  keywords   String[] @default([])
+  note       String   @db.Text
+  sourceType String?  @map("source_type")
+  reportedOn String?  @map("reported_on")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("wallpad_compat_notes")
 }

@@ -33,6 +33,13 @@ export type QueuedCompletionInput = {
   // linkagePhotos 가 없는 항목은 서버가 연동 사진 필수 검사를 하지 않는다.
   linkagePhotos?: Blob[];
   wallpadPhotos?: Blob[];
+  // 월패드 연동 결과(성공/실패/안 함)와 제조사·모델·실패 사유. 옛 대기열 항목에는 없고,
+  // 없으면 서버가 wallpadLinked 만 받는다.
+  wallpadResult?: string;
+  wallpadBrand?: string | null;
+  wallpadModel?: string | null;
+  wallpadFailReason?: string | null;
+  wallpadNote?: string | null;
   installEndAt: string;
   photos: Blob[];
 };
@@ -180,7 +187,7 @@ export async function uploadAndSubmitCompletion(
       entry.extraClaimAmount ? (entry.extraClaimPhotos ?? []) : [],
     );
     if (!extraClaim.ok) return extraClaim;
-    // 연동 사진은 연동을 골랐을 때만, 월패드 사진은 월패드 연동을 했을 때만.
+    // 연동 사진은 연동을 골랐을 때만, 월패드 사진은 월패드 연동을 시도했을 때만(실패 포함).
     const linkage = await uploadExtraPhotos(
       entry.orderId,
       entry.capability !== "NONE" ? (entry.linkagePhotos ?? []) : [],
@@ -188,7 +195,9 @@ export async function uploadAndSubmitCompletion(
     if (!linkage.ok) return linkage;
     const wallpad = await uploadExtraPhotos(
       entry.orderId,
-      entry.wallpadLinked ? (entry.wallpadPhotos ?? []) : [],
+      (entry.wallpadResult === undefined ? entry.wallpadLinked : entry.wallpadResult !== "NOT_ATTEMPTED")
+        ? (entry.wallpadPhotos ?? [])
+        : [],
     );
     if (!wallpad.ok) return wallpad;
 
@@ -203,6 +212,11 @@ export async function uploadAndSubmitCompletion(
       extraClaimPhotoPaths: extraClaim.paths,
       linkagePhotoPaths: entry.linkagePhotos ? linkage.paths : undefined,
       wallpadPhotoPaths: wallpad.paths,
+      wallpadResult: entry.wallpadResult,
+      wallpadBrand: entry.wallpadBrand ?? null,
+      wallpadModel: entry.wallpadModel ?? null,
+      wallpadFailReason: entry.wallpadFailReason ?? null,
+      wallpadNote: entry.wallpadNote ?? null,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });

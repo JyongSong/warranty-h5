@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import type { InstallationCompletionView } from "@/lib/installation/completion/service";
 import { computeInstallLineItems } from "@/lib/installation/settlement/compute";
 import type { EffectiveRates } from "@/lib/installation/settlement/rates";
+import { WALLPAD_FAIL_REASON_LABEL, type WallpadFailReason } from "@/lib/installation/wallpad/constants";
 import {
   approveInstallationCompletionAction,
   rejectInstallationCompletionAction,
@@ -16,6 +17,20 @@ const CAP_LABEL: Record<string, string> = {
   DOORLOCK_AND_APP: "APP 연동",
   DOORLOCK_AND_APP_AND_HUB: "허브 연동",
 };
+// 월패드 칸 한 줄 요약. 결과가 없는 옛 제출은 wallpadLinked 만 보여 준다.
+function wallpadSummary(c: InstallationCompletionView): string {
+  const amount = c.wallpadAmount ? ` · ${c.wallpadAmount.toLocaleString()}원` : "";
+  const device = [c.wallpadBrand, c.wallpadModel].filter(Boolean).join(" ");
+  if (c.wallpadResult === "SUCCESS") return `연동 성공${device ? ` · ${device}` : ""}${amount}`;
+  if (c.wallpadResult === "FAIL") {
+    const reason = c.wallpadFailReason
+      ? WALLPAD_FAIL_REASON_LABEL[c.wallpadFailReason as WallpadFailReason] ?? c.wallpadFailReason
+      : "";
+    return `연동 실패${device ? ` · ${device}` : ""}${reason ? ` · ${reason}` : ""}`;
+  }
+  return c.wallpadLinked ? `연동${amount}` : "안 함";
+}
+
 const CAP_RANK: Record<string, number> = {
   NONE: 0,
   DOORLOCK_AND_APP: 1,
@@ -111,11 +126,7 @@ export default function CompletionReviewPanel({
         />
         <Field
           label="월패드"
-          value={
-            completion.wallpadLinked
-              ? `연동${completion.wallpadAmount ? ` · ${completion.wallpadAmount.toLocaleString()}원` : ""}`
-              : "안 함"
-          }
+          value={wallpadSummary(completion)}
         />
         <Field
           label="장거리 (기사 신고)"
@@ -131,7 +142,12 @@ export default function CompletionReviewPanel({
           emptyText="연동 화면 사진 없음 (설치 사진에서 확인)"
         />
       ) : null}
-      {completion.wallpadLinked && completion.wallpadPhotos.length > 0 ? (
+      {completion.wallpadResult === "FAIL" && completion.wallpadNote ? (
+        <div style={{ fontSize: 13, color: "#3f3f46", margin: "-4px 0 12px" }}>
+          월패드 메모: {completion.wallpadNote}
+        </div>
+      ) : null}
+      {completion.wallpadPhotos.length > 0 ? (
         <OptionPhotos title="월패드 사진" photos={completion.wallpadPhotos} emptyText="" />
       ) : null}
 
