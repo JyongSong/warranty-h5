@@ -211,6 +211,39 @@ export async function getWallpadCompatData(): Promise<{
   };
 }
 
+/**
+ * 공개 조회 페이지(/rf447)용 데이터. 누구나 볼 수 있으므로 내부 정보를 뺀다.
+ * - 주소: 단지 묶음 키도 주소에서 나오므로 순번으로 바꾼다.
+ * - 완료 등록 사례: 주문 연결과 기사 메모(고객 정보가 섞일 수 있다)를 뺀다.
+ */
+export async function getPublicWallpadCompatData(): Promise<{
+  models: WallpadModelRow[];
+  cases: WallpadCaseRow[];
+  notes: WallpadNoteRow[];
+}> {
+  const data = await getWallpadCompatData();
+  const siteIds = new Map<string, string>();
+  return {
+    ...data,
+    cases: data.cases.map((c) => {
+      let siteKey: string | null = null;
+      if (c.siteKey) {
+        siteKey = siteIds.get(c.siteKey) ?? `site-${siteIds.size + 1}`;
+        siteIds.set(c.siteKey, siteKey);
+      }
+      const fromCompletion = c.source === "COMPLETION";
+      return {
+        ...c,
+        siteKey,
+        siteAddress: null,
+        installationOrderId: null,
+        note: fromCompletion ? null : c.note,
+        sourceUrl: fromCompletion ? null : c.sourceUrl,
+      };
+    }),
+  };
+}
+
 /** 기사 완료 등록 화면의 모델명 자동완성 목록. */
 export async function listWallpadModelNames(): Promise<Array<{ brand: string; model: string }>> {
   try {
