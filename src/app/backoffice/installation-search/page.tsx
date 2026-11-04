@@ -12,8 +12,12 @@ interface PageProps {
 
 export default async function InstallationSearchPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
-  const searchCondition = normalizeInstallationOrderSearchCondition(resolvedSearchParams);
+  // 입력칸 하나로 주문번호/출고번호/고객명/전화번호를 함께 찾는다 (q).
+  // 검색어가 없으면 기존처럼 최근 30일 주문(또는 예전 searchField 링크 조건)을 보여준다.
+  const query = getSingleSearchParam(resolvedSearchParams.q);
+  const searchCondition = query ? undefined : normalizeInstallationOrderSearchCondition(resolvedSearchParams);
   const tableSearchParams = normalizeInstallationOrderTableSearchParams(resolvedSearchParams, searchCondition);
+  if (query) tableSearchParams.q = query;
   const nextPath = buildBackofficeNextPath("/backoffice/installation-search", tableSearchParams);
   if (getSingleSearchParam(resolvedSearchParams.statusView)) {
     redirect(nextPath);
@@ -22,8 +26,9 @@ export default async function InstallationSearchPage({ searchParams }: PageProps
   return (
     <InstallationOrderListView
       basePath="/backoffice/installation-search"
-      emptyMessage={searchCondition ? "검색 결과가 없습니다." : "검색 조건을 입력하세요."}
-      query=""
+      emptyMessage={query || searchCondition ? "검색 결과가 없습니다." : "검색어를 입력하세요."}
+      query={query}
+      searchVariant="unified"
       searchCondition={searchCondition}
       nextPath={nextPath}
       searchParams={tableSearchParams}

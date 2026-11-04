@@ -27,6 +27,7 @@ function createItem(overrides: Partial<InstallationOrderListItem> = {}): Install
     id: "order-1",
     installationId: "order-1",
     erpOrderNo: "ONS20260605893",
+    orderNumber: "ONS20260605893",
     customerName: "홍길동",
     phone: "01012345678",
     sourceAddress: "경남 진주시 초전북로62번길 32 더하임403호",
@@ -184,6 +185,7 @@ describe("InstallationOrderList", () => {
           createItem({
             id: "order-1",
             erpOrderNo: "ONS20260605893",
+            orderNumber: "ONS20260605893",
             status: "CUSTOMER_INPUT_SMS_REQUIRED",
             customerRequest: null,
           }),
@@ -210,6 +212,7 @@ describe("InstallationOrderList", () => {
           createItem({
             id: "order-1",
             erpOrderNo: "ONS20260605893",
+            orderNumber: "ONS20260605893",
             status: "CUSTOMER_INPUT_SMS_REQUIRED",
             customerRequest: null,
           }),

@@ -33,6 +33,8 @@ export type InstallationAssignmentReviewItem = {
   createdAt: string;
   order: {
     erpOrderNo: string;
+    /** 화면에 보이는 주문번호(ERP 주문번호). 비어 있으면 출고번호로 대체. */
+    orderNumber: string;
     customerName: string | null;
     sourcePhone: string | null;
     sourceAddress: string | null;
@@ -174,12 +176,12 @@ export default function AssignmentReviewList({
       },
       {
         id: "erpOrderNo",
-        accessorFn: (row) => row.order.erpOrderNo,
+        accessorFn: (row) => row.order.orderNumber,
         header: "주문-주문번호",
         enableHiding: false,
         size: 150,
         minSize: 120,
-        cell: ({ row }) => <div className="font-semibold text-zinc-950">{row.original.order.erpOrderNo}</div>,
+        cell: ({ row }) => <div className="font-semibold text-zinc-950">{row.original.order.orderNumber}</div>,
         sortingFn: "alphanumeric",
       },
       {
@@ -416,7 +418,7 @@ export default function AssignmentReviewList({
                     />
                   </label>
                   <div className="min-w-0 flex-1">
-                    <div className="break-all text-base font-semibold text-zinc-950">{item.order.erpOrderNo}</div>
+                    <div className="break-all text-base font-semibold text-zinc-950">{item.order.orderNumber}</div>
                     <div className="mt-1 text-sm text-zinc-600">
                       {formatText(item.order.customerName)} · {formatText(item.order.sourcePhone)}
                     </div>

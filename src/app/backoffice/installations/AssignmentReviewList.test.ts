@@ -33,6 +33,7 @@ function createItem(overrides: Partial<InstallationAssignmentReviewItem> = {}): 
     createdAt: "2026-07-10T09:00:00.000Z",
     order: {
       erpOrderNo: "ISU20260700554",
+      orderNumber: "2026070112345678",
       customerName: "홍길동",
       sourcePhone: "01012345678",
       sourceAddress: "서울 서초구 강남대로53길 8",

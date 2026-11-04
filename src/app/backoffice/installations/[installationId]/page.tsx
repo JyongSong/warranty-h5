@@ -18,6 +18,9 @@ import { getInstallationOrderStatusDetail } from "@/lib/installation/orders/view
 import { getInstallationCompletionForOrder } from "@/lib/installation/completion/service";
 import InstallationOrderDetail, { type InstallationOrderDetailItem } from "./InstallationOrderDetail";
 import CompletionReviewPanel from "./CompletionReviewPanel";
+import ApprovedCompletionPanel from "./ApprovedCompletionPanel";
+import CustomerRequestEditPanel from "./CustomerRequestEditPanel";
+import { isCustomerRequestEditableByAdmin } from "@/lib/installation/customer/admin-edit";
 import PartnerAssignmentPanel from "./PartnerAssignmentPanel";
 import { getBackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
@@ -199,6 +202,29 @@ export async function renderInstallationOrderDetailPage({
   return (
     <>
       {partnerPanel ? <PartnerAssignmentPanel installationId={installationId} data={partnerPanel} /> : null}
+      {activeRequest && isCustomerRequestEditableByAdmin(order.status) ? (
+        <CustomerRequestEditPanel
+          // 저장 후 새로고침되면 폼 초기값도 새 값으로 바뀌어야 한다.
+          key={`${activeRequest.id}:${activeRequest.updatedAt.toISOString()}`}
+          orderId={installationId}
+          orderStatus={order.status}
+          initial={{
+            installAddress: activeRequest.installAddress ?? null,
+            installAddressDetail: activeRequest.installAddressDetail ?? null,
+            installDate: activeRequest.installDate ?? null,
+            installTimeSlot: activeRequest.installTimeSlot ?? null,
+            customerPhone: activeRequest.customerPhone ?? null,
+          }}
+        />
+      ) : null}
+      {completion && order.status === "COMPLETED" && completion.reviewStatus === "APPROVED" ? (
+        <ApprovedCompletionPanel
+          key={completion.submittedAt + (completion.reviewStatus ?? "")}
+          orderId={installationId}
+          completion={completion}
+          rates={settlementRates}
+        />
+      ) : null}
       {completion ? (
         <CompletionReviewPanel
           orderId={installationId}
