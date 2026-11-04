@@ -35,7 +35,10 @@ const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
 export type InstallationOrderListItem = {
   id: string;
   installationId: string;
+  /** 출고번호(NO_GIRL). 시스템 내부 식별용 source key. */
   erpOrderNo: string;
+  /** 화면에 보이는 주문번호(ERP 주문번호). 비어 있으면 출고번호로 대체. */
+  orderNumber: string;
   /** "SELF" = 자사 ERP, "CJ" = CJ 온스타일 공개 페이지 유입 */
   channel?: string;
   customerName: string | null;
@@ -106,7 +109,7 @@ const assignmentStatusLabels: Record<string, string> = {
 const SEARCH_FIELD_OPTIONS: Array<{ field: InstallationOrderSearchField; label: string }> = [
   { field: "orderDate", label: "주문일 범위" },
   { field: "desiredInstallDate", label: "설치희망일 범위" },
-  { field: "orderNumber", label: "주문번호" },
+  { field: "orderNumber", label: "주문번호/출고번호" },
   { field: "customerName", label: "고객이름" },
   { field: "customerPhone", label: "고객전화번호" },
   { field: "installerName", label: "기사이름" },
@@ -131,6 +134,7 @@ export default function InstallationOrderList({
   statusFilterItems,
   pagination,
   showSearchControls = true,
+  searchVariant = "fields",
   showStatusFilters = true,
   emptyMessage = "표시할 설치 주문이 없습니다.",
 }: {
@@ -145,6 +149,8 @@ export default function InstallationOrderList({
   statusFilterItems?: Array<{ statusView: InstallationOrderStatusView; label: string; count?: number; href?: string }>;
   pagination?: BackofficeTablePaginationModel;
   showSearchControls?: boolean;
+  /** "fields" = 검색 조건 선택형, "unified" = 입력칸 하나로 주문번호/출고번호/고객명/전화번호 통합 검색 */
+  searchVariant?: "fields" | "unified";
   showStatusFilters?: boolean;
   emptyMessage?: string;
 }) {
@@ -335,7 +341,8 @@ export default function InstallationOrderList({
       const orderNumberColumns: ColumnDef<InstallationOrderListItem>[] = [
         ...(showBulkSelectionControls ? [selectionColumn] : []),
         {
-          accessorKey: "erpOrderNo",
+          id: "erpOrderNo",
+          accessorKey: "orderNumber",
           header: "주문-주문번호",
           enableHiding: false,
           size: 150,
@@ -352,7 +359,7 @@ export default function InstallationOrderList({
                 aria-current={selectedInstallationId === row.original.id ? "page" : undefined}
                 className="truncate font-semibold text-blue-700 underline decoration-blue-200 underline-offset-2 transition hover:text-blue-900 hover:decoration-blue-500"
               >
-                {row.original.erpOrderNo}
+                {row.original.orderNumber}
               </Link>
             </div>
           ),
@@ -731,13 +738,21 @@ export default function InstallationOrderList({
                 <div className="@container">
                   <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
                     <div className="w-full min-w-0 flex-1">
-                      <InstallationOrderInlineSearchForm
-                        basePath={basePath}
-                        historyDateRange={historyDateRange}
-                        pageSize={pagination?.pageSize}
-                        searchCondition={searchCondition}
-                        statusView={statusView}
-                      />
+                      {searchVariant === "unified" ? (
+                        <InstallationOrderUnifiedSearchForm
+                          basePath={basePath}
+                          pageSize={pagination?.pageSize}
+                          searchQuery={searchQuery}
+                        />
+                      ) : (
+                        <InstallationOrderInlineSearchForm
+                          basePath={basePath}
+                          historyDateRange={historyDateRange}
+                          pageSize={pagination?.pageSize}
+                          searchCondition={searchCondition}
+                          statusView={statusView}
+                        />
+                      )}
                     </div>
                     <div className="self-end">{columnControls}</div>
                   </div>
@@ -774,6 +789,49 @@ export default function InstallationOrderList({
         {pagination ? <BackofficeTablePagination pagination={pagination} /> : null}
       </div>
     </section>
+  );
+}
+
+function InstallationOrderUnifiedSearchForm({
+  basePath,
+  pageSize,
+  searchQuery,
+}: {
+  basePath: string;
+  pageSize?: number;
+  searchQuery: string;
+}) {
+  return (
+    <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3">
+      <form
+        action={basePath}
+        method="get"
+        className="grid grid-cols-2 items-end gap-3 @3xl:grid-cols-[minmax(0,1fr)_auto_auto]"
+      >
+        {pageSize ? <input type="hidden" name="pageSize" value={pageSize} /> : null}
+        <label className="col-span-2 flex min-w-0 flex-col gap-1 @3xl:col-span-1">
+          <span className="text-xs font-semibold text-zinc-600">검색어</span>
+          <input
+            type="search"
+            name="q"
+            defaultValue={searchQuery}
+            placeholder="주문번호, 출고번호, 고객명, 전화번호"
+            required
+            autoFocus
+            className="h-9 rounded-md border border-zinc-300 px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950"
+          />
+        </label>
+        <button type="submit" className={`${getBackofficeButtonClass("primary")} w-full @3xl:w-auto`}>
+          검색
+        </button>
+        <Link href={basePath} className={`${getBackofficeButtonClass("secondary")} w-full @3xl:w-auto`}>
+          초기화
+        </Link>
+        <p className="col-span-2 text-xs leading-5 text-zinc-500 @3xl:col-span-3">
+          주문번호·출고번호는 일부만 입력해도 찾습니다. 고객명과 전화번호는 정확히 일치해야 합니다. 검색어가 없으면 최근 30일 주문을 보여줍니다.
+        </p>
+      </form>
+    </div>
   );
 }
 
@@ -890,7 +948,7 @@ function InstallationOrderInlineSearchForm({
           초기화
         </Link>
         <p className="col-span-2 text-xs leading-5 text-zinc-500 @3xl:col-span-4">
-          고객명과 고객전화번호는 정확히 일치해야 합니다. 주문번호는 ERP 주문번호, 외부 주문번호, NO_GIRL 일부 검색을 지원합니다.
+          고객명과 고객전화번호는 정확히 일치해야 합니다. 주문번호/출고번호는 일부만 입력해도 찾습니다.
         </p>
       </form>
     </div>
@@ -1103,7 +1161,7 @@ function getSearchKeywordPlaceholder(field: InstallationOrderSearchField) {
   const placeholders: Partial<Record<InstallationOrderSearchField, string>> = {
     customerName: "홍길동",
     customerPhone: "01012345678",
-    orderNumber: "ONS20260604942",
+    orderNumber: "2026110226770941 또는 ISU20261100270",
     installerName: "서울강남기사",
     installerPhone: "01012345678",
     installerDateRange: "기사이름 또는 전화번호",

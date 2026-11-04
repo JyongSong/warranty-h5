@@ -35,6 +35,7 @@ type InstallationOrderListViewProps = {
   statusFilterItems?: Array<{ statusView: InstallationOrderStatusView; label: string; href?: string }>;
   title?: string;
   showSearchControls?: boolean;
+  searchVariant?: "fields" | "unified";
   showStatusFilters?: boolean;
   requireSearchCondition?: boolean;
   emptyMessage?: string;
@@ -51,6 +52,7 @@ export async function InstallationOrderListView({
   statusFilterItems,
   title,
   showSearchControls,
+  searchVariant,
   showStatusFilters,
   requireSearchCondition = false,
   emptyMessage,
@@ -116,6 +118,7 @@ export async function InstallationOrderListView({
       id: order.id,
       installationId: order.id,
       erpOrderNo: order.sourceErpOrderNo,
+      orderNumber: order.sourceExternalOrderNumbers || order.sourceErpOrderNo,
       channel: order.sourceChannel,
       customerName: order.sourceCustomerName,
       phone: order.sourcePhone,
@@ -194,6 +197,7 @@ export async function InstallationOrderListView({
       statusView={statusView}
       title={title}
       showSearchControls={showSearchControls}
+      searchVariant={searchVariant}
       showStatusFilters={showStatusFilters}
       emptyMessage={emptyMessage}
       pagination={buildPaginationModel(basePath, searchParams, tableParams, totalItems, totalPages)}
@@ -222,6 +226,8 @@ export async function AssignmentReviewsView({ nextPath }: { nextPath: string }) 
       createdAt: assignment.createdAt.toISOString(),
       order: {
         erpOrderNo: assignment.installationOrder.sourceErpOrderNo,
+        orderNumber:
+          assignment.installationOrder.sourceExternalOrderNumbers || assignment.installationOrder.sourceErpOrderNo,
         customerName: assignment.installationOrder.sourceCustomerName,
         sourcePhone: assignment.installationOrder.sourcePhone,
         sourceAddress: assignment.installationOrder.sourceAddress,
