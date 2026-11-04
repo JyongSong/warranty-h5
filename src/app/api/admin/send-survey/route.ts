@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/error";
 
 export async function POST(req: Request) {
     try {
-        const { errorResponse } = await requireAdminApi(1);
+        const { errorResponse } = await requireAdminApi("edit");
         if (errorResponse) return errorResponse;
 
         const body = await req.json();

@@ -22,7 +22,13 @@ function getSidebarCollapsedSnapshot() {
   return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
 }
 
-export default function BackofficeDesktopSidebar({ userEmail }: { userEmail?: string }) {
+export default function BackofficeDesktopSidebar({
+  userEmail,
+  userLevel,
+}: {
+  userEmail?: string;
+  userLevel: number;
+}) {
   const collapsed = useSyncExternalStore(subscribeToSidebarState, getSidebarCollapsedSnapshot, () => false);
 
   function toggleCollapsed() {
@@ -75,7 +81,7 @@ export default function BackofficeDesktopSidebar({ userEmail }: { userEmail?: st
 
       </div>
 
-      <BackofficeSidebarNav id="backoffice-desktop-navigation" collapsed={collapsed} />
+      <BackofficeSidebarNav id="backoffice-desktop-navigation" collapsed={collapsed} level={userLevel} />
 
       {userEmail ? (
         <div

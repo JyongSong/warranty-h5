@@ -133,7 +133,7 @@ describe("POST /api/send-assignment-sms", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(requireAdminApiMock).toHaveBeenCalledWith(1);
+    expect(requireAdminApiMock).toHaveBeenCalledWith("edit");
     expect(sendMock).not.toHaveBeenCalled();
   });
 

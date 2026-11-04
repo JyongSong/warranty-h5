@@ -98,6 +98,13 @@ export default function BackofficeAuthClient() {
             로그인
           </LoadingButton>
         </form>
+
+        <p className="mt-5 text-center text-sm text-zinc-600">
+          계정이 없나요?{" "}
+          <a href="/signup" className="font-semibold text-zinc-950 underline underline-offset-2">
+            회원가입
+          </a>
+        </p>
       </div>
     </div>
   );

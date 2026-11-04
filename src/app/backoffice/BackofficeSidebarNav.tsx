@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { hasBackofficeAccess, type BackofficeAccess } from "@/lib/login/backofficeRoles";
 
 type MenuItem = {
   href: string;
@@ -25,6 +26,8 @@ type MenuItem = {
   subItems?: MenuItem[];
   // 백오피스 밖(별도 로그인) 화면. 새 탭으로 연다.
   external?: boolean;
+  // 이 메뉴를 보려면 필요한 권한. 기본은 view (승인된 모든 유저).
+  access?: BackofficeAccess;
 };
 
 const menuItems: MenuItem[] = [
@@ -62,6 +65,7 @@ const menuItems: MenuItem[] = [
     subItems: [
       {
         href: "/backoffice/as/register",
+        access: "edit",
         label: "A/S등록",
         icon: "as",
       },
@@ -89,11 +93,13 @@ const menuItems: MenuItem[] = [
       },
       {
         href: "/backoffice/installers/new",
+        access: "edit",
         label: "기사 추가",
         icon: "installer",
       },
       {
         href: "/backoffice/installers/profile-sms",
+        access: "edit",
         label: "기사 정보 확인 문자",
         icon: "installer",
       },
@@ -131,6 +137,7 @@ const menuItems: MenuItem[] = [
       },
       {
         href: "/backoffice/iot-pass/new",
+        access: "edit",
         label: "IoT Pass 추가",
         icon: "iot",
       },
@@ -150,6 +157,7 @@ const menuItems: MenuItem[] = [
   },
   {
     href: "/backoffice/registrations/cj-links",
+    access: "edit",
     label: "CJ 2년 등록 링크 문자",
     icon: "query",
   },
@@ -165,17 +173,24 @@ const menuItems: MenuItem[] = [
   },
   {
     href: "/backoffice/send-assignment-sms",
+    access: "edit",
     label: "설치 배정 SMS 임시",
     icon: "sms",
   },
   {
     href: "/backoffice/settings",
+    access: "settings",
     label: "설정",
     icon: "settings",
     subItems: [
       {
         href: "/backoffice/settings/users",
         label: "유저 관리",
+        icon: "settings",
+      },
+      {
+        href: "/backoffice/settings/audit-log",
+        label: "변경 이력",
         icon: "settings",
       },
       {
@@ -211,6 +226,14 @@ const menuItems: MenuItem[] = [
     ],
   },
 ];
+
+export function filterBackofficeMenuItems(items: MenuItem[], level: number): MenuItem[] {
+  return items
+    .filter((item) => hasBackofficeAccess(level, item.access ?? "view"))
+    .map((item) =>
+      item.subItems ? { ...item, subItems: filterBackofficeMenuItems(item.subItems, level) } : item,
+    );
+}
 
 export function isBackofficeMenuItemActive(pathname: string, href: string, searchParams?: URLSearchParams) {
   const normalizedPathname = pathname.split("?")[0] ?? pathname;
@@ -263,14 +286,17 @@ export default function BackofficeSidebarNav({
   className,
   collapsed = false,
   onNavigate,
+  level,
 }: {
   id?: string;
   className?: string;
   collapsed?: boolean;
   onNavigate?: () => void;
+  level: number;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const visibleMenuItems = filterBackofficeMenuItems(menuItems, level);
 
   return (
     <nav
@@ -283,7 +309,7 @@ export default function BackofficeSidebarNav({
       }
       aria-label="백오피스 메뉴"
     >
-      {menuItems.map((item) => (
+      {visibleMenuItems.map((item) => (
         <BackofficeSidebarNavItem
           key={item.href}
           item={item}

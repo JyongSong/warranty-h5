@@ -47,7 +47,7 @@ describe("POST /api/admin/send-survey", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(requireAdminApiMock).toHaveBeenCalledWith(1);
+    expect(requireAdminApiMock).toHaveBeenCalledWith("edit");
     expect(findUniqueMock).not.toHaveBeenCalled();
     expect(sendSmsMock).not.toHaveBeenCalled();
   });

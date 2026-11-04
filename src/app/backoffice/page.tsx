@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { canViewBackoffice } from "@/lib/login/backofficeRoles";
 
 export default async function HomePage() {
   const user = await getCurrentBackofficeUser();
-  const isLoggedIn = Boolean(user && user.level >= 1);
+  const isLoggedIn = Boolean(user && canViewBackoffice(user.level));
 
   return (
     <div className="min-h-screen">

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { requireBackofficeAction } from "@/lib/login/backofficeAuth";
+import { hasBackofficeAccess } from "@/lib/login/backofficeRoles";
+import { recordBackofficeAudit } from "@/lib/backoffice/audit";
 import {
   createBackofficeAuthUser,
   deleteBackofficeAuthUser,
@@ -15,7 +17,8 @@ import {
 } from "./actions";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/login/backofficeAuth", () => ({ getCurrentBackofficeUser: vi.fn() }));
+vi.mock("@/lib/login/backofficeAuth", () => ({ requireBackofficeAction: vi.fn() }));
+vi.mock("@/lib/backoffice/audit", () => ({ recordBackofficeAudit: vi.fn() }));
 vi.mock("@/lib/login/backofficeAuthAdmin", () => ({
   createBackofficeAuthUser: vi.fn(),
   deleteBackofficeAuthUser: vi.fn(),
@@ -25,8 +28,24 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { backofficeUser: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() } },
 }));
 
-const admin = { id: "admin-1", supabaseUserId: "supabase-admin", email: "admin@example.com", level: 1 };
-const getAdminMock = vi.mocked(getCurrentBackofficeUser);
+const admin = {
+  id: "admin-1",
+  supabaseUserId: "supabase-admin",
+  email: "admin@example.com",
+  name: "관리자",
+  level: 1,
+};
+let currentUser = admin;
+const requireActionMock = vi.mocked(requireBackofficeAction);
+const auditMock = vi.mocked(recordBackofficeAudit);
+const userRow = (overrides: Record<string, unknown> = {}) => ({
+  id: "user-1",
+  supabaseUserId: "supabase-user-1",
+  emailEncrypted: "plain-not-encrypted",
+  name: null,
+  level: 2,
+  ...overrides,
+});
 const createAuthMock = vi.mocked(createBackofficeAuthUser);
 const deleteAuthMock = vi.mocked(deleteBackofficeAuthUser);
 const resetAuthPasswordMock = vi.mocked(resetBackofficeAuthUserPassword);
@@ -38,7 +57,8 @@ const deleteMock = vi.mocked(prisma.backofficeUser.delete);
 function createForm() {
   const form = new FormData();
   form.set("email", "New.User@Example.COM");
-  form.set("level", "1");
+  form.set("level", "2");
+  form.set("name", "홍길동");
   form.set("password", "initial-password");
   form.set("confirmPassword", "initial-password");
   return form;
@@ -49,25 +69,35 @@ describe("backoffice user management actions", () => {
     vi.clearAllMocks();
     process.env.PII_ENCRYPTION_KEY = "current-pii-key";
     process.env.PII_HASH_KEY = "current-pii-hash-key";
-    getAdminMock.mockResolvedValue(admin);
+    currentUser = admin;
+    requireActionMock.mockImplementation(async (access = "edit") =>
+      hasBackofficeAccess(currentUser.level, access)
+        ? { ok: true, user: currentUser }
+        : { ok: false, error: "FORBIDDEN" },
+    );
     deleteAuthMock.mockResolvedValue(undefined);
   });
 
   it("creates the Supabase account and app user together", async () => {
     createAuthMock.mockResolvedValue({ supabaseUserId: "supabase-user-1" });
-    createMock.mockResolvedValue({ id: "user-1" } as never);
+    createMock.mockResolvedValue(userRow({ name: "홍길동" }) as never);
 
     await expect(createBackofficeUserAction(createForm())).resolves.toEqual({ ok: true, id: "user-1" });
+    expect(requireActionMock).toHaveBeenCalledWith("settings");
     expect(createAuthMock).toHaveBeenCalledWith("new.user@example.com", "initial-password");
     expect(createMock).toHaveBeenCalledWith({
       data: {
         supabaseUserId: "supabase-user-1",
         emailEncrypted: expect.stringMatching(/^enc:v1:/),
         emailHash: expect.any(String),
-        level: 1,
+        name: "홍길동",
+        level: 2,
       },
-      select: { id: true },
+      select: expect.objectContaining({ id: true, level: true }),
     });
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: "backoffice_user", action: "create", actor: admin }),
+    );
     expect(revalidatePath).toHaveBeenCalledWith("/backoffice/settings/users");
   });
 
@@ -94,22 +124,57 @@ describe("backoffice user management actions", () => {
     expect(deleteAuthMock).toHaveBeenCalledWith("supabase-user-1");
   });
 
-  it("updates a user's level", async () => {
-    updateMock.mockResolvedValue({ id: "user-1" } as never);
+  it("updates a user's level and name", async () => {
+    findUniqueMock.mockResolvedValue(userRow() as never);
+    updateMock.mockResolvedValue(userRow({ level: 3, name: "김조회" }) as never);
     const form = new FormData();
     form.set("id", "user-1");
-    form.set("level", "0");
+    form.set("level", "3");
+    form.set("name", " 김조회 ");
 
     await expect(updateBackofficeUserAction(form)).resolves.toEqual({ ok: true, id: "user-1" });
     expect(updateMock).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { level: 0 },
-      select: { id: true },
+      data: { level: 3, name: "김조회" },
+      select: expect.objectContaining({ id: true }),
+    });
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: "update" }));
+  });
+
+  it("records approval when a pending signup gets a level", async () => {
+    findUniqueMock.mockResolvedValue(userRow({ level: 0 }) as never);
+    updateMock.mockResolvedValue(userRow({ level: 2, name: "신규" }) as never);
+    const form = new FormData();
+    form.set("id", "user-1");
+    form.set("level", "2");
+    form.set("name", "신규");
+
+    await expect(updateBackofficeUserAction(form)).resolves.toEqual({ ok: true, id: "user-1" });
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: "approve" }));
+  });
+
+  it("rejects levels outside 1-3", async () => {
+    const form = new FormData();
+    form.set("id", "user-1");
+    form.set("level", "0");
+
+    await expect(updateBackofficeUserAction(form)).resolves.toEqual({ ok: false, error: "LEVEL_INVALID" });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("does not let the current super admin lower their own level", async () => {
+    const form = new FormData();
+    form.set("id", "admin-1");
+    form.set("level", "2");
+
+    await expect(updateBackofficeUserAction(form)).resolves.toEqual({
+      ok: false,
+      error: "SELF_LEVEL_DOWN_NOT_ALLOWED",
     });
   });
 
   it("resets a connected user's password", async () => {
-    findUniqueMock.mockResolvedValue({ id: "user-1", supabaseUserId: "supabase-user-1" } as never);
+    findUniqueMock.mockResolvedValue(userRow() as never);
     resetAuthPasswordMock.mockResolvedValue(undefined);
     const form = new FormData();
     form.set("id", "user-1");
@@ -121,7 +186,7 @@ describe("backoffice user management actions", () => {
   });
 
   it("blocks app access before deleting the Auth account and app row", async () => {
-    findUniqueMock.mockResolvedValue({ id: "user-1", supabaseUserId: "supabase-user-1" } as never);
+    findUniqueMock.mockResolvedValue(userRow() as never);
     updateMock.mockResolvedValue({ id: "user-1" } as never);
     deleteAuthMock.mockResolvedValue(undefined);
     deleteMock.mockResolvedValue({ id: "user-1" } as never);
@@ -144,8 +209,8 @@ describe("backoffice user management actions", () => {
     });
   });
 
-  it("rejects writes from level-zero users", async () => {
-    getAdminMock.mockResolvedValue({ ...admin, level: 0 });
+  it.each([0, 2, 3])("rejects user management from level %i", async (level) => {
+    currentUser = { ...admin, level };
 
     await expect(createBackofficeUserAction(createForm())).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
     expect(createAuthMock).not.toHaveBeenCalled();

@@ -21,7 +21,7 @@ export type SyncInstallerCoordinatesResult =
   | { ok: false; error: string };
 
 export async function searchNearestInstallersAction(address: string): Promise<SearchNearestInstallersResult> {
-  const { errorResponse } = await requireAdminApi(0);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
   if (!address.trim()) return { ok: false, error: "ADDRESS_REQUIRED" };
 
@@ -41,7 +41,7 @@ export async function searchNearestInstallersAction(address: string): Promise<Se
 }
 
 export async function syncInstallerCoordinatesAction(): Promise<SyncInstallerCoordinatesResult> {
-  const { errorResponse } = await requireAdminApi(1);
+  const { errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   try {

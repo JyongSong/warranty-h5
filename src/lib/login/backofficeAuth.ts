@@ -10,11 +10,19 @@ import {
   isPiiHashConfigured,
   normalizeEmailForHash,
 } from "@/lib/piiCrypto";
+import {
+  BACKOFFICE_LEVEL,
+  BACKOFFICE_READ_ONLY_ERROR,
+  hasBackofficeAccess,
+  type BackofficeAccess,
+} from "@/lib/login/backofficeRoles";
 
 export type BackofficeAuthUser = {
   id: string;
   supabaseUserId: string;
   email: string;
+  // 승인 때 최고 관리자가 붙여 준 이름. 없을 수 있다.
+  name?: string | null;
   level: number;
 };
 
@@ -122,6 +130,7 @@ export async function signInBackofficeWithPassword(
     id: true,
     supabaseUserId: true,
     emailEncrypted: true,
+    name: true,
     level: true,
   } as const;
 
@@ -157,6 +166,7 @@ export async function signInBackofficeWithPassword(
     id: user.id,
     supabaseUserId,
     email: decryptPii(user.emailEncrypted),
+    name: user.name,
     level: user.level,
   };
 }
@@ -215,6 +225,7 @@ async function linkBackofficeUserForSupabaseSignIn({
     id: true;
     supabaseUserId: true;
     emailEncrypted: true;
+    name: true;
     level: true;
   };
 }) {
@@ -256,6 +267,7 @@ export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | n
       id: true,
       supabaseUserId: true,
       emailEncrypted: true,
+      name: true,
       level: true,
     },
   });
@@ -268,7 +280,8 @@ export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | n
       id: user.id,
       supabaseUserId: data.user.id,
       email,
-      level: user.level,
+      name: user.name,
+    level: user.level,
     };
   }
 
@@ -289,13 +302,16 @@ export async function getCurrentBackofficeUser(): Promise<BackofficeAuthUser | n
     id: user.id,
     supabaseUserId: data.user.id,
     email: supabaseEmail,
+    name: user.name,
     level: user.level,
   };
 }
 
+export const BACKOFFICE_PENDING_PATH = "/signup/pending";
+
 export async function requireBackofficeUserPage(
   nextPath: string,
-  minLevel = 1,
+  access: BackofficeAccess = "view",
 ): Promise<BackofficeAuthUser> {
   const user = await getCurrentBackofficeUser();
 
@@ -303,9 +319,31 @@ export async function requireBackofficeUserPage(
     redirect(`/login?redirect_url=${encodeURIComponent(nextPath)}`);
   }
 
-  if (user.level < minLevel) {
+  if (user.level === BACKOFFICE_LEVEL.PENDING) {
+    redirect(BACKOFFICE_PENDING_PATH);
+  }
+
+  if (!hasBackofficeAccess(user.level, access)) {
     notFound();
   }
 
   return user;
+}
+
+export type BackofficeActionAuth =
+  | { ok: true; user: BackofficeAuthUser }
+  | { ok: false; error: string };
+
+// 서버 액션용. 화면에서 버튼을 숨겨도 직접 호출은 막아야 하므로 모든 쓰기 액션이
+// 이걸 거친다. 조회 전용 계정에는 FORBIDDEN 대신 안내 문구를 돌려준다.
+export async function requireBackofficeAction(
+  access: BackofficeAccess = "edit",
+): Promise<BackofficeActionAuth> {
+  const user = await getCurrentBackofficeUser();
+  if (!user) return { ok: false, error: "UNAUTHORIZED" };
+  if (hasBackofficeAccess(user.level, access)) return { ok: true, user };
+  if (access === "edit" && hasBackofficeAccess(user.level, "view")) {
+    return { ok: false, error: BACKOFFICE_READ_ONLY_ERROR };
+  }
+  return { ok: false, error: "FORBIDDEN" };
 }

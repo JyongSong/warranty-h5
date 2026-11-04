@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { canManageBackofficeSettings } from "@/lib/login/backofficeRoles";
 import { parseAsHistoryWorkbook } from "@/lib/backoffice/as-history-import";
 import { saveAsInstallHistory } from "@/lib/backoffice/as-history-store";
 import { initialAsHistoryImportState, type AsHistoryImportState } from "./state";
@@ -14,7 +15,7 @@ export async function importAsHistoryAction(
 ): Promise<AsHistoryImportState> {
   const user = await getCurrentBackofficeUser();
   if (!user) return failure("UNAUTHORIZED");
-  if (user.level < 1) return failure("FORBIDDEN");
+  if (!canManageBackofficeSettings(user.level)) return failure("FORBIDDEN");
 
   const file = formData.get("file");
   if (!isFileLike(file) || file.size === 0) return failure("FILE_REQUIRED");

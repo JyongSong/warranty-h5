@@ -118,7 +118,7 @@ describe("getInstallationOrderStatusDetail", () => {
     );
     expect(findBackofficeUsers).toHaveBeenCalledWith({
       where: { id: { in: ["admin-1"] } },
-      select: { id: true, emailEncrypted: true },
+      select: { id: true, emailEncrypted: true, name: true },
     });
     expect(findInstallers).toHaveBeenCalledWith({
       where: { id: { in: ["installer-1"] } },

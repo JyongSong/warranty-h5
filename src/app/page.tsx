@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { getCurrentBackofficeUser } from "@/lib/login/backofficeAuth";
+import { canViewBackoffice } from "@/lib/login/backofficeRoles";
 import HomeUserMenu from "./HomeUserMenu";
 
 export default async function HomePage() {
   const user = await getCurrentBackofficeUser();
-  const isLoggedIn = Boolean(user && user.level >= 1);
+  const isLoggedIn = Boolean(user && canViewBackoffice(user.level));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-white">

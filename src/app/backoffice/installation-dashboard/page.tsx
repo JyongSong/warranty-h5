@@ -11,7 +11,7 @@ type DailyTrendItem = BackofficeDashboardChartSummary["dailyTrend"][number];
 type QueueStatusItem = BackofficeDashboardChartSummary["queueStatusItems"][number];
 
 export default async function BackofficePage() {
-  await requireBackofficeUserPage("/backoffice", 1);
+  await requireBackofficeUserPage("/backoffice");
   const [chartSummary, systemSummary] = await Promise.all([
     getBackofficeDashboardChartSummary({ days: 14 }),
     getBackofficeSystemStatusSummary(),

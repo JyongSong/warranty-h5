@@ -3,11 +3,12 @@ import { getErrorMessage } from "@/lib/error";
 import { normalizePhone } from "@/lib/phone";
 import { parseInstallerPayload } from "@/lib/installer";
 import { requireAdminApi } from "@/lib/adminAuth";
+import { recordBackofficeAudit, toBackofficeAuditActor } from "@/lib/backoffice/audit";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { errorResponse } = await requireAdminApi("view");
     if (errorResponse) return errorResponse;
 
     const { searchParams } = new URL(req.url);
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { admin, errorResponse } = await requireAdminApi("edit");
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
@@ -77,6 +78,14 @@ export async function POST(req: Request) {
 
     const item = await prisma.installer.create({
       data,
+    });
+    await recordBackofficeAudit({
+      actor: toBackofficeAuditActor(admin),
+      entityType: "installer",
+      entityId: item.id,
+      entityLabel: item.name,
+      action: "create",
+      after: item,
     });
 
     return NextResponse.json({ ok: true, item });

@@ -6,7 +6,7 @@ import AsHistoryImportForm from "./AsHistoryImportForm";
 export const dynamic = "force-dynamic";
 
 export default async function BackofficeAsHistoryImportPage() {
-  await requireBackofficeUserPage("/backoffice/settings/data-import/as-history", 1);
+  await requireBackofficeUserPage("/backoffice/settings/data-import/as-history", "settings");
   const storedCount = await prisma.asInstallHistory.count();
 
   return (

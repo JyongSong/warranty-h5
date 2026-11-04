@@ -59,7 +59,6 @@ export async function renderInstallationOrderDetailPage({
       `${basePath}/${installationId}`,
       searchParams,
     ),
-    1,
   );
 
   const order = await getInstallationOrderStatusDetail(installationId);

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/adminAuth";
+import { recordBackofficeAudit, toBackofficeAuditActor } from "@/lib/backoffice/audit";
 import { getErrorMessage } from "@/lib/error";
 import { normalizeIotPassSn, parseIotPassPayload, serializeIotPass } from "@/lib/iotPass";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { errorResponse } = await requireAdminApi("view");
     if (errorResponse) return errorResponse;
 
     const { searchParams } = new URL(req.url);
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { errorResponse } = await requireAdminApi(1);
+    const { admin, errorResponse } = await requireAdminApi("edit");
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
@@ -69,6 +70,14 @@ export async function POST(req: Request) {
     }
 
     const item = await prisma.device_feature_upgrades.create({ data });
+    await recordBackofficeAudit({
+      actor: toBackofficeAuditActor(admin),
+      entityType: "iot_pass",
+      entityId: item.id,
+      entityLabel: item.sn,
+      action: "create",
+      after: item,
+    });
 
     return NextResponse.json({ ok: true, item: serializeIotPass(item, null) });
   } catch (error: unknown) {

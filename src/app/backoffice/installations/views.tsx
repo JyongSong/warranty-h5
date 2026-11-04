@@ -57,7 +57,7 @@ export async function InstallationOrderListView({
   requireSearchCondition = false,
   emptyMessage,
 }: InstallationOrderListViewProps) {
-  await requireBackofficeUserPage(nextPath ?? buildBackofficeNextPath(basePath, searchParams), 1);
+  await requireBackofficeUserPage(nextPath ?? buildBackofficeNextPath(basePath, searchParams));
 
   const tableParams = normalizeBackofficeTableParams(searchParams);
   const statusChangedAtRange = historyDateRange ? toStatusChangedAtRange(historyDateRange) : {};
@@ -206,7 +206,7 @@ export async function InstallationOrderListView({
 }
 
 export async function AssignmentReviewsView({ nextPath }: { nextPath: string }) {
-  await requireBackofficeUserPage(nextPath, 1);
+  await requireBackofficeUserPage(nextPath);
 
   const assignments = await listActiveInstallerRequestAssignments();
 

@@ -62,7 +62,7 @@ export async function getAssignmentDistanceAction(
   orderId: string,
   installerId: string,
 ): Promise<AssignmentDistanceResult> {
-  const { errorResponse } = await requireAdminApi(0);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   try {
@@ -95,7 +95,7 @@ export async function getAssignmentDistanceAction(
 }
 
 export async function getOrderInstallerDistancesAction(orderId: string): Promise<OrderInstallerDistancesResult> {
-  const { errorResponse } = await requireAdminApi(0);
+  const { errorResponse } = await requireAdminApi("view");
   if (errorResponse) return { ok: false, error: "UNAUTHORIZED" };
 
   try {

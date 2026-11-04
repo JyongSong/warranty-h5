@@ -164,7 +164,7 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
     adminActorIds.length > 0
       ? prisma.backofficeUser.findMany({
           where: { id: { in: adminActorIds } },
-          select: { id: true, emailEncrypted: true },
+          select: { id: true, emailEncrypted: true, name: true },
         })
       : [],
     installerActorIds.length > 0
@@ -174,8 +174,13 @@ export async function getInstallationOrderStatusDetail(orderId: string) {
         })
       : [],
   ]);
+  // 승인 때 붙인 이름이 있으면 "이름 (이메일)" 로 보여 준다.
   const adminEmailById = new Map(
-    adminActors.map((actor) => [actor.id, decryptNullablePii(actor.emailEncrypted)]),
+    adminActors.map((actor) => {
+      const email = decryptNullablePii(actor.emailEncrypted);
+      const name = actor.name?.trim();
+      return [actor.id, name ? `${name} (${email ?? "-"})` : email];
+    }),
   );
   const installerById = new Map(installerActors.map((actor) => [actor.id, actor]));
 

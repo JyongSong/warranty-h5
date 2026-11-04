@@ -6,7 +6,7 @@ import SystemSettingsEditor from "./SystemSettingsEditor";
 export const dynamic = "force-dynamic";
 
 export default async function SystemSettingsPage() {
-  await requireBackofficeUserPage("/backoffice/settings/system-settings", 1);
+  await requireBackofficeUserPage("/backoffice/settings/system-settings", "settings");
   const settings = await listSystemSettings();
 
   return (

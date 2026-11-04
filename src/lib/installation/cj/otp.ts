@@ -41,7 +41,11 @@ function generateVerifiedToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
-export async function sendCustomerOtp(rawPhone: string): Promise<{ ok: true }> {
+// smsPrefix: 같은 인증 테이블을 백오피스 회원가입도 쓰므로 문자 머리말만 바꿔 보낸다.
+export async function sendCustomerOtp(
+  rawPhone: string,
+  smsPrefix = "[Aqara 설치]",
+): Promise<{ ok: true }> {
   const phone = normalizePhone(rawPhone);
   if (!isKoreanMobileNumber(phone)) {
     throw new CustomerOtpError("INVALID_PHONE");
@@ -81,7 +85,7 @@ export async function sendCustomerOtp(rawPhone: string): Promise<{ ok: true }> {
     },
   });
 
-  await sendSms(phone, `[Aqara 설치] 인증번호 ${code} (5분 이내 입력)`);
+  await sendSms(phone, `${smsPrefix} 인증번호 ${code} (5분 이내 입력)`);
   return { ok: true };
 }
 

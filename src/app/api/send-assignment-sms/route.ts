@@ -59,7 +59,7 @@ function normalizeKr(input: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const { admin, errorResponse } = await requireAdminApi(1);
+  const { admin, errorResponse } = await requireAdminApi("edit");
   if (errorResponse) return errorResponse;
 
   try {

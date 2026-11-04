@@ -7,7 +7,7 @@ import BackofficePageHeader from "../../BackofficePageHeader";
 import JsonEntityBrowser from "./JsonEntityBrowser";
 
 export default async function JsonEntitiesPage() {
-  await requireBackofficeUserPage("/backoffice/settings/json-entities", 1);
+  await requireBackofficeUserPage("/backoffice/settings/json-entities", "settings");
   const entities = getBackofficeJsonEntities().map(({ value, ...entity }) => ({
     ...entity,
     display: buildJsonEntityDisplay(value),

@@ -1,3 +1,4 @@
+import { canEditBackoffice } from "@/lib/login/backofficeRoles";
 import { requireAdminPage } from "@/lib/adminAuth";
 import {
   listActiveInstallerLocations,
@@ -14,7 +15,7 @@ export default async function BackofficeInstallerMapPage() {
 
   return (
     <InstallerMapClient
-      canSyncCoordinates={admin.level >= 1}
+      canSyncCoordinates={canEditBackoffice(admin.level)}
       markers={installers.flatMap((installer) =>
         installer.point
           ? [

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import BackofficeFormSubmitButton from "../../BackofficeFormSubmitButton";
+import { BackofficeLevelSelect } from "./BackofficeLevelSelect";
 
 type BackofficeUserCreateDialogProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -49,11 +50,11 @@ export function BackofficeUserCreateDialog({ action }: BackofficeUserCreateDialo
                   유저 추가
                 </h2>
                 <p id="create-user-dialog-description" className="mt-1 text-sm text-slate-600">
-                  이메일, 초기 권한과 로그인 비밀번호를 입력해 주세요.
+                  이메일, 이름, 등급과 로그인 비밀번호를 입력해 주세요.
                 </p>
               </div>
 
-              <div className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_7rem]">
+              <div className="grid gap-4 px-5 py-5">
                 <label className="grid gap-2">
                   <span className="text-sm font-medium text-slate-700">이메일</span>
                   <input
@@ -67,18 +68,18 @@ export function BackofficeUserCreateDialog({ action }: BackofficeUserCreateDialo
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-sm font-medium text-slate-700">레벨</span>
+                  <span className="text-sm font-medium text-slate-700">이름</span>
                   <input
-                    name="level"
-                    type="number"
-                    min="0"
-                    step="1"
+                    name="name"
+                    type="text"
                     required
-                    defaultValue="1"
-                    className="h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    maxLength={50}
+                    placeholder="홍길동"
+                    className="h-11 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   />
                 </label>
-                <label className="grid gap-2 sm:col-span-2">
+                <BackofficeLevelSelect defaultValue="2" />
+                <label className="grid gap-2">
                   <span className="text-sm font-medium text-slate-700">초기 비밀번호</span>
                   <input
                     name="password"
@@ -88,7 +89,7 @@ export function BackofficeUserCreateDialog({ action }: BackofficeUserCreateDialo
                     className="h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   />
                 </label>
-                <label className="grid gap-2 sm:col-span-2">
+                <label className="grid gap-2">
                   <span className="text-sm font-medium text-slate-700">초기 비밀번호 확인</span>
                   <input
                     name="confirmPassword"

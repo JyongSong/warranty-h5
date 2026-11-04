@@ -1,3 +1,4 @@
+import { canEditBackoffice } from "@/lib/login/backofficeRoles";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/adminAuth";
 import BackofficePageHeader from "../../BackofficePageHeader";
@@ -6,7 +7,7 @@ import IotPassForm from "../IotPassForm";
 
 export default async function BackofficeIotPassCreatePage() {
   // 생성 API(POST /api/iot-pass)가 등급 1 을 요구한다.
-  const admin = await requireAdminPage("/backoffice/iot-pass/new", 1);
+  const admin = await requireAdminPage("/backoffice/iot-pass/new", "edit");
 
   return (
     <div>
@@ -18,7 +19,7 @@ export default async function BackofficeIotPassCreatePage() {
           </Link>
         }
       />
-      <IotPassForm item={null} canManage={admin.level >= 1} />
+      <IotPassForm item={null} canManage={canEditBackoffice(admin.level)} />
     </div>
   );
 }

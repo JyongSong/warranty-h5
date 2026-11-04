@@ -9,7 +9,7 @@ import DataImportForm from "../DataImportForm";
 export const dynamic = "force-dynamic";
 
 export default async function BackofficeInstallerDataImportPage() {
-  await requireBackofficeUserPage("/backoffice/settings/data-import/installers", 1);
+  await requireBackofficeUserPage("/backoffice/settings/data-import/installers", "settings");
   const columnMapEntity = getDataImportColumnMapEntity();
 
   return (
