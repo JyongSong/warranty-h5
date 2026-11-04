@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireInstallerPage } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
 import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
+import { listWallpadModelNames } from "@/lib/installation/wallpad/service";
 import CompleteClient from "./CompleteClient";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,10 @@ export default async function InstallerCompletePage({
   if (!view) notFound();
   if (view.status !== "ACCEPTED") redirect(`/installer/orders/${orderId}`);
 
-  const { rates } = await resolveInstallerRates(installer.id);
+  const [{ rates }, wallpadModels] = await Promise.all([
+    resolveInstallerRates(installer.id),
+    listWallpadModelNames(),
+  ]);
 
   return (
     <CompleteClient
@@ -26,6 +30,7 @@ export default async function InstallerCompletePage({
       address={view.address ?? ""}
       linkageAppFee={rates.linkageAppFee}
       linkageHubFee={rates.linkageHubFee}
+      wallpadModels={wallpadModels}
     />
   );
 }

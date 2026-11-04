@@ -115,6 +115,11 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
+    href: "/backoffice/wallpad-compat",
+    label: "월패드 호환 (RF447)",
+    icon: "query",
+  },
+  {
     href: "/backoffice/iot-pass",
     label: "IoT Pass 관리",
     icon: "iot",

@@ -13,6 +13,14 @@ import ConfirmAmountDialog, { type AmountLine } from "../../../ConfirmAmountDial
 import { previewInstallSettlementAction, type SettlementPreview } from "./actions";
 import PhotoPicker from "../../../PhotoPicker";
 import LinkageGuideDialog, { type LinkageCapability } from "./LinkageGuideDialog";
+import {
+  WALLPAD_BRANDS,
+  WALLPAD_FAIL_REASONS,
+  WALLPAD_FAIL_REASON_LABEL,
+  WALLPAD_MODEL_MAX_LENGTH,
+  WALLPAD_NOTE_MAX_LENGTH,
+  type WallpadResult,
+} from "@/lib/installation/wallpad/constants";
 import * as ui from "../../../ui";
 
 const CAPABILITIES = [
@@ -20,6 +28,12 @@ const CAPABILITIES = [
   { value: "DOORLOCK_AND_APP", label: "APP 연동" },
   { value: "DOORLOCK_AND_APP_AND_HUB", label: "허브 연동 (APP 포함)" },
 ] as const;
+
+const WALLPAD_OPTIONS: Array<{ value: WallpadResult; label: string }> = [
+  { value: "NOT_ATTEMPTED", label: "연동 안 함" },
+  { value: "SUCCESS", label: "연동 성공 (현장 결제)" },
+  { value: "FAIL", label: "시도했지만 실패" },
+];
 
 // 장거리 구간. 기사 등록 주소와 고객 설치 주소 사이의 거리로 고른다.
 const LONG_DISTANCE_OPTIONS = [
@@ -40,6 +54,11 @@ const ERR: Record<string, string> = {
   LINKAGE_PHOTO_REQUIRED: "앱/허브 연동 화면 사진을 1장 이상 첨부해 주세요.",
   LINKAGE_PHOTO_COUNT_INVALID: "연동 화면 사진은 최대 4장까지 첨부할 수 있습니다.",
   WALLPAD_PHOTO_COUNT_INVALID: "월패드 사진은 최대 4장까지 첨부할 수 있습니다.",
+  WALLPAD_RESULT_INVALID: "월패드 연동 항목을 확인해 주세요.",
+  WALLPAD_BRAND_INVALID: "월패드 제조사를 다시 골라 주세요.",
+  WALLPAD_FAIL_REASON_INVALID: "월패드 연동 실패 사유를 다시 골라 주세요.",
+  WALLPAD_MODEL_TOO_LONG: "월패드 모델명이 너무 깁니다.",
+  WALLPAD_NOTE_TOO_LONG: "월패드 메모는 500자 이내로 입력해 주세요.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
@@ -50,6 +69,7 @@ export default function CompleteClient({
   address,
   linkageAppFee,
   linkageHubFee,
+  wallpadModels,
 }: {
   orderId: string;
   erpOrderNo: string;
@@ -57,10 +77,16 @@ export default function CompleteClient({
   /** 이 기사에게 적용되는 연동비. 선택지 옆에 그대로 보여 준다. */
   linkageAppFee: number;
   linkageHubFee: number;
+  /** 월패드 모델명 자동완성 목록(호환 DB). 비어 있어도 직접 입력할 수 있다. */
+  wallpadModels: Array<{ brand: string; model: string }>;
 }) {
   const router = useRouter();
   const [capability, setCapability] = useState<string>("NONE");
-  const [wallpadLinked, setWallpadLinked] = useState(false);
+  const [wallpadResult, setWallpadResult] = useState<WallpadResult>("NOT_ATTEMPTED");
+  const [wallpadBrand, setWallpadBrand] = useState("");
+  const [wallpadModel, setWallpadModel] = useState("");
+  const [wallpadFailReason, setWallpadFailReason] = useState("");
+  const [wallpadNote, setWallpadNote] = useState("");
   const [wallpadAmount, setWallpadAmount] = useState("");
   const [longDistanceAmount, setLongDistanceAmount] = useState(0);
   const [extraClaimAmount, setExtraClaimAmount] = useState("");
@@ -90,6 +116,12 @@ export default function CompleteClient({
   // 연동을 골랐으면 연동 화면 사진이 있어야 넘어간다. 연동비 승인의 근거다.
   const linked = capability !== "NONE";
   const linkagePhotoMissing = linked && linkagePhotos.length === 0;
+  // 월패드는 실패도 남긴다. 제조사·모델·사유는 모를 수 있어 모두 선택이다.
+  const wallpadLinked = wallpadResult === "SUCCESS";
+  const wallpadAttempted = wallpadResult !== "NOT_ATTEMPTED";
+  const wallpadModelOptions = wallpadModels.filter(
+    (m) => !wallpadBrand || !WALLPAD_BRANDS.includes(m.brand as never) || m.brand === wallpadBrand,
+  );
   const canGoToPhotos = !extraClaimReasonMissing && !linkagePhotoMissing && !busy && !compressing;
   const canSubmit = photos.length >= 1 && photos.length <= 4 && canGoToPhotos;
 
@@ -147,7 +179,7 @@ export default function CompleteClient({
           capability,
           longDistanceAmount: longDistanceAmount > 0 ? longDistanceAmount : null,
           extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
-          wallpadAmount: toNumberOrNull(wallpadAmount),
+          wallpadAmount: wallpadLinked ? toNumberOrNull(wallpadAmount) : null,
         });
 
     setPreview(result);
@@ -164,7 +196,13 @@ export default function CompleteClient({
       orderId,
       capability,
       wallpadLinked,
-      wallpadAmount: amount ? Number(amount) : null,
+      // 현장 금액은 연동에 성공했을 때만 보낸다.
+      wallpadAmount: wallpadLinked && amount ? Number(amount) : null,
+      wallpadResult,
+      wallpadBrand: wallpadAttempted ? wallpadBrand || null : null,
+      wallpadModel: wallpadAttempted ? wallpadModel.trim() || null : null,
+      wallpadFailReason: wallpadResult === "FAIL" ? wallpadFailReason || null : null,
+      wallpadNote: wallpadAttempted ? wallpadNote.trim() || null : null,
       longDistanceAmount: longDistanceAmount > 0 ? longDistanceAmount : null,
       // 금액이 없으면 사유·증빙도 보내지 않는다. 적다 만 내용이 딸려 가지 않게.
       extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
@@ -172,7 +210,7 @@ export default function CompleteClient({
       extraClaimPhotos: hasExtraClaim ? extraClaimPhotos : [],
       // 고르지 않은 항목의 사진은 보내지 않는다(서버도 버린다).
       linkagePhotos: linked ? linkagePhotos : [],
-      wallpadPhotos: wallpadLinked ? wallpadPhotos : [],
+      wallpadPhotos: wallpadAttempted ? wallpadPhotos : [],
       // 설치 종료 시각 = 지금 제출을 누른 시각. 오프라인 대기열에 들어가도
       // 나중에 전송된 시각이 아니라 이 시각이 남는다.
       installEndAt: new Date().toISOString(),
@@ -264,26 +302,87 @@ export default function CompleteClient({
             </div>
 
             <div style={ui.card}>
-              <label style={checkRow}>
-                <input
-                  type="checkbox"
-                  checked={wallpadLinked}
-                  onChange={(e) => setWallpadLinked(e.target.checked)}
-                />
-                <span>월패드 연동함 (현장 결제)</span>
-              </label>
-              {wallpadLinked ? (
+              <div style={ui.label}>월패드 연동</div>
+              {WALLPAD_OPTIONS.map((o) => (
+                <label key={o.value} style={radioRow}>
+                  <input
+                    type="radio"
+                    name="wallpadResult"
+                    checked={wallpadResult === o.value}
+                    onChange={() => setWallpadResult(o.value)}
+                  />
+                  <span style={optionLabel}>{o.label}</span>
+                </label>
+              ))}
+              {wallpadAttempted ? (
                 <>
-                  <div style={{ marginTop: 10 }}>
-                    <MoneyInput
-                      value={wallpadAmount}
-                      onChange={setWallpadAmount}
-                      placeholder="현장 금액 (선택)"
-                    />
+                  <div style={{ ...helpText, margin: "6px 0 10px" }}>
+                    {wallpadResult === "FAIL"
+                      ? "안 되는 단지·모델을 모으는 자료입니다. 실패해도 꼭 남겨 주세요. 정산에는 영향이 없습니다."
+                      : "어느 단지·모델에서 되는지 모으는 자료입니다."}
                   </div>
+                  <select
+                    style={ui.input}
+                    value={wallpadBrand}
+                    onChange={(e) => setWallpadBrand(e.target.value)}
+                  >
+                    <option value="">월패드 제조사 (선택)</option>
+                    {WALLPAD_BRANDS.map((brand) => (
+                      <option key={brand} value={brand}>
+                        {brand}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    style={{ ...ui.input, marginTop: 10 }}
+                    value={wallpadModel}
+                    onChange={(e) => setWallpadModel(e.target.value)}
+                    maxLength={WALLPAD_MODEL_MAX_LENGTH}
+                    list="wallpad-model-options"
+                    autoCapitalize="characters"
+                    placeholder="모델명 (선택, 예: KHN-Q100LT)"
+                  />
+                  <datalist id="wallpad-model-options">
+                    {wallpadModelOptions.map((m) => (
+                      <option key={`${m.brand}-${m.model}`} value={m.model}>
+                        {m.brand}
+                      </option>
+                    ))}
+                  </datalist>
+                  {wallpadResult === "FAIL" ? (
+                    <>
+                      <select
+                        style={{ ...ui.input, marginTop: 10 }}
+                        value={wallpadFailReason}
+                        onChange={(e) => setWallpadFailReason(e.target.value)}
+                      >
+                        <option value="">실패 사유 (선택)</option>
+                        {WALLPAD_FAIL_REASONS.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {WALLPAD_FAIL_REASON_LABEL[reason]}
+                          </option>
+                        ))}
+                      </select>
+                      <textarea
+                        style={{ ...ui.input, marginTop: 10, minHeight: 72, resize: "vertical" }}
+                        value={wallpadNote}
+                        onChange={(e) => setWallpadNote(e.target.value)}
+                        maxLength={WALLPAD_NOTE_MAX_LENGTH}
+                        placeholder="메모 (선택) — 현장에서 확인한 내용"
+                      />
+                    </>
+                  ) : (
+                    <div style={{ marginTop: 10 }}>
+                      <MoneyInput
+                        value={wallpadAmount}
+                        onChange={setWallpadAmount}
+                        placeholder="현장 금액 (선택)"
+                      />
+                    </div>
+                  )}
                   <PhotoPicker
                     embedded
-                    label="월패드 사진 (선택, 최대 4장)"
+                    label="월패드 사진 (선택, 최대 4장 · 모델명 라벨이 보이게)"
                     photos={wallpadPhotos}
                     busy={compressing}
                     onAdd={(files) => void addTo(files, wallpadPhotos, setWallpadPhotos)}
@@ -514,12 +613,6 @@ const radioRow: CSSProperties = {
   alignItems: "center",
   gap: 10,
   padding: "8px 0",
-  fontSize: 15,
-};
-const checkRow: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
   fontSize: 15,
 };
 const optionLabel: CSSProperties = { flex: 1, minWidth: 0 };

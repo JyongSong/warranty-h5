@@ -7,6 +7,18 @@ import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/instal
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
 import { createInstallSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
+import {
+  WALLPAD_BRANDS,
+  WALLPAD_FAIL_REASONS,
+  WALLPAD_MODEL_MAX_LENGTH,
+  WALLPAD_NOTE_MAX_LENGTH,
+  WALLPAD_RESULTS,
+  isOneOf,
+} from "@/lib/installation/wallpad/constants";
+import {
+  fillCompletionCaseSiteName,
+  recordCompletionWallpadCase,
+} from "@/lib/installation/wallpad/service";
 
 export class InstallationCompletionError extends Error {
   constructor(message: string) {
@@ -35,8 +47,17 @@ export type SubmitCompletionInput = {
    * 필수 검사를 하지 않는다 — 그때는 연동 사진을 설치 사진에 섞어 올렸다.
    */
   linkagePhotoPaths?: string[];
-  /** 월패드 연동 사진(선택). 월패드 연동을 안 했으면 버린다. */
+  /** 월패드 사진(선택). 월패드 연동을 시도하지 않았으면 버린다. */
   wallpadPhotoPaths?: string[];
+  /**
+   * 월패드 연동 결과. undefined 는 이 항목이 생기기 전 화면(또는 그때 대기열에 들어간 건)에서 온
+   * 제출이라 wallpadLinked 만 받는다. 값이 있으면 wallpadLinked 는 결과에서 다시 정한다.
+   */
+  wallpadResult?: string;
+  wallpadBrand?: string | null;
+  wallpadModel?: string | null;
+  wallpadFailReason?: string | null;
+  wallpadNote?: string | null;
   installEndAt: Date;
   photoPaths: string[];
 };
@@ -60,12 +81,81 @@ function normalizeOptionPhotos(input: SubmitCompletionInput): {
     throw new InstallationCompletionError("LINKAGE_PHOTO_COUNT_INVALID");
   }
 
-  const wallpadPhotoPaths = input.wallpadLinked ? (input.wallpadPhotoPaths ?? []) : [];
+  // 실패한 경우도 월패드 사진을 남긴다. 어떤 모델이었는지 나중에 확인할 근거다.
+  const wallpadAttempted =
+    input.wallpadResult === undefined ? input.wallpadLinked : input.wallpadResult !== "NOT_ATTEMPTED";
+  const wallpadPhotoPaths = wallpadAttempted ? (input.wallpadPhotoPaths ?? []) : [];
   if (wallpadPhotoPaths.length > WALLPAD_PHOTO_MAX) {
     throw new InstallationCompletionError("WALLPAD_PHOTO_COUNT_INVALID");
   }
 
   return { linkagePhotoPaths, wallpadPhotoPaths };
+}
+
+/**
+ * 월패드 연동 결과를 저장할 값으로 다듬는다.
+ *
+ * 제조사·모델명·실패 사유는 모두 선택이다(기사가 모를 수 있다). 적었으면 정해진 값인지만 본다.
+ * 현장 금액은 성공했을 때만 남긴다. 옛 제출(결과 없음)은 wallpadLinked 를 그대로 쓴다.
+ */
+function normalizeWallpad(input: SubmitCompletionInput): {
+  wallpadLinked: boolean;
+  wallpadAmount: number | null;
+  wallpadResult: string | null;
+  wallpadBrand: string | null;
+  wallpadModel: string | null;
+  wallpadFailReason: string | null;
+  wallpadNote: string | null;
+} {
+  if (input.wallpadResult === undefined) {
+    return {
+      wallpadLinked: input.wallpadLinked,
+      wallpadAmount: input.wallpadAmount,
+      wallpadResult: null,
+      wallpadBrand: null,
+      wallpadModel: null,
+      wallpadFailReason: null,
+      wallpadNote: null,
+    };
+  }
+  const result = input.wallpadResult;
+  if (!isOneOf(WALLPAD_RESULTS, result)) throw new InstallationCompletionError("WALLPAD_RESULT_INVALID");
+  if (result === "NOT_ATTEMPTED") {
+    return {
+      wallpadLinked: false,
+      wallpadAmount: null,
+      wallpadResult: result,
+      wallpadBrand: null,
+      wallpadModel: null,
+      wallpadFailReason: null,
+      wallpadNote: null,
+    };
+  }
+
+  const brand = input.wallpadBrand?.trim() || null;
+  if (brand && !isOneOf(WALLPAD_BRANDS, brand)) throw new InstallationCompletionError("WALLPAD_BRAND_INVALID");
+  const model = input.wallpadModel?.trim() || null;
+  if (model && model.length > WALLPAD_MODEL_MAX_LENGTH) {
+    throw new InstallationCompletionError("WALLPAD_MODEL_TOO_LONG");
+  }
+  const note = input.wallpadNote?.trim() || null;
+  if (note && note.length > WALLPAD_NOTE_MAX_LENGTH) {
+    throw new InstallationCompletionError("WALLPAD_NOTE_TOO_LONG");
+  }
+  const failReason = result === "FAIL" ? input.wallpadFailReason?.trim() || null : null;
+  if (failReason && !isOneOf(WALLPAD_FAIL_REASONS, failReason)) {
+    throw new InstallationCompletionError("WALLPAD_FAIL_REASON_INVALID");
+  }
+
+  return {
+    wallpadLinked: result === "SUCCESS",
+    wallpadAmount: result === "SUCCESS" ? input.wallpadAmount : null,
+    wallpadResult: result,
+    wallpadBrand: brand,
+    wallpadModel: model,
+    wallpadFailReason: failReason,
+    wallpadNote: note,
+  };
 }
 
 /**
@@ -124,6 +214,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
   }
   const extraClaim = normalizeExtraClaim(input);
   const optionPhotos = normalizeOptionPhotos(input);
+  const wallpad = normalizeWallpad(input);
 
   await prisma.$transaction(async (tx) => {
     await tx.installationCompletion.upsert({
@@ -132,8 +223,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         installationOrderId: input.orderId,
         submittedInstallerId: input.installerId,
         achievedAqaraAppCapability: input.achievedAqaraAppCapability,
-        wallpadLinked: input.wallpadLinked,
-        wallpadAmount: input.wallpadAmount,
+        ...wallpad,
         longDistanceAmount: input.longDistanceAmount,
         ...extraClaim,
         ...optionPhotos,
@@ -145,8 +235,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         submittedInstallerId: input.installerId,
         submittedAt: new Date(),
         achievedAqaraAppCapability: input.achievedAqaraAppCapability,
-        wallpadLinked: input.wallpadLinked,
-        wallpadAmount: input.wallpadAmount,
+        ...wallpad,
         longDistanceAmount: input.longDistanceAmount,
         // 재제출은 기타 청구도 통째로 바꾼다. 이번에 비워서 올렸으면 청구를 철회한 것이다.
         ...extraClaim,
@@ -171,7 +260,8 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
           actorId: input.installerId,
           metadata: {
             achievedAqaraAppCapability: input.achievedAqaraAppCapability,
-            wallpadLinked: input.wallpadLinked,
+            wallpadLinked: wallpad.wallpadLinked,
+            wallpadResult: wallpad.wallpadResult,
           },
         },
       },
@@ -190,7 +280,7 @@ export async function approveInstallerCompletion(input: {
   // 0 이나 null 로 승인하면 그 청구는 인정하지 않은 것이다.
   extraClaimAmount?: number | null;
 }): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  const caseNeedingSiteName = await prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
       where: { id: input.orderId },
       select: { id: true, status: true, activeAssignmentId: true },
@@ -229,6 +319,9 @@ export async function approveInstallerCompletion(input: {
       adminId: input.adminId,
     });
 
+    // 승인된 건만 월패드 호환 현장 사례로 남긴다(반려된 내용이 데이터에 섞이지 않게).
+    const wallpadCaseId = await recordCompletionWallpadCase(tx, input.orderId);
+
     await transitionInstallationOrderStatus(
       input.orderId,
       INSTALLATION_ORDER_STATUSES.COMPLETED,
@@ -242,7 +335,12 @@ export async function approveInstallerCompletion(input: {
       },
       tx as never,
     );
+
+    return wallpadCaseId;
   });
+
+  // 네이버 건물명 조회는 외부 호출이라 트랜잭션 밖에서 한다. 실패해도 승인은 끝난 것이다.
+  if (caseNeedingSiteName) await fillCompletionCaseSiteName(caseNeedingSiteName);
 }
 
 export async function rejectInstallerCompletion(input: {
@@ -332,6 +430,11 @@ export type InstallationCompletionView = {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  wallpadResult: string | null;
+  wallpadBrand: string | null;
+  wallpadModel: string | null;
+  wallpadFailReason: string | null;
+  wallpadNote: string | null;
   longDistanceAmount: number | null;
   extraClaimAmount: number | null;
   extraClaimReason: string | null;
@@ -358,6 +461,11 @@ export async function getInstallationCompletionForOrder(
     achievedAqaraAppCapability: c.achievedAqaraAppCapability,
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
+    wallpadResult: c.wallpadResult,
+    wallpadBrand: c.wallpadBrand,
+    wallpadModel: c.wallpadModel,
+    wallpadFailReason: c.wallpadFailReason,
+    wallpadNote: c.wallpadNote,
     longDistanceAmount: c.longDistanceAmount,
     extraClaimAmount: c.extraClaimAmount,
     extraClaimReason: c.extraClaimReason,
