@@ -37,30 +37,54 @@ function trimOrNull(value: unknown): string | null {
  * 단지명은 주소의 "(동, 아파트명)" 에서 꺼내고, 없으면 일단 도로명 주소를 넣어 둔다.
  * 네이버 건물명 조회는 트랜잭션 밖에서 fillCompletionCaseSiteName 이 한다.
  * 돌려주는 값은 건물명 조회가 필요한 사례의 id 다.
+ *
+ * 성공·실패를 고르기 전의 옛 제출(wallpadResult 없음)은 "월패드 연동" 체크가 있으면 연동 성공으로 본다.
+ * 연동 금액은 현장마다 달라 판단에 쓰지 않는다.
  */
 export async function recordCompletionWallpadCase(tx: Tx, orderId: string): Promise<string | null> {
   const order = await tx.installationOrder.findUnique({
     where: { id: orderId },
-    select: {
-      completion: {
-        select: {
-          wallpadResult: true,
-          wallpadBrand: true,
-          wallpadModel: true,
-          wallpadFailReason: true,
-          wallpadNote: true,
-          installEndAt: true,
-        },
-      },
-      activeCustomerRequest: { select: { installAddressEncrypted: true, installAddress1Encrypted: true } },
-      source: { select: { addressEncrypted: true } },
-    },
+    select: COMPLETION_CASE_ORDER_SELECT,
   });
-  const completion = order?.completion;
-  if (!completion || (completion.wallpadResult !== "SUCCESS" && completion.wallpadResult !== "FAIL")) {
+  const built = order ? buildCompletionCase(order) : null;
+  if (!built) {
     await removeCompletionWallpadCase(tx, orderId);
     return null;
   }
+
+  const saved = await tx.wallpadSiteCase.upsert({
+    where: { installationOrderId: orderId },
+    create: { ...built.data, installationOrderId: orderId },
+    update: built.data,
+    select: { id: true },
+  });
+  return built.needsBuildingName ? saved.id : null;
+}
+
+/** 완료 등록을 현장 사례로 만들 때 읽는 주문 항목. */
+export const COMPLETION_CASE_ORDER_SELECT = {
+  completion: {
+    select: {
+      wallpadResult: true,
+      wallpadLinked: true,
+      wallpadBrand: true,
+      wallpadModel: true,
+      wallpadFailReason: true,
+      wallpadNote: true,
+      installEndAt: true,
+    },
+  },
+  activeCustomerRequest: { select: { installAddressEncrypted: true, installAddress1Encrypted: true } },
+  source: { select: { addressEncrypted: true } },
+} satisfies Prisma.InstallationOrderSelect;
+
+type CompletionCaseOrder = Prisma.InstallationOrderGetPayload<{ select: typeof COMPLETION_CASE_ORDER_SELECT }>;
+
+/** 주문의 완료 등록 → 현장 사례 데이터. 사례로 남길 결과가 아니면 null. */
+export function buildCompletionCase(order: CompletionCaseOrder) {
+  const completion = order.completion;
+  const result = completion ? completionCaseResult(completion) : null;
+  if (!completion || !result) return null;
 
   const address =
     decryptNullablePii(order.activeCustomerRequest?.installAddressEncrypted) ??
@@ -69,25 +93,32 @@ export async function recordCompletionWallpadCase(tx: Tx, orderId: string): Prom
   const siteAddress = wallpadSiteAddress(address);
   const nameFromAddress = siteNameFromAddress(address);
 
-  const data = {
-    siteName: nameFromAddress ?? siteAddress ?? "(주소 미확인)",
-    siteKey: wallpadSiteKey(siteAddress),
-    siteAddress,
-    brand: completion.wallpadBrand,
-    model: completion.wallpadModel,
-    result: completion.wallpadResult,
-    failReason: completion.wallpadResult === "FAIL" ? completion.wallpadFailReason : null,
-    note: completion.wallpadNote,
-    source: "COMPLETION" satisfies WallpadCaseSource,
-    occurredOn: kstDate(completion.installEndAt),
+  return {
+    data: {
+      siteName: nameFromAddress ?? siteAddress ?? "(주소 미확인)",
+      siteKey: wallpadSiteKey(siteAddress),
+      siteAddress,
+      brand: completion.wallpadBrand,
+      model: completion.wallpadModel,
+      result,
+      failReason: result === "FAIL" ? completion.wallpadFailReason : null,
+      note: completion.wallpadNote,
+      source: "COMPLETION" satisfies WallpadCaseSource,
+      occurredOn: kstDate(completion.installEndAt),
+    },
+    /** 주소에 단지명이 없어 네이버 건물명 조회가 필요한지. */
+    needsBuildingName: !nameFromAddress && Boolean(siteAddress),
   };
-  const saved = await tx.wallpadSiteCase.upsert({
-    where: { installationOrderId: orderId },
-    create: { ...data, installationOrderId: orderId },
-    update: data,
-    select: { id: true },
-  });
-  return !nameFromAddress && siteAddress ? saved.id : null;
+}
+
+/** 완료 등록이 현장 사례가 되는 결과. 연동 안 함이면 null. */
+export function completionCaseResult(completion: {
+  wallpadResult: string | null;
+  wallpadLinked: boolean;
+}): "SUCCESS" | "FAIL" | null {
+  if (completion.wallpadResult === "SUCCESS" || completion.wallpadResult === "FAIL") return completion.wallpadResult;
+  if (completion.wallpadResult == null && completion.wallpadLinked) return "SUCCESS";
+  return null;
 }
 
 /** 승인 취소 등으로 이 주문의 완료 등록 사례를 지운다. 관리자가 직접 넣은 사례는 건드리지 않는다. */
