@@ -286,7 +286,8 @@ export type WallpadModelInput = {
   verifiedOn?: string | null;
 };
 
-export async function saveWallpadModel(input: WallpadModelInput, adminId: string): Promise<void> {
+/** 저장한 모델의 id 를 돌려준다. adminId 가 null 이면 API 로 들어온 입력이다. */
+export async function saveWallpadModel(input: WallpadModelInput, adminId: string | null): Promise<string> {
   const brand = trimOrNull(input.brand);
   const model = trimOrNull(input.model);
   if (!brand) throw new WallpadCompatError("BRAND_REQUIRED");
@@ -311,9 +312,9 @@ export async function saveWallpadModel(input: WallpadModelInput, adminId: string
   };
   if (input.id) {
     await prisma.wallpadModel.update({ where: { id: input.id }, data });
-  } else {
-    await prisma.wallpadModel.create({ data });
+    return input.id;
   }
+  return (await prisma.wallpadModel.create({ data, select: { id: true } })).id;
 }
 
 export async function deleteWallpadModel(id: string): Promise<void> {
@@ -337,7 +338,7 @@ export type WallpadCaseInput = {
  * 관리자가 현장 사례를 넣거나 고친다. 완료 등록에서 온 사례도 고칠 수 있다(단지명·모델명 정정).
  * 주소를 적으면 도로명+건물번호까지만 남겨 같은 단지 사례와 묶는다.
  */
-export async function saveWallpadCase(input: WallpadCaseInput, adminId: string): Promise<void> {
+export async function saveWallpadCase(input: WallpadCaseInput, adminId: string | null): Promise<string> {
   const siteName = trimOrNull(input.siteName);
   if (!siteName) throw new WallpadCompatError("SITE_NAME_REQUIRED");
   if (!isOneOf(WALLPAD_CASE_RESULTS, input.result)) throw new WallpadCompatError("RESULT_INVALID");
@@ -362,11 +363,13 @@ export async function saveWallpadCase(input: WallpadCaseInput, adminId: string):
   };
   if (input.id) {
     await prisma.wallpadSiteCase.update({ where: { id: input.id }, data });
-  } else {
-    await prisma.wallpadSiteCase.create({
-      data: { ...data, source: "ADMIN" satisfies WallpadCaseSource, createdByAdminId: adminId },
-    });
+    return input.id;
   }
+  const created = await prisma.wallpadSiteCase.create({
+    data: { ...data, source: "ADMIN" satisfies WallpadCaseSource, createdByAdminId: adminId },
+    select: { id: true },
+  });
+  return created.id;
 }
 
 export async function deleteWallpadCase(id: string): Promise<void> {
@@ -383,7 +386,7 @@ export type WallpadNoteInput = {
   reportedOn?: string | null;
 };
 
-export async function saveWallpadNote(input: WallpadNoteInput): Promise<void> {
+export async function saveWallpadNote(input: WallpadNoteInput): Promise<string> {
   if (!isOneOf(WALLPAD_NOTE_KINDS, input.kind)) throw new WallpadCompatError("KIND_INVALID");
   const title = trimOrNull(input.title);
   const note = trimOrNull(input.note);
@@ -400,9 +403,9 @@ export async function saveWallpadNote(input: WallpadNoteInput): Promise<void> {
   };
   if (input.id) {
     await prisma.wallpadCompatNote.update({ where: { id: input.id }, data });
-  } else {
-    await prisma.wallpadCompatNote.create({ data });
+    return input.id;
   }
+  return (await prisma.wallpadCompatNote.create({ data, select: { id: true } })).id;
 }
 
 export async function deleteWallpadNote(id: string): Promise<void> {

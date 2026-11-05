@@ -16,7 +16,7 @@ import {
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
-async function run(task: (adminId: string) => Promise<void>): Promise<ActionResult> {
+async function run(task: (adminId: string) => Promise<unknown>): Promise<ActionResult> {
   const { admin, errorResponse } = await requireAdminApi("edit");
   if (errorResponse || !admin) return { ok: false, error: "UNAUTHORIZED" };
   try {
