@@ -1261,8 +1261,9 @@ describe("backoffice installation order routes", () => {
     expect(listSource).toContain('header: "주문-고객주소"');
     expect(listSource).toContain('header: "설치-주소"');
     expect(listSource).toContain('header: "설치-설치연락처"');
-    expect(listSource).toContain('header: "설치-희망일"');
-    expect(listSource).toContain('header: "배정-기사"');
+    expect(listSource).toContain('header: "설치-희망일/시간"');
+    expect(listSource).toContain('header: "배정-기사/브랜치"');
+    expect(listSource).toContain('header: "설치-품목"');
     expect(listSource).toContain('header: "배정-상태"');
     expect(listSource).toContain('header: "운영-상태"');
     expect(listSource).toContain('header: "운영-처리 사유"');
@@ -1296,7 +1297,7 @@ describe("backoffice installation order routes", () => {
     expect(listSource).toContain("row.original.activeAttempt?.assignmentStatus");
     expect(listSource).toContain("formatBackofficePhone(row.original.phone)");
     expect(listSource).toContain("formatBackofficePhone(row.original.request?.customerPhone)");
-    expect(listSource).toContain('const TABLE_PREFS_KEY = "backoffice.installations.table.v3"');
+    expect(listSource).toContain('const TABLE_PREFS_KEY = "backoffice.installations.table.v4"');
   });
 
   it("keeps terminal status filters out of the installation queue while supporting result tracking columns", () => {
@@ -1863,6 +1864,7 @@ describe("backoffice installation order routes", () => {
         currentInstallerId: null,
         partnerStatus: null,
         partnerClaimAmount: null,
+        partnerInstallItems: null,
         partner: null,
         hasOpenIssue: false,
         statusChangedAt: new Date("2026-06-16T05:11:28.983Z"),

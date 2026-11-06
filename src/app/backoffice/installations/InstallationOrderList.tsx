@@ -28,8 +28,10 @@ import {
   sendCustomerInputSmsForInstallationOrdersAction,
 } from "./actions";
 import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
+import type { PartnerInstallItem } from "@/lib/installation/partner/install-items";
 
-const TABLE_PREFS_KEY = "backoffice.installations.table.v3";
+// v4: 기본 열 순서 변경(희망일/시간·기사/브랜치 합침, 설치 품목 추가). 옛 저장 순서를 버린다.
+const TABLE_PREFS_KEY = "backoffice.installations.table.v4";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
 
 export type InstallationOrderListItem = {
@@ -47,6 +49,8 @@ export type InstallationOrderListItem = {
   itemName: string | null;
   productSummary: string | null;
   sourceItemsJsonText: string | null;
+  /** 설치 품목(관리자 수정값 우선, 없으면 주문 메모에서 뽑은 값) */
+  installItems?: PartnerInstallItem[];
   sourceOrderDate: string | null;
   status: string;
   currentInstallerId: string | null;
@@ -428,20 +432,20 @@ export default function InstallationOrderList({
       const installationColumns: ColumnDef<InstallationOrderListItem>[] = [
         {
           id: "installDate",
-          accessorFn: (row) => getInstallationOrderDate(row) ?? "",
-          header: "설치-희망일",
-          size: 130,
-          minSize: 110,
-          cell: ({ row }) => formatBackofficeDateTime(getInstallationOrderDate(row.original)),
-          sortingFn: "alphanumeric",
-        },
-        {
-          id: "installTimeSlot",
-          accessorFn: (row) => row.request?.installTimeSlot ?? "",
-          header: "설치-희망시간",
-          size: 160,
+          accessorFn: (row) =>
+            [getInstallationOrderDate(row) ?? "", row.request?.installTimeSlot ?? ""].filter(Boolean).join(" "),
+          header: "설치-희망일/시간",
+          size: 170,
           minSize: 130,
-          cell: ({ row }) => formatText(row.original.request?.installTimeSlot),
+          cell: ({ row }) => {
+            const timeSlot = row.original.request?.installTimeSlot;
+            return (
+              <div className="leading-5">
+                <div>{formatBackofficeDateTime(getInstallationOrderDate(row.original))}</div>
+                {timeSlot ? <div className="text-xs text-zinc-500">{timeSlot}</div> : null}
+              </div>
+            );
+          },
           sortingFn: "alphanumeric",
         },
         {
@@ -471,31 +475,54 @@ export default function InstallationOrderList({
         },
       ];
 
-      const assignmentColumns: ColumnDef<InstallationOrderListItem>[] = [
-        {
+      const assignedInstallerColumn: ColumnDef<InstallationOrderListItem> = {
           id: "assignedInstaller",
           accessorFn: (row) =>
             formatPartnerAssignee(row.partner) ?? row.assignment?.installerName ?? row.assignment?.installerId ?? "",
-          header: "배정-기사",
-          size: 180,
-          minSize: 120,
+          header: "배정-기사/브랜치",
+          size: 190,
+          minSize: 130,
           cell: ({ row }) => {
             const partnerAssignee = formatPartnerAssignee(row.original.partner);
             const label = formatText(
               partnerAssignee ?? row.original.assignment?.installerName ?? row.original.assignment?.installerId,
             );
             if (partnerAssignee || !row.original.assignment) return label;
-            return row.original.assignment.installerHasApp ? (
-              <span className="font-bold text-emerald-700" title="기사 앱 설치됨 (푸시 수신 가능)">
-                {label}
-                <span aria-label="앱 설치됨" className="ml-1 text-xs">📱</span>
-              </span>
-            ) : (
-              <span title="기사 앱 미설치 (문자로만 안내)">{label}</span>
+            const branch = row.original.assignment.installerBranch;
+            return (
+              <div className="min-w-0 leading-5">
+                {row.original.assignment.installerHasApp ? (
+                  <span className="font-bold text-emerald-700" title="기사 앱 설치됨 (푸시 수신 가능)">
+                    {label}
+                    <span aria-label="앱 설치됨" className="ml-1 text-xs">📱</span>
+                  </span>
+                ) : (
+                  <span title="기사 앱 미설치 (문자로만 안내)">{label}</span>
+                )}
+                {branch ? <div className="truncate text-xs text-zinc-500" title={branch}>{branch}</div> : null}
+              </div>
             );
           },
           sortingFn: "alphanumeric",
-        },
+        };
+      const installItemsColumn: ColumnDef<InstallationOrderListItem> = {
+          id: "installItems",
+          accessorFn: (row) => formatInstallItemsSummary(row.installItems),
+          header: "설치-품목",
+          size: 220,
+          minSize: 140,
+          cell: ({ row }) => {
+            const text = formatInstallItemsSummary(row.original.installItems);
+            if (!text) return <span className="text-zinc-300">-</span>;
+            return (
+              <div className="truncate text-zinc-800" title={text}>
+                {text}
+              </div>
+            );
+          },
+          sortingFn: "alphanumeric",
+        };
+      const assignmentColumns: ColumnDef<InstallationOrderListItem>[] = [
         {
           id: "assignedInstallerDistance",
           header: "배정-거리",
@@ -509,15 +536,6 @@ export default function InstallationOrderList({
             ) : (
               "-"
             ),
-        },
-        {
-          id: "assignedInstallerBranch",
-          accessorFn: (row) => row.assignment?.installerBranch ?? "",
-          header: "배정-브랜치",
-          size: 180,
-          minSize: 120,
-          cell: ({ row }) => formatText(row.original.assignment?.installerBranch),
-          sortingFn: "alphanumeric",
         },
         {
           id: "assignmentStatus",
@@ -580,7 +598,10 @@ export default function InstallationOrderList({
           ),
           sortingFn: "alphanumeric",
         },
-        {
+      ];
+
+      // 정산 금액은 설치 완료 탭에서만 보인다.
+      const settlementAmountColumn: ColumnDef<InstallationOrderListItem> = {
           id: "settlementAmount",
           // 정렬은 숫자로, 표시는 확정/예상 구분해서.
           accessorFn: (row) => row.settlementAmount?.totalAmount ?? row.partner?.claimAmount ?? -1,
@@ -617,8 +638,7 @@ export default function InstallationOrderList({
             );
           },
           sortingFn: "alphanumeric",
-        },
-      ];
+        };
 
       const statusChangedAtColumn: ColumnDef<InstallationOrderListItem> = {
           id: "statusChangedAt",
@@ -644,23 +664,21 @@ export default function InstallationOrderList({
         },
       ];
 
+      // 기본 순서: 주문번호, 희망일/시간, 설치 주소, 설치 연락처, 기사/브랜치, 설치 품목,
+      // (설치 완료 탭만) 정산 금액, 그다음은 예전 순서 그대로.
+      const leadingColumns = [
+        ...orderNumberColumns,
+        ...installationColumns,
+        assignedInstallerColumn,
+        installItemsColumn,
+        ...(statusView === "completed" ? [settlementAmountColumn] : []),
+        ...assignmentColumns,
+        ...orderContextColumns,
+        ...operationColumns,
+      ];
       return isTerminalView
-        ? [
-            ...orderNumberColumns,
-            ...installationColumns,
-            ...assignmentColumns,
-            ...orderContextColumns,
-            ...operationColumns,
-            ...historyTrackingColumns,
-          ]
-        : [
-            ...orderNumberColumns,
-            ...installationColumns,
-            ...assignmentColumns,
-            ...orderContextColumns,
-            ...operationColumns,
-            statusChangedAtColumn,
-          ];
+        ? [...leadingColumns, ...historyTrackingColumns]
+        : [...leadingColumns, statusChangedAtColumn];
     },
     [
        allSelectableOrdersSelected,
@@ -669,6 +687,7 @@ export default function InstallationOrderList({
        detailSearchQuery,
        isBulkAssignmentPending,
        isTerminalView,
+       statusView,
        selectableAssignmentIds.length,
        selectableOrderIds.length,
        selectedAssignmentIds,
@@ -1213,6 +1232,13 @@ function formatUtcDateOnly(date: Date) {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatInstallItemsSummary(items: PartnerInstallItem[] | undefined) {
+  if (!items || items.length === 0) return "";
+  return items
+    .map((item) => `${item.name} ×${item.quantity}${item.onsitePayment ? " (현장결제)" : ""}`)
+    .join(", ");
 }
 
 function formatText(value: string | null | undefined) {
