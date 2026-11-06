@@ -22,6 +22,8 @@ export type InstallerOrderItem = {
   installDate: string | null;
   installTimeSlot: string | null;
   address: string | null;
+  // 고객이 입력 페이지에서 적은 요청사항 (철문·주차 등). 수락 판단에 쓰도록 수락 전에도 보여 준다.
+  customerNote: string | null;
   // Customer name/phone are hidden until the installer accepts (PRD §6.2).
   customerName: string | null;
   customerPhone: string | null;
@@ -59,6 +61,7 @@ const orderContentSelect = {
       installAddressDetailEncrypted: true,
       installDate: true,
       installTimeSlot: true,
+      customerNote: true,
       customerPhoneEncrypted: true,
       ordererPhoneEncrypted: true,
     },
@@ -84,6 +87,7 @@ type OrderContent = {
     installAddressDetailEncrypted: string | null;
     installDate: string | null;
     installTimeSlot: string | null;
+    customerNote: string | null;
     customerPhoneEncrypted: string | null;
     ordererPhoneEncrypted: string | null;
   }>;
@@ -132,6 +136,7 @@ function shapeOrder(
     installDate: req?.installDate ?? null,
     installTimeSlot: req?.installTimeSlot ?? null,
     address,
+    customerNote: req?.customerNote?.trim() || null,
     customerName: piiVisible ? decryptNullablePii(order.source?.customerNameEncrypted) : null,
     customerPhone: piiVisible
       ? decryptNullablePii(req?.customerPhoneEncrypted) ?? decryptNullablePii(order.source?.phoneEncrypted)

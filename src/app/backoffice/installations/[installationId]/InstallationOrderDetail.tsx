@@ -262,6 +262,9 @@ export default function InstallationOrderDetail({
     { label: "예외", value: openIssues.length > 0 ? `열린 예외 ${openIssues.length}건` : "없음", colSpan: 2 as const },
     { label: "설치 희망", value: formatInstallSchedule(activeCustomerRequest?.installDate, activeCustomerRequest?.installTimeSlot) },
     { label: "설치 주소", value: formatText(activeCustomerRequest?.installAddress) },
+    ...(activeCustomerRequest?.customerNote?.trim()
+      ? [{ label: "요청사항", value: activeCustomerRequest.customerNote.trim(), colSpan: 2 as const, multiline: true }]
+      : []),
     { label: "설치 기사 이름", value: currentInstallerName },
     { label: "설치 기사 브랜치", value: currentInstallerBranch },
   ];
@@ -1271,7 +1274,7 @@ function DetailTabCount({ count }: { count: number }) {
 function OperationSummary({
   rows,
 }: {
-  rows: Array<{ label: string; value: string; colSpan?: 2 }>;
+  rows: Array<{ label: string; value: string; colSpan?: 2; multiline?: boolean }>;
 }) {
   return (
     <div className="mb-5 grid min-w-0 grid-cols-2 border-y border-zinc-200 bg-white lg:grid-cols-4">
@@ -1281,7 +1284,12 @@ function OperationSummary({
           className={`${row.colSpan === 2 ? "col-span-2" : ""} min-w-0 border-b border-r border-zinc-100 px-3 py-3`}
         >
           <div className="text-xs font-semibold text-zinc-500">{row.label}</div>
-          <div title={row.value} className="mt-1 truncate text-sm font-semibold text-zinc-950">{row.value}</div>
+          <div
+            title={row.value}
+            className={`mt-1 text-sm font-semibold text-zinc-950 ${row.multiline ? "whitespace-pre-wrap break-keep" : "truncate"}`}
+          >
+            {row.value}
+          </div>
         </div>
       ))}
     </div>

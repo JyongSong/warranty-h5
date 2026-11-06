@@ -147,9 +147,9 @@ export default function CustomerRequestClient({
     "",
   );
   const [phone, setPhone] = useState(initialInputValues.phone);
-  // 요청사항 입력란은 당분간 감춘다. 다만 이전에 저장된 값이 있으면 그대로
-  // 실어 보내야 재제출 때 지워지지 않는다.
-  const customerNote = request?.customerNote ?? "";
+  // 선택 입력. 기사 앱·본사 화면에 그대로 보인다(수락 전에도).
+  const [customerNoteInput, setCustomerNoteInput] = useState(request?.customerNote ?? "");
+  const customerNote = customerNoteInput.trim();
   const [consent, setConsent] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -374,6 +374,19 @@ export default function CustomerRequestClient({
               ))}
             </select>
             <span style={helperTextStyle}>{INSTALL_SCHEDULE_ADJUST_NOTICE}</span>
+          </label>
+
+          <label style={fieldGapStyle}>
+            <span style={labelStyle}>요청사항 (선택)</span>
+            <textarea
+              value={customerNoteInput}
+              onChange={(event) => setCustomerNoteInput(event.target.value)}
+              rows={3}
+              maxLength={500}
+              placeholder="예) 도어락이 철문이에요 / 오후에는 부재중입니다"
+              style={textareaStyle}
+            />
+            <span style={helperTextStyle}>현관문 종류, 주차 안내 등 미리 알려주실 내용이 있다면 적어주세요.</span>
           </label>
 
           <label style={consentStyle}>
@@ -623,7 +636,7 @@ function SummaryList({ summary }: { summary: Summary }) {
       <SummaryRow label="희망 날짜" value={summary.installDate} />
       <SummaryRow label="희망 시간" value={summary.timeSlot} />
       <SummaryRow label="연락처" value={summary.normalizedPhone} />
-
+      {summary.customerNote ? <SummaryRow label="요청사항" value={summary.customerNote} /> : null}
     </div>
   );
 }
@@ -750,6 +763,15 @@ const inputStyle: CSSProperties = {
   outline: "none",
 };
 
+
+const textareaStyle: CSSProperties = {
+  ...inputStyle,
+  minHeight: 96,
+  padding: "14px",
+  resize: "vertical",
+  fontFamily: "inherit",
+  lineHeight: 1.5,
+};
 
 const postcodeRowStyle: CSSProperties = {
   display: "flex",
@@ -913,6 +935,7 @@ const summaryValueStyle: CSSProperties = {
   fontWeight: 700,
   lineHeight: 1.5,
   overflowWrap: "anywhere",
+  whiteSpace: "pre-line",
 };
 
 function submitButtonStyle(disabled: boolean): CSSProperties {
