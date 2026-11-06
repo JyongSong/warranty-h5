@@ -99,6 +99,7 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           ) : null}
           <Row label="희망 일정" value={[item.installDate, item.installTimeSlot].filter(Boolean).join(" ") || "-"} />
           <Row label="주소" value={item.address ?? "-"} />
+          {item.customerNote ? <Row label="요청사항" value={item.customerNote} /> : null}
           {item.customerName ? <Row label="고객명" value={item.customerName} /> : null}
           {item.customerPhone ? <PhoneRow label="연락처" phone={item.customerPhone} /> : null}
           {item.backupPhone ? <PhoneRow label="예비 연락처" phone={item.backupPhone} /> : null}
