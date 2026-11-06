@@ -35,6 +35,17 @@ export const SATISFACTION_SURVEY_SEND_CRON_JOB: CronJobDefinition = {
   enabledSettingKey: "survey.autoSend.enabled",
 };
 
+// CJ 온스타일 주문번호 명단 자동 동기화. 켜고 끄는 것은 env(CJ_API_*) 유무로
+// 정한다(백오피스 토글 없음).
+export const CJ_API_SYNC_CRON_JOB: CronJobDefinition = {
+  key: "cj.apiSync",
+  label: "CJ 주문번호 자동 동기화",
+  path: "/api/internal/cron/installation/cj-sync",
+  // 매시 20분(UTC 기준이지만 매시라 무관).
+  schedule: "20 * * * *",
+  enabledSettingKey: "cj.apiSync.enabled",
+};
+
 export const INSTALLATION_CRON_JOBS = [
   INSTALLATION_SYNC_ORDERS_CRON_JOB,
   INSTALLATION_DISPATCHER_CRON_JOB,
