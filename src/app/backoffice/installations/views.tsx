@@ -13,6 +13,7 @@ import {
 } from "@/lib/backoffice/table-controls";
 import { listActiveInstallerRequestAssignments } from "@/lib/installation/installer/review";
 import { getInstallOrderAmounts } from "@/lib/installation/settlement/order-amounts";
+import { resolvePartnerInstallItems } from "@/lib/installation/partner/install-items";
 import {
   countInstallationOrderStatuses,
   listInstallationOrderStatuses,
@@ -126,6 +127,7 @@ export async function InstallationOrderListView({
       itemName: null,
       productSummary: order.sourceMemo,
       sourceItemsJsonText: order.sourceItemsJsonText,
+      installItems: resolvePartnerInstallItems(order.partnerInstallItems, order.sourceMemo).items,
       sourceOrderDate: order.sourceOrderDate,
       status: order.status,
       currentInstallerId: order.currentInstallerId,

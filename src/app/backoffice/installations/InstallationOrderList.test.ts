@@ -75,6 +75,7 @@ describe("InstallationOrderList", () => {
       createElement(InstallationOrderList, {
         initialItems: [
           createItem({
+            installItems: [{ code: "SV1", name: "도어락 설치", quantity: 1, onsitePayment: false }],
             assignment: {
               id: "assignment-1",
               installerId: "installer-1",
@@ -98,13 +99,14 @@ describe("InstallationOrderList", () => {
 
     const expectedHeaders = [
       "주문-주문번호",
-      "설치-희망일",
-      "설치-희망시간",
+      "설치-희망일/시간",
       "설치-주소",
       "설치-설치연락처",
-      "배정-기사",
-      "배정-브랜치",
+      "배정-기사/브랜치",
+      "설치-품목",
+      "배정-거리",
       "배정-상태",
+      "주문-주문일",
       "주문-고객명",
       "주문-고객 전화",
       "주문-고객주소",
@@ -119,7 +121,10 @@ describe("InstallationOrderList", () => {
     expect(headerIndexes).toEqual([...headerIndexes].sort((left, right) => left - right));
     expect(html).toContain("김기사");
     expect(html).toContain("서울강남지점");
+    expect(html).toContain("도어락 설치 ×1");
     expect(html).toContain("기사 응답 대기");
+    // 정산 금액은 설치 완료 탭에서만
+    expect(html).not.toContain("운영-정산 금액");
     expect(html).not.toContain("WAITING_INSTALLER_RESPONSE");
     expect(html).not.toContain("상세");
   });
@@ -134,13 +139,15 @@ describe("InstallationOrderList", () => {
 
     const expectedHeaders = [
       "주문-주문번호",
-      "설치-희망일",
-      "설치-희망시간",
+      "설치-희망일/시간",
       "설치-주소",
       "설치-설치연락처",
-      "배정-기사",
-      "배정-브랜치",
+      "배정-기사/브랜치",
+      "설치-품목",
+      "운영-정산 금액",
+      "배정-거리",
       "배정-상태",
+      "주문-주문일",
       "주문-고객명",
       "주문-고객 전화",
       "주문-고객주소",

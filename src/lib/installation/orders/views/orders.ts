@@ -178,6 +178,7 @@ export async function listInstallationOrderStatuses({
       currentInstallerId: true,
       partnerStatus: true,
       partnerClaimAmount: true,
+      partnerInstallItems: true,
       partner: { select: { name: true } },
       hasOpenIssue: true,
       statusChangedAt: true,
