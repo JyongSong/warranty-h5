@@ -1,9 +1,7 @@
 import { requireBackofficeUserPage } from "@/lib/login/backofficeAuth";
 import {
-  aggregateSettlementByInstaller,
-  listSettlementLines,
+  listInstallSettlementLinesWithOrder,
   listSettlementPeriods,
-  type SettlementLineFilter,
 } from "@/lib/installation/settlement/service";
 import { getAgentProxyBaseFeeDefault, getGlobalDefaults } from "@/lib/installation/settlement/rates";
 import { listInstallerRateOverrides } from "@/lib/installation/settlement/installer-rates";
@@ -14,10 +12,17 @@ export const dynamic = "force-dynamic";
 type SearchParams = {
   tab?: string;
   periodId?: string;
-  installerId?: string;
   startDate?: string;
   endDate?: string;
 };
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 오늘(KST) 기준 이번 달 1일 ~ 오늘
+function currentMonthRangeKst(): { startDate: string; endDate: string } {
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return { startDate: `${today.slice(0, 8)}01`, endDate: today };
+}
 
 export default async function BackofficeInstallerSettlementPage({
   searchParams,
@@ -30,17 +35,20 @@ export default async function BackofficeInstallerSettlementPage({
 
   const periods = await listSettlementPeriods();
 
-  const filter: SettlementLineFilter = {
-    periodId: sp.periodId || undefined,
-    installerId: sp.installerId || undefined,
-    startDate: sp.startDate || undefined,
-    endDate: sp.endDate || undefined,
-  };
-  const hasFilter = Boolean(filter.periodId || filter.startDate || filter.endDate || filter.installerId);
+  // 정산 주기로 보는 경우가 아니면 날짜 구간으로 본다. 날짜가 없으면 이번 달.
+  const periodId = sp.periodId || "";
+  const fallback = currentMonthRangeKst();
+  const startDate = DATE_RE.test(sp.startDate ?? "") ? sp.startDate! : periodId ? "" : fallback.startDate;
+  const endDate = DATE_RE.test(sp.endDate ?? "") ? sp.endDate! : periodId ? "" : fallback.endDate;
 
-  const [lines, summary, rateDefaults, rateOverrides, agentProxyBaseFee] = await Promise.all([
-    hasFilter ? listSettlementLines(filter) : Promise.resolve([]),
-    hasFilter ? aggregateSettlementByInstaller(filter) : Promise.resolve([]),
+  const [lines, rateDefaults, rateOverrides, agentProxyBaseFee] = await Promise.all([
+    tab === "settlement"
+      ? listInstallSettlementLinesWithOrder({
+          periodId: periodId || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        })
+      : Promise.resolve([]),
     getGlobalDefaults(),
     listInstallerRateOverrides(),
     getAgentProxyBaseFeeDefault(),
@@ -51,15 +59,8 @@ export default async function BackofficeInstallerSettlementPage({
       <SettlementClient
         tab={tab}
         periods={periods}
-        filter={{
-          periodId: filter.periodId ?? "",
-          installerId: filter.installerId ?? "",
-          startDate: filter.startDate ?? "",
-          endDate: filter.endDate ?? "",
-        }}
-        hasFilter={hasFilter}
+        filter={{ periodId, startDate, endDate }}
         lines={lines}
-        summary={summary}
         rateDefaults={rateDefaults}
         rateOverrides={rateOverrides}
         agentProxyBaseFee={agentProxyBaseFee}

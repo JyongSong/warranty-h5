@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
-  InstallerSettlementSummary,
-  SettlementLineView,
+  InstallSettlementLineView,
   SettlementPeriodView,
 } from "@/lib/installation/settlement/service";
 import type { EffectiveRates } from "@/lib/installation/settlement/rates";
@@ -12,7 +12,6 @@ import type { InstallerRateOverrideView } from "@/lib/installation/settlement/in
 import {
   collectLinesIntoPeriodAction,
   createSettlementPeriodAction,
-  removeLineFromPeriodAction,
   setPeriodSettledAction,
   upsertInstallerRateOverrideAction,
 } from "./actions";
@@ -20,17 +19,22 @@ import {
 const won = (n: number) => `${n.toLocaleString()}원`;
 const kstDate = (iso: string) =>
   new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-const SOURCE_LABEL: Record<string, string> = { INSTALL: "설치", AS: "A/S" };
 
-type Filter = { periodId: string; installerId: string; startDate: string; endDate: string };
+type Filter = { periodId: string; startDate: string; endDate: string };
+
+type InstallerGroup = {
+  installerId: string;
+  installerName: string;
+  count: number;
+  totalAmount: number;
+  lines: InstallSettlementLineView[];
+};
 
 export default function SettlementClient({
   tab,
   periods,
   filter,
-  hasFilter,
   lines,
-  summary,
   rateDefaults,
   rateOverrides,
   agentProxyBaseFee,
@@ -38,9 +42,7 @@ export default function SettlementClient({
   tab: string;
   periods: SettlementPeriodView[];
   filter: Filter;
-  hasFilter: boolean;
-  lines: SettlementLineView[];
-  summary: InstallerSettlementSummary[];
+  lines: InstallSettlementLineView[];
   rateDefaults: EffectiveRates;
   rateOverrides: InstallerRateOverrideView[];
   agentProxyBaseFee: number;
@@ -58,13 +60,7 @@ export default function SettlementClient({
       {tab === "rates" ? (
         <RatesTab rateDefaults={rateDefaults} rateOverrides={rateOverrides} agentProxyBaseFee={agentProxyBaseFee} />
       ) : (
-        <SettlementTab
-          periods={periods}
-          filter={filter}
-          hasFilter={hasFilter}
-          lines={lines}
-          summary={summary}
-        />
+        <SettlementTab periods={periods} filter={filter} lines={lines} />
       )}
     </div>
   );
@@ -84,35 +80,246 @@ function TabLink({ label, active, href }: { label: string; active: boolean; href
 }
 
 // ── Settlement tab ────────────────────────────────────────────────────
+// 날짜 구간의 설치 완료(승인된) 건 → 총합계 → 기사별 → 건별.
 function SettlementTab({
   periods,
   filter,
-  hasFilter,
   lines,
-  summary,
 }: {
   periods: SettlementPeriodView[];
   filter: Filter;
-  hasFilter: boolean;
-  lines: SettlementLineView[];
-  summary: InstallerSettlementSummary[];
+  lines: InstallSettlementLineView[];
 }) {
+  const router = useRouter();
+  const [fStart, setFStart] = useState(filter.startDate);
+  const [fEnd, setFEnd] = useState(filter.endDate);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+
+  const period = filter.periodId ? periods.find((p) => p.id === filter.periodId) : undefined;
+
+  const groups = useMemo<InstallerGroup[]>(() => {
+    const map = new Map<string, InstallerGroup>();
+    for (const l of lines) {
+      let g = map.get(l.installerId);
+      if (!g) {
+        g = { installerId: l.installerId, installerName: l.installerName, count: 0, totalAmount: 0, lines: [] };
+        map.set(l.installerId, g);
+      }
+      g.count += 1;
+      g.totalAmount += l.totalAmount;
+      g.lines.push(l);
+    }
+    for (const g of map.values()) g.lines.sort((a, b) => a.completedAt.localeCompare(b.completedAt));
+    return [...map.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [lines]);
+
+  const grandTotal = groups.reduce((s, g) => s + g.totalAmount, 0);
+  // 야간/휴일 할증은 폐지됐다. 폐지 전 건이 섞인 조회에만 열을 남긴다.
+  const hasNightWeekend = lines.some((l) => l.nightWeekendFee > 0);
+
+  function search() {
+    const params = new URLSearchParams({ tab: "settlement" });
+    if (fStart) params.set("startDate", fStart);
+    if (fEnd) params.set("endDate", fEnd);
+    router.push(`/backoffice/installers-settlement?${params.toString()}`);
+  }
+
+  function toggle(id: string) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allOpen = groups.length > 0 && groups.every((g) => open.has(g.installerId));
+
+  const exportParams = new URLSearchParams({ sourceType: "INSTALL" });
+  if (filter.periodId) exportParams.set("periodId", filter.periodId);
+  if (filter.startDate) exportParams.set("startDate", filter.startDate);
+  if (filter.endDate) exportParams.set("endDate", filter.endDate);
+
+  return (
+    <div className="space-y-6">
+      {/* 조회 조건 */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <Labeled label="설치 완료일 (시작)">
+              <input type="date" className={inputCls} value={fStart} onChange={(e) => setFStart(e.target.value)} />
+            </Labeled>
+            <Labeled label="설치 완료일 (끝)">
+              <input type="date" className={inputCls} value={fEnd} onChange={(e) => setFEnd(e.target.value)} />
+            </Labeled>
+            <button className={primaryBtn} onClick={search} disabled={!fStart || !fEnd || fStart > fEnd}>
+              조회
+            </button>
+          </div>
+          <a className={secondaryBtn} href={`/api/settlement/export?${exportParams.toString()}`}>
+            엑셀 내보내기
+          </a>
+        </div>
+        <p className="mt-2 text-xs text-zinc-400">
+          본사 승인이 끝난 설치 건만 금액이 잡힙니다. A/S 건은 포함하지 않습니다.
+        </p>
+        {period ? (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+            정산 주기: {period.name} ({period.startDate} ~ {period.endDate})
+            <Link className="text-amber-900 underline" href="/backoffice/installers-settlement?tab=settlement">
+              해제
+            </Link>
+          </div>
+        ) : null}
+      </section>
+
+      {/* 1단계: 총합계 */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <BigStat label="총 정산 금액" value={won(grandTotal)} strong />
+        <BigStat label="설치 건수" value={`${lines.length.toLocaleString()}건`} />
+        <BigStat label="기사 수" value={`${groups.length}명`} />
+      </section>
+
+      {/* 2단계: 기사별 → 3단계: 건별 */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-zinc-700">기사별 금액</h2>
+          {groups.length > 0 ? (
+            <button
+              className={linkBtn}
+              onClick={() => setOpen(allOpen ? new Set() : new Set(groups.map((g) => g.installerId)))}
+            >
+              {allOpen ? "모두 접기" : "모두 펼치기"}
+            </button>
+          ) : null}
+        </div>
+        {groups.length === 0 ? (
+          <p className="py-6 text-center text-sm text-zinc-400">이 기간에 승인된 설치 건이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-zinc-500">
+                  <th className="py-2">기사</th>
+                  <th className="text-right">건수</th>
+                  <th className="text-right">금액</th>
+                  <th className="w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => {
+                  const isOpen = open.has(g.installerId);
+                  return (
+                    <Fragment key={g.installerId}>
+                      <tr
+                        className="cursor-pointer border-b hover:bg-zinc-50"
+                        onClick={() => toggle(g.installerId)}
+                      >
+                        <td className="py-2.5 font-semibold">
+                          <span className="mr-2 inline-block w-3 text-zinc-400">{isOpen ? "▾" : "▸"}</span>
+                          {g.installerName}
+                        </td>
+                        <td className="text-right">{g.count}건</td>
+                        <td className="text-right font-bold">{won(g.totalAmount)}</td>
+                        <td className="text-right text-xs text-blue-600">{isOpen ? "접기" : "건별 보기"}</td>
+                      </tr>
+                      {isOpen ? (
+                        <tr className="border-b bg-zinc-50">
+                          <td colSpan={4} className="px-2 py-3">
+                            <InstallerLines lines={g.lines} hasNightWeekend={hasNightWeekend} />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="text-sm">
+                  <td className="pt-3 font-bold">합계</td>
+                  <td className="pt-3 text-right font-bold">{lines.length}건</td>
+                  <td className="pt-3 text-right font-bold">{won(grandTotal)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <PeriodsSection periods={periods} />
+    </div>
+  );
+}
+
+function InstallerLines({
+  lines,
+  hasNightWeekend,
+}: {
+  lines: InstallSettlementLineView[];
+  hasNightWeekend: boolean;
+}) {
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-left text-zinc-500">
+          <th className="py-1.5">완료일</th>
+          <th>주문번호</th>
+          <th>고객</th>
+          <th>주소</th>
+          <th className="text-right">연동비</th>
+          <th className="text-right">출장비</th>
+          <th className="text-right">장거리</th>
+          {hasNightWeekend ? <th className="text-right">야간/휴일</th> : null}
+          <th className="text-right">기타 청구</th>
+          <th className="text-right">월패드(본사)</th>
+          <th className="text-right">금액</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lines.map((l) => (
+          <tr key={l.id} className="border-t border-zinc-200">
+            <td className="whitespace-nowrap py-1.5">{kstDate(l.completedAt)}</td>
+            <td className="whitespace-nowrap">
+              <a
+                className="text-blue-600 hover:underline"
+                href={`/backoffice/installations/${l.sourceOrderId}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {l.erpOrderNo || l.sourceOrderId.slice(0, 8)}
+              </a>
+              {l.agentProxy ? (
+                <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 font-bold text-violet-800">대행</span>
+              ) : null}
+            </td>
+            <td className="whitespace-nowrap">{l.customerName ?? "-"}</td>
+            <td className="max-w-[16rem] truncate" title={l.address ?? ""}>
+              {l.address ?? "-"}
+            </td>
+            <td className="text-right">{num(l.linkageFee)}</td>
+            <td className="text-right">{num(l.travelFee)}</td>
+            <td className="text-right">{num(l.longDistanceFee)}</td>
+            {hasNightWeekend ? <td className="text-right">{num(l.nightWeekendFee)}</td> : null}
+            <td className="text-right">{num(l.extraClaimFee)}</td>
+            <td className="text-right">{num(l.wallpadFee)}</td>
+            <td className="text-right font-bold">{won(l.totalAmount)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const num = (n: number) => (n === 0 ? "-" : n.toLocaleString());
+
+// ── 정산 주기 (예전 방식, 접어 둠) ─────────────────────────────────────
+function PeriodsSection({ periods }: { periods: SettlementPeriodView[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
-  // 야간/휴일 할증은 폐지됐다. 폐지 전 건이 섞인 조회에만 열을 남긴다.
-  const hasNightWeekend = summary.some((s) => s.nightWeekendFee > 0);
-
-  // create-period form
   const [name, setName] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-
-  // filter form
-  const [fPeriod, setFPeriod] = useState(filter.periodId);
-  const [fStart, setFStart] = useState(filter.startDate);
-  const [fEnd, setFEnd] = useState(filter.endDate);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -123,27 +330,13 @@ function SettlementTab({
     });
   }
 
-  function applyFilter() {
-    const params = new URLSearchParams({ tab: "settlement" });
-    if (fPeriod) params.set("periodId", fPeriod);
-    if (fStart) params.set("startDate", fStart);
-    if (fEnd) params.set("endDate", fEnd);
-    router.push(`/backoffice/installers-settlement?${params.toString()}`);
-  }
-
-  const exportParams = new URLSearchParams();
-  if (filter.periodId) exportParams.set("periodId", filter.periodId);
-  if (filter.installerId) exportParams.set("installerId", filter.installerId);
-  if (filter.startDate) exportParams.set("startDate", filter.startDate);
-  if (filter.endDate) exportParams.set("endDate", filter.endDate);
-
   return (
-    <div className="space-y-6">
-      {error ? <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
-
-      {/* Create period */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-bold text-zinc-700">정산 주기 생성</h2>
+    <details className="rounded-xl border border-zinc-200 bg-white p-4">
+      <summary className="cursor-pointer text-sm font-bold text-zinc-500">
+        정산 주기 관리 (결산 확정용 · 선택 사항)
+      </summary>
+      <div className="mt-4 space-y-4">
+        {error ? <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
         <div className="flex flex-wrap items-end gap-3">
           <Labeled label="주기명">
             <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 2026년 8월" />
@@ -172,11 +365,6 @@ function SettlementTab({
             생성
           </button>
         </div>
-      </section>
-
-      {/* Periods */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-bold text-zinc-700">정산 주기</h2>
         {periods.length === 0 ? (
           <p className="text-sm text-zinc-400">아직 생성된 주기가 없습니다.</p>
         ) : (
@@ -215,16 +403,7 @@ function SettlementTab({
                         보기
                       </a>
                       {p.status === "OPEN" ? (
-                        <button
-                          className={linkBtn}
-                          disabled={pending}
-                          onClick={() =>
-                            run(async () => {
-                              const res = await collectLinesIntoPeriodAction(p.id);
-                              return res;
-                            })
-                          }
-                        >
+                        <button className={linkBtn} disabled={pending} onClick={() => run(() => collectLinesIntoPeriodAction(p.id))}>
                           미배정 수집
                         </button>
                       ) : null}
@@ -242,141 +421,16 @@ function SettlementTab({
             </table>
           </div>
         )}
-      </section>
+      </div>
+    </details>
+  );
+}
 
-      {/* Filter + results */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <Labeled label="주기">
-              <select className={inputCls} value={fPeriod} onChange={(e) => setFPeriod(e.target.value)}>
-                <option value="">(선택 안 함)</option>
-                <option value="__none__">미배정만</option>
-                {periods.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </Labeled>
-            <Labeled label="시작일">
-              <input type="date" className={inputCls} value={fStart} onChange={(e) => setFStart(e.target.value)} />
-            </Labeled>
-            <Labeled label="종료일">
-              <input type="date" className={inputCls} value={fEnd} onChange={(e) => setFEnd(e.target.value)} />
-            </Labeled>
-            <button className={primaryBtn} onClick={applyFilter}>
-              조회
-            </button>
-          </div>
-          {hasFilter ? (
-            <a className={primaryBtn} href={`/api/settlement/export?${exportParams.toString()}`}>
-              엑셀 내보내기
-            </a>
-          ) : null}
-        </div>
-
-        {!hasFilter ? (
-          <p className="text-sm text-zinc-400">주기 또는 기간을 선택해 조회하세요.</p>
-        ) : (
-          <div className="space-y-6">
-            <div>
-              <h3 className="mb-2 text-xs font-bold text-zinc-500">기사별 합계</h3>
-              {summary.length === 0 ? (
-                <p className="text-sm text-zinc-400">해당 조건의 정산 내역이 없습니다.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs text-zinc-500">
-                        <th className="py-2">기사</th>
-                        <th className="text-right">설치</th>
-                        <th className="text-right">A/S</th>
-                        <th className="text-right">연동비</th>
-                        <th className="text-right">출장비</th>
-                        <th className="text-right">장거리</th>
-                        {hasNightWeekend ? <th className="text-right">야간/휴일</th> : null}
-                        <th className="text-right">용역비</th>
-                        <th className="text-right">기타 청구</th>
-                        <th className="text-right">월패드(본사)</th>
-                        <th className="text-right">합계</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {summary.map((s) => (
-                        <tr key={s.installerId} className="border-b last:border-0">
-                          <td className="py-2 font-medium">{s.installerName}</td>
-                          <td className="text-right">{s.installCount}</td>
-                          <td className="text-right">{s.asCount}</td>
-                          <td className="text-right">{won(s.linkageFee)}</td>
-                          <td className="text-right">{won(s.travelFee)}</td>
-                          <td className="text-right">{won(s.longDistanceFee)}</td>
-                          {hasNightWeekend ? (
-                            <td className="text-right">{won(s.nightWeekendFee)}</td>
-                          ) : null}
-                          <td className="text-right">{won(s.serviceFee)}</td>
-                          <td className="text-right">{won(s.extraClaimFee)}</td>
-                          <td className="text-right">{won(s.wallpadFee)}</td>
-                          <td className="text-right font-bold">{won(s.totalAmount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <h3 className="mb-2 text-xs font-bold text-zinc-500">상세 내역 ({lines.length})</h3>
-              {lines.length === 0 ? null : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs text-zinc-500">
-                        <th className="py-2">기사</th>
-                        <th>구분</th>
-                        <th>완료일</th>
-                        <th className="text-right">합계</th>
-                        <th>주기</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l) => (
-                        <tr key={l.id} className="border-b last:border-0">
-                          <td className="py-2 font-medium">{l.installerName}</td>
-                          <td>
-                            {SOURCE_LABEL[l.sourceType] ?? l.sourceType}
-                            {l.agentProxy ? (
-                              <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-800">
-                                대행
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="text-zinc-600">{kstDate(l.completedAt)}</td>
-                          <td className="text-right font-semibold">{won(l.totalAmount)}</td>
-                          <td className="text-zinc-500">{l.periodId ? "배정됨" : "미배정"}</td>
-                          <td className="text-right">
-                            {l.periodId ? (
-                              <button
-                                className={linkBtn}
-                                disabled={pending}
-                                onClick={() => run(() => removeLineFromPeriodAction(l.id))}
-                              >
-                                주기 제외
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
+function BigStat({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${strong ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white"}`}>
+      <div className={`text-xs ${strong ? "text-zinc-300" : "text-zinc-500"}`}>{label}</div>
+      <div className="mt-1 text-xl font-bold">{value}</div>
     </div>
   );
 }
@@ -506,3 +560,4 @@ function Stat({ label, value }: { label: string; value: string }) {
 const inputCls = "rounded-md border border-zinc-300 px-3 py-1.5 text-sm";
 const primaryBtn = "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50";
 const linkBtn = "text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50";
+const secondaryBtn = "rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-50";
