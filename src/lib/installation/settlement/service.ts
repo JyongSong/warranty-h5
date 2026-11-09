@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { decryptNullablePii } from "@/lib/piiCrypto";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -162,6 +163,8 @@ export type SettlementLineFilter = {
   installerId?: string;
   startDate?: string; // YYYY-MM-DD KST
   endDate?: string;
+  /** INSTALL 만 / AS 만. 비우면 둘 다. */
+  sourceType?: "INSTALL" | "AS";
 };
 
 function buildLineWhere(filter: SettlementLineFilter): Prisma.SettlementLineWhereInput {
@@ -169,6 +172,7 @@ function buildLineWhere(filter: SettlementLineFilter): Prisma.SettlementLineWher
   if (filter.periodId === "__none__") where.periodId = null;
   else if (filter.periodId) where.periodId = filter.periodId;
   if (filter.installerId) where.installerId = filter.installerId;
+  if (filter.sourceType) where.sourceType = filter.sourceType;
   if (filter.startDate && isValidDateStr(filter.startDate)) {
     where.completedAt = { ...(where.completedAt as object), gte: kstDateToUtcStart(filter.startDate) };
   }
@@ -268,6 +272,50 @@ export async function aggregateSettlementByInstaller(
     row.totalAmount += l.totalAmount;
   }
   return [...byInstaller.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+}
+
+export type InstallSettlementLineView = SettlementLineView & {
+  /** ERP 주문번호 */
+  erpOrderNo: string | null;
+  customerName: string | null;
+  address: string | null;
+};
+
+function tryDecrypt(value: string | null | undefined): string | null {
+  try {
+    return decryptNullablePii(value);
+  } catch {
+    return null;
+  }
+}
+
+// 설치 건 정산 내역 + 주문 정보(ERP 주문번호·고객명·주소). 기사별 → 건별로 펼쳐 보는 화면용.
+export async function listInstallSettlementLinesWithOrder(
+  filter: Omit<SettlementLineFilter, "sourceType"> = {},
+): Promise<InstallSettlementLineView[]> {
+  const lines = await listSettlementLines({ ...filter, sourceType: "INSTALL" });
+  if (lines.length === 0) return [];
+  const orders = await prisma.installationOrder.findMany({
+    where: { id: { in: lines.map((l) => l.sourceOrderId) } },
+    select: {
+      id: true,
+      source: { select: { sourceKey: true, customerNameEncrypted: true, addressEncrypted: true } },
+      activeCustomerRequest: {
+        select: { customerNameEncrypted: true, installAddressEncrypted: true },
+      },
+    },
+  });
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  return lines.map((l) => {
+    const o = byId.get(l.sourceOrderId);
+    const req = o?.activeCustomerRequest;
+    return {
+      ...l,
+      erpOrderNo: o?.source?.sourceKey ?? null,
+      customerName: tryDecrypt(req?.customerNameEncrypted) ?? tryDecrypt(o?.source?.customerNameEncrypted),
+      address: tryDecrypt(req?.installAddressEncrypted) ?? tryDecrypt(o?.source?.addressEncrypted),
+    };
+  });
 }
 
 // Installer-facing: only their own lines (§m4 isolation).

@@ -3,8 +3,11 @@ import * as XLSX from "xlsx";
 import { requireAdminApi } from "@/lib/adminAuth";
 import {
   aggregateSettlementByInstaller,
+  listInstallSettlementLinesWithOrder,
   listSettlementLines,
+  type InstallSettlementLineView,
   type SettlementLineFilter,
+  type SettlementLineView,
 } from "@/lib/installation/settlement/service";
 
 export const dynamic = "force-dynamic";
@@ -27,26 +30,35 @@ export async function GET(req: NextRequest) {
     installerId: sp.get("installerId") ?? undefined,
     startDate: sp.get("startDate") ?? undefined,
     endDate: sp.get("endDate") ?? undefined,
+    // 기사 정산 화면은 설치 건만 본다(sourceType=INSTALL). 값이 없으면 예전처럼 설치 + A/S.
+    sourceType: sp.get("sourceType") === "INSTALL" ? "INSTALL" : undefined,
   };
+  const installOnly = filter.sourceType === "INSTALL";
 
   try {
-    const [lines, summary] = await Promise.all([
-      listSettlementLines(filter),
-      aggregateSettlementByInstaller(filter),
-    ]);
+    const [lines, summary]: [Array<SettlementLineView & Partial<InstallSettlementLineView>>, Awaited<ReturnType<typeof aggregateSettlementByInstaller>>] =
+      await Promise.all([
+        installOnly ? listInstallSettlementLinesWithOrder(filter) : listSettlementLines(filter),
+        aggregateSettlementByInstaller(filter),
+      ]);
 
     // 야간/휴일 할증은 폐지됐다. 폐지 전 건이 섞인 기간에만 열을 남긴다.
     const hasNightWeekend = lines.some((l) => l.nightWeekendFee > 0);
 
-    const detailRows = lines.map((l) => ({
+    const detailRows = [...lines]
+      .sort((a, b) => a.installerName.localeCompare(b.installerName, "ko") || a.completedAt.localeCompare(b.completedAt))
+      .map((l) => ({
       기사: l.installerName,
-      구분: SOURCE_LABEL[l.sourceType] ?? l.sourceType,
+      구분: (SOURCE_LABEL[l.sourceType] ?? l.sourceType) + (l.agentProxy ? "(대행)" : ""),
       완료일: fmtKstDate(l.completedAt),
+      ...(installOnly
+        ? { 주문번호: l.erpOrderNo ?? "", 고객: l.customerName ?? "", 주소: l.address ?? "" }
+        : {}),
       연동비: l.linkageFee,
       출장비: l.travelFee,
       장거리: l.longDistanceFee,
       ...(hasNightWeekend ? { "야간/주말": l.nightWeekendFee } : {}),
-      용역비: l.serviceFee,
+      ...(installOnly ? {} : { 용역비: l.serviceFee }),
       "기타 청구": l.extraClaimFee,
       "월패드(본사 청구)": l.wallpadFee,
       "합계(정산)": l.totalAmount,
@@ -57,12 +69,12 @@ export async function GET(req: NextRequest) {
     const summaryRows = summary.map((s) => ({
       기사: s.installerName,
       설치건수: s.installCount,
-      "A/S건수": s.asCount,
+      ...(installOnly ? {} : { "A/S건수": s.asCount }),
       연동비: s.linkageFee,
       출장비: s.travelFee,
       장거리: s.longDistanceFee,
       ...(hasNightWeekend ? { "야간/주말": s.nightWeekendFee } : {}),
-      용역비: s.serviceFee,
+      ...(installOnly ? {} : { 용역비: s.serviceFee }),
       "기타 청구": s.extraClaimFee,
       "월패드(본사 청구)": s.wallpadFee,
       합계: s.totalAmount,
