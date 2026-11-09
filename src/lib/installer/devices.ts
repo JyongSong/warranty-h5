@@ -13,6 +13,21 @@ export async function deleteInstallerDevice(fcmToken: string) {
   await prisma.installerDevice.deleteMany({ where: { fcmToken } });
 }
 
+/**
+ * 기사 앱(푸시 기기)이 등록된 기사 id 와 마지막 등록 시각.
+ * 앱을 지우면 토큰이 남아 있다가 푸시 실패 때 지워지므로, "앱 설치" 는 등록된 기기가 있다는 뜻이다.
+ */
+export async function listInstallerAppStatus(installerIds: string[]): Promise<Map<string, Date>> {
+  const ids = [...new Set(installerIds.filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.installerDevice.groupBy({
+    by: ["installerId"],
+    where: { installerId: { in: ids } },
+    _max: { lastSeenAt: true },
+  });
+  return new Map(rows.flatMap((row) => (row._max.lastSeenAt ? [[row.installerId, row._max.lastSeenAt] as const] : [])));
+}
+
 export async function listInstallerDeviceTokens(installerId: string): Promise<string[]> {
   const rows = await prisma.installerDevice.findMany({
     where: { installerId },

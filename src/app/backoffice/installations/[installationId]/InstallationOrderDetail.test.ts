@@ -331,7 +331,8 @@ describe("ManualAssignmentInstallerSelector", () => {
       }),
     );
 
-    expect(html).toContain("기사명, 전화, 지역 검색");
+    expect(html).toContain("이름, 상호, 전화, 지역 검색");
+    expect(html).toContain("앱 설치만");
     expect(html).toContain("지역 매칭만");
     expect(html).toContain("허브 보유만");
     expect(html).toContain("지역 매칭 우선");
@@ -356,6 +357,37 @@ describe("ManualAssignmentInstallerSelector", () => {
         sort: "recommended",
       }).map((candidate) => candidate.installerId),
     ).toEqual(["installer-1"]);
+  });
+
+  it("searches by the installer's own name and filters to installers with the app", () => {
+    const people = [
+      { ...candidates[0], installerId: "installer-1", personName: "김경민", installerName: "경영하드웨어", installerBranch: "경영하드웨어", appInstalled: true },
+      { ...candidates[1], installerId: "installer-2", personName: "이영호", installerName: "열쇠마을", installerBranch: "열쇠마을", appInstalled: false },
+    ];
+    const ids = (options: { query?: string; appOnly?: boolean }) =>
+      filterManualAssignmentInstallers(people, {
+        query: options.query ?? "",
+        matchOnly: false,
+        hubOnly: false,
+        appOnly: options.appOnly,
+        sort: "name",
+      }).map((candidate) => candidate.installerId);
+
+    expect(ids({ query: "김경민" })).toEqual(["installer-1"]);
+    expect(ids({ query: "열쇠마을" })).toEqual(["installer-2"]);
+    expect(ids({ appOnly: true })).toEqual(["installer-1"]);
+
+    const html = renderToStaticMarkup(
+      createElement(ManualAssignmentInstallerSelector, {
+        candidates: people,
+        disabled: false,
+        selectedInstallerId: "",
+        onSelectInstaller: vi.fn(),
+      }),
+    );
+    expect(html).toContain("김경민 · 경영하드웨어");
+    expect(html).toContain("앱 설치");
+    expect(html).toContain("앱 미설치");
   });
 
   it("sorts matched installers first, then lower monthly dispatch count", () => {

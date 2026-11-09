@@ -173,6 +173,11 @@ export type InstallationOrderDetailItem = {
     monthlyDispatchCount: number;
     matchTier: string | null;
     hasAqaraHubInventory: boolean;
+    /** 기사 본인 이름. installerName 은 상호가 있으면 상호다. */
+    personName?: string | null;
+    /** 기사 앱(푸시 기기) 등록 여부. null 이면 조회하지 못한 것 */
+    appInstalled?: boolean | null;
+    appLastSeenAt?: string | null;
   }>;
   manualAssignmentInstallers: Array<{
     rank: number;
@@ -185,6 +190,11 @@ export type InstallationOrderDetailItem = {
     monthlyDispatchCount: number;
     matchTier: string | null;
     hasAqaraHubInventory: boolean;
+    /** 기사 본인 이름. installerName 은 상호가 있으면 상호다. */
+    personName?: string | null;
+    /** 기사 앱(푸시 기기) 등록 여부. null 이면 조회하지 못한 것 */
+    appInstalled?: boolean | null;
+    appLastSeenAt?: string | null;
   }>;
 };
 
@@ -955,11 +965,13 @@ export function ManualAssignmentInstallerSelector({
   const [query, setQuery] = useState("");
   const [matchOnly, setMatchOnly] = useState(false);
   const [hubOnly, setHubOnly] = useState(false);
+  const [appOnly, setAppOnly] = useState(false);
   const [sort, setSort] = useState<ManualAssignmentInstallerSort>("recommended");
   const distanceByInstallerId = distanceLookup.status === "READY" ? distanceLookup.byInstallerId : undefined;
   const filteredCandidates = useMemo(
-    () => filterManualAssignmentInstallers(candidates, { query, matchOnly, hubOnly, sort, distanceByInstallerId }),
-    [candidates, distanceByInstallerId, hubOnly, matchOnly, query, sort],
+    () =>
+      filterManualAssignmentInstallers(candidates, { query, matchOnly, hubOnly, appOnly, sort, distanceByInstallerId }),
+    [appOnly, candidates, distanceByInstallerId, hubOnly, matchOnly, query, sort],
   );
 
   return (
@@ -978,13 +990,13 @@ export function ManualAssignmentInstallerSelector({
         <>
           <div className="mt-2 grid gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
             <label className="block">
-              <span className="sr-only">기사명, 전화, 지역 검색</span>
+              <span className="sr-only">이름, 상호, 전화, 지역 검색</span>
               <input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 disabled={disabled}
-                placeholder="기사명, 전화, 지역 검색"
+                placeholder="이름, 상호, 전화, 지역 검색"
                 className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950 disabled:bg-zinc-100"
               />
             </label>
@@ -1009,6 +1021,16 @@ export function ManualAssignmentInstallerSelector({
                     className="size-4 rounded border-zinc-300 accent-zinc-950"
                   />
                   허브 보유만
+                </label>
+                <label className="inline-flex h-9 items-center gap-2 text-sm font-semibold text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={appOnly}
+                    onChange={(event) => setAppOnly(event.target.checked)}
+                    disabled={disabled}
+                    className="size-4 rounded border-zinc-300 accent-zinc-950"
+                  />
+                  앱 설치만
                 </label>
               </div>
               <label className="block">
@@ -1051,14 +1073,23 @@ export function ManualAssignmentInstallerSelector({
                 />
                 <span className="min-w-0">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-zinc-950">{candidate.installerName}</span>
+                    <span className="font-semibold text-zinc-950">{formatManualAssignmentInstallerName(candidate)}</span>
                     <StatusBadge
                       label={candidate.matchTier ? "지역 매칭" : "지역 예외"}
                       tone={candidate.matchTier ? "success" : "warning"}
                     />
+                    {candidate.appInstalled === true ? (
+                      <span
+                        title={candidate.appLastSeenAt ? `앱 기기 등록 ${formatBackofficeDateTime(candidate.appLastSeenAt)}` : undefined}
+                      >
+                        <StatusBadge label="앱 설치" tone="success" />
+                      </span>
+                    ) : candidate.appInstalled === false ? (
+                      <StatusBadge label="앱 미설치" tone="neutral" />
+                    ) : null}
                   </span>
                   <span className="mt-1 block text-xs text-zinc-500">
-                    #{candidate.rank} · {formatText(candidate.installerBranch)} · {formatBackofficePhone(candidate.phone)}
+                    #{candidate.rank} · {formatBackofficePhone(candidate.phone)}
                   </span>
                   <span className="mt-1 block break-words text-xs text-zinc-600">
                     {formatText(candidate.region)} / {formatList(candidate.serviceAreas)} / 월 {candidate.monthlyDispatchCount}건
@@ -1108,6 +1139,7 @@ export function filterManualAssignmentInstallers(
     query: string;
     matchOnly: boolean;
     hubOnly: boolean;
+    appOnly?: boolean;
     sort: ManualAssignmentInstallerSort;
     distanceByInstallerId?: Map<string, InstallerDistance>;
   },
@@ -1118,11 +1150,14 @@ export function filterManualAssignmentInstallers(
     .filter((candidate) => {
       if (options.matchOnly && !candidate.matchTier) return false;
       if (options.hubOnly && !candidate.hasAqaraHubInventory) return false;
+      if (options.appOnly && candidate.appInstalled !== true) return false;
       if (!normalizedQuery) return true;
 
       return normalizeManualAssignmentSearchText(
         [
+          candidate.personName ?? "",
           candidate.installerName,
+          candidate.installerBranch ?? "",
           candidate.installerId,
           candidate.phone,
           candidate.region,
@@ -1159,6 +1194,14 @@ function compareManualAssignmentInstallers(
 
   const matchDiff = Number(Boolean(right.matchTier)) - Number(Boolean(left.matchTier));
   return matchDiff || monthlyDispatchDiff || left.installerName.localeCompare(right.installerName, "ko");
+}
+
+/** 「이름 · 상호」. 상호가 없거나 이름과 같으면 이름만. */
+function formatManualAssignmentInstallerName(candidate: ManualAssignmentInstaller) {
+  const name = candidate.personName?.trim();
+  const branch = candidate.installerBranch?.trim() || candidate.installerName;
+  if (!name || name === branch) return branch;
+  return `${name} · ${branch}`;
 }
 
 function normalizeManualAssignmentSearchText(value: string) {

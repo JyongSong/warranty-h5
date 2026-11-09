@@ -664,6 +664,10 @@ async function findNextInstallerCandidate(
     }
   }
 
+  // 후보 명단(거리 기준이면 20km 이내로 이미 추려진 목록)이 있으면 그 밖의 기사에게는
+  // 자동으로 넘기지 않는다. 지역만 맞는 먼 기사에게 조용히 가지 않도록 관리자에게 맡긴다.
+  // 이 길은 트랜잭션 안이라 여기서 지도 API 로 거리를 다시 구하지 않는다.
+  if (previousCandidateInstallerIds.length > 0) return null;
   const nextCandidate = matchedCandidates[0] ?? null;
   return nextCandidate ? { ...nextCandidate, revalidationExclusions } : null;
 }
