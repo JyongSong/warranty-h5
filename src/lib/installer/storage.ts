@@ -109,6 +109,15 @@ export function createPartnerCompletionUploadTargets(orderId: string, count: num
   return createUploadTargets(`partner/${orderId}/`, count);
 }
 
+// 기사 정산 정보 사진(사업자등록증·통장 사본). 경로 접두사는 settlement-info 의 isInstallerDocPath 와 맞춘다.
+export function installerDocPrefix(installerId: string) {
+  return `installer-docs/${installerId}/`;
+}
+
+export function createInstallerDocUploadTargets(installerId: string, count: number) {
+  return createUploadTargets(installerDocPrefix(installerId), count);
+}
+
 /**
  * 제출된 경로가 실제로 Storage 에 올라와 있는지 확인한다.
  *
