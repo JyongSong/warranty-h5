@@ -296,6 +296,7 @@ function SettlementTab({
                         {hasNightWeekend ? <th className="text-right">야간/휴일</th> : null}
                         <th className="text-right">용역비</th>
                         <th className="text-right">기타 청구</th>
+                        <th className="text-right">월패드(본사)</th>
                         <th className="text-right">합계</th>
                       </tr>
                     </thead>
@@ -313,6 +314,7 @@ function SettlementTab({
                           ) : null}
                           <td className="text-right">{won(s.serviceFee)}</td>
                           <td className="text-right">{won(s.extraClaimFee)}</td>
+                          <td className="text-right">{won(s.wallpadFee)}</td>
                           <td className="text-right font-bold">{won(s.totalAmount)}</td>
                         </tr>
                       ))}

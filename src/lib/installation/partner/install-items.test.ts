@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveInstallItemsFromMemo,
+  formatInstallerInstallItem,
   formatInstallItemsText,
   normalizeInstallItems,
   PartnerInstallItemsError,
   resolvePartnerInstallItems,
+  wallpadBillingOfItems,
 } from "@/lib/installation/partner/install-items";
 
 const item = (code: string | null, name: string, quantity = 1, onsitePayment = false) => ({
@@ -109,5 +111,44 @@ describe("HQ edits", () => {
       "K100도어락설치 ×1, 월패드 연동 설치 ×1 (현장결제)",
     );
     expect(formatInstallItemsText([])).toBe("(없음)");
+  });
+});
+
+describe("기사 앱 월패드 분리 (splitWallpad)", () => {
+  const lines = (memo: string) =>
+    deriveInstallItemsFromMemo(memo, { splitWallpad: true }).map(formatInstallerInstallItem);
+
+  it("도어락과 묶지 않고 월패드 모듈을 본사 청구로 따로 보여 준다", () => {
+    const memo = "RF 447 송수신기 모듈 x1 / 용역 출장비 x1 / 용역 도어락 설치비(K100) x1 / 용역 월패드 모듈 설치비 x1";
+    expect(lines(memo)).toEqual(["K100도어락설치 ×1", "(본사 청구) 월패드연동설치 ×1"]);
+    expect(wallpadBillingOfItems(deriveInstallItemsFromMemo(memo, { splitWallpad: true }))).toEqual({
+      hq: true,
+      onsite: false,
+    });
+    // 협력사·이카운트용(기본)은 그대로 묶는다.
+    expect(deriveInstallItemsFromMemo(memo).map((i) => i.code)).toEqual(["00049"]);
+  });
+
+  it("도어락+월패드 연동 품목도 둘로 나눈다", () => {
+    expect(lines("용역 도어락 설치비(L100)+월패드 연동(RF447) x1")).toEqual([
+      "L100도어락설치 ×1",
+      "(본사 청구) 월패드연동설치 ×1",
+    ]);
+  });
+
+  it("연동 설치비(현장결제)는 현장 결제 월패드연동설치", () => {
+    const memo = "스마트 도어락 K100 x1 / 용역 도어락 설치비(K100) x1 / 용역 연동 설치비 (현장결제) x1";
+    expect(lines(memo)).toEqual(["K100도어락설치 ×1", "(현장 결제) 월패드연동설치 ×1"]);
+    expect(wallpadBillingOfItems(deriveInstallItemsFromMemo(memo, { splitWallpad: true }))).toEqual({
+      hq: false,
+      onsite: true,
+    });
+  });
+
+  it("월패드 품목이 없으면 둘 다 false", () => {
+    expect(wallpadBillingOfItems(deriveInstallItemsFromMemo("용역 조명 스위치 설치비 x3", { splitWallpad: true }))).toEqual({
+      hq: false,
+      onsite: false,
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   isWeekend,
   parseKstDateTimeLocal,
   linkageFeeForCapability,
+  WALLPAD_HQ_FEE,
 } from "./compute";
 import type { EffectiveRates } from "./rates";
 
@@ -199,5 +200,32 @@ describe("computeAsLineItems", () => {
     expect(computeAsLineItems(null).totalAmount).toBe(0);
     expect(computeAsLineItems(-5).totalAmount).toBe(0);
     expect(computeAsLineItems(40000).extraClaimFee).toBe(0);
+  });
+});
+
+describe("월패드 결제 방식", () => {
+  const base = {
+    achievedAqaraAppCapability: "NONE",
+    longDistanceAmount: null,
+    installEndAt: kst("2026-11-06", 14),
+    firstSubmittedAt: new Date("2026-11-06T00:00:00Z"),
+    rates: RATES,
+  };
+
+  it("본사 청구는 고정 금액을 정산에 넣고 현장 금액은 버린다", () => {
+    const { items } = computeInstallLineItems({ ...base, wallpadAmount: 30000, wallpadBilling: "HQ" });
+    expect(WALLPAD_HQ_FEE).toBe(50000);
+    expect(items.wallpadFee).toBe(50000);
+    expect(items.wallpadAmount).toBe(0);
+    expect(items.totalAmount).toBe(15000 + 50000);
+  });
+
+  it("현장 결제·결제 방식 없음(옛 제출)은 기록만 하고 정산에 넣지 않는다", () => {
+    for (const wallpadBilling of ["ONSITE", null, undefined]) {
+      const { items } = computeInstallLineItems({ ...base, wallpadAmount: 30000, wallpadBilling });
+      expect(items.wallpadFee).toBe(0);
+      expect(items.wallpadAmount).toBe(30000);
+      expect(items.totalAmount).toBe(15000);
+    }
   });
 });

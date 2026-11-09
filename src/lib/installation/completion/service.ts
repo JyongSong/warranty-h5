@@ -7,6 +7,7 @@ import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/instal
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
 import { createInstallSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
+import { WALLPAD_BILLINGS } from "@/lib/installation/settlement/compute";
 import {
   WALLPAD_BRANDS,
   WALLPAD_FAIL_REASONS,
@@ -58,6 +59,11 @@ export type SubmitCompletionInput = {
   wallpadModel?: string | null;
   wallpadFailReason?: string | null;
   wallpadNote?: string | null;
+  /**
+   * 월패드 연동 성공 건의 결제 방식(HQ 본사 청구 / ONSITE 현장 결제). 성공이 아니면 버린다.
+   * 없으면(이 항목이 생기기 전 화면·대기열) 현장 결제로 본다.
+   */
+  wallpadBilling?: string | null;
   installEndAt: Date;
   photoPaths: string[];
 };
@@ -97,10 +103,12 @@ function normalizeOptionPhotos(input: SubmitCompletionInput): {
  *
  * 제조사·모델명·실패 사유는 모두 선택이다(기사가 모를 수 있다). 적었으면 정해진 값인지만 본다.
  * 현장 금액은 성공했을 때만 남긴다. 옛 제출(결과 없음)은 wallpadLinked 를 그대로 쓴다.
+ * 성공 건은 결제 방식을 남기고, 본사 청구면 금액이 고정이라 현장 금액을 버린다.
  */
 function normalizeWallpad(input: SubmitCompletionInput): {
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  wallpadBilling: string | null;
   wallpadResult: string | null;
   wallpadBrand: string | null;
   wallpadModel: string | null;
@@ -111,6 +119,7 @@ function normalizeWallpad(input: SubmitCompletionInput): {
     return {
       wallpadLinked: input.wallpadLinked,
       wallpadAmount: input.wallpadAmount,
+      wallpadBilling: null,
       wallpadResult: null,
       wallpadBrand: null,
       wallpadModel: null,
@@ -124,6 +133,7 @@ function normalizeWallpad(input: SubmitCompletionInput): {
     return {
       wallpadLinked: false,
       wallpadAmount: null,
+      wallpadBilling: null,
       wallpadResult: result,
       wallpadBrand: null,
       wallpadModel: null,
@@ -147,9 +157,16 @@ function normalizeWallpad(input: SubmitCompletionInput): {
     throw new InstallationCompletionError("WALLPAD_FAIL_REASON_INVALID");
   }
 
+  const success = result === "SUCCESS";
+  const billing = success ? (input.wallpadBilling ?? "ONSITE") : null;
+  if (billing && !isOneOf(WALLPAD_BILLINGS, billing)) {
+    throw new InstallationCompletionError("WALLPAD_BILLING_INVALID");
+  }
+
   return {
-    wallpadLinked: result === "SUCCESS",
-    wallpadAmount: result === "SUCCESS" ? input.wallpadAmount : null,
+    wallpadLinked: success,
+    wallpadAmount: success && billing === "ONSITE" ? input.wallpadAmount : null,
+    wallpadBilling: billing,
     wallpadResult: result,
     wallpadBrand: brand,
     wallpadModel: model,
@@ -262,6 +279,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
             achievedAqaraAppCapability: input.achievedAqaraAppCapability,
             wallpadLinked: wallpad.wallpadLinked,
             wallpadResult: wallpad.wallpadResult,
+            wallpadBilling: wallpad.wallpadBilling,
           },
         },
       },
@@ -430,6 +448,8 @@ export type InstallationCompletionView = {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  /** HQ 본사 청구 / ONSITE 현장 결제. 비어 있으면 옛 제출 또는 연동 성공 아님 */
+  wallpadBilling: string | null;
   wallpadResult: string | null;
   wallpadBrand: string | null;
   wallpadModel: string | null;
@@ -461,6 +481,7 @@ export async function getInstallationCompletionForOrder(
     achievedAqaraAppCapability: c.achievedAqaraAppCapability,
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
+    wallpadBilling: c.wallpadBilling,
     wallpadResult: c.wallpadResult,
     wallpadBrand: c.wallpadBrand,
     wallpadModel: c.wallpadModel,

@@ -81,6 +81,7 @@ export async function editApprovedCompletionAction(input: {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  wallpadBilling?: string | null;
   longDistanceAmount: number | null;
   extraClaimAmount: number | null;
   extraClaimReason: string | null;

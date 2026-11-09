@@ -34,6 +34,8 @@ export default function ApprovedCompletionPanel({
   const [capability, setCapability] = useState(completion.achievedAqaraAppCapability);
   const [wallpadLinked, setWallpadLinked] = useState(completion.wallpadLinked);
   const [wallpadAmount, setWallpadAmount] = useState(toInput(completion.wallpadAmount));
+  const [wallpadBilling, setWallpadBilling] = useState(completion.wallpadBilling ?? "ONSITE");
+  const wallpadHq = wallpadLinked && wallpadBilling === "HQ";
   const [longDistance, setLongDistance] = useState(toInput(completion.longDistanceAmount));
   const [extraClaim, setExtraClaim] = useState(toInput(completion.extraClaimAmount));
   const [extraClaimReason, setExtraClaimReason] = useState(completion.extraClaimReason ?? "");
@@ -45,7 +47,8 @@ export default function ApprovedCompletionPanel({
           achievedAqaraAppCapability: capability,
           longDistanceAmount: toAmount(longDistance) ?? 0,
           extraClaimAmount: toAmount(extraClaim) ?? 0,
-          wallpadAmount: wallpadLinked ? toAmount(wallpadAmount) : null,
+          wallpadAmount: wallpadLinked && !wallpadHq ? toAmount(wallpadAmount) : null,
+          wallpadBilling: wallpadLinked ? wallpadBilling : null,
           installEndAt: new Date(completion.installEndAt),
           firstSubmittedAt: new Date(completion.firstSubmittedAt),
           rates,
@@ -56,6 +59,7 @@ export default function ApprovedCompletionPanel({
     setCapability(completion.achievedAqaraAppCapability);
     setWallpadLinked(completion.wallpadLinked);
     setWallpadAmount(toInput(completion.wallpadAmount));
+    setWallpadBilling(completion.wallpadBilling ?? "ONSITE");
     setLongDistance(toInput(completion.longDistanceAmount));
     setExtraClaim(toInput(completion.extraClaimAmount));
     setExtraClaimReason(completion.extraClaimReason ?? "");
@@ -77,7 +81,8 @@ export default function ApprovedCompletionPanel({
       reason,
       achievedAqaraAppCapability: capability,
       wallpadLinked,
-      wallpadAmount: wallpadLinked ? toAmount(wallpadAmount) : null,
+      wallpadAmount: wallpadLinked && !wallpadHq ? toAmount(wallpadAmount) : null,
+      wallpadBilling: wallpadLinked ? wallpadBilling : null,
       longDistanceAmount: toAmount(longDistance),
       extraClaimAmount: toAmount(extraClaim),
       extraClaimReason: extraClaimReason || null,
@@ -166,8 +171,24 @@ export default function ApprovedCompletionPanel({
               />
               월패드 연동함
             </label>
-            <AmountInput label="월패드 금액 (현장 수금)" value={wallpadAmount} onChange={setWallpadAmount} disabled={!wallpadLinked} />
+            <label className="grid gap-1">
+              <span className="text-xs font-bold text-zinc-600">월패드 결제 방식</span>
+              <select
+                value={wallpadBilling}
+                onChange={(event) => setWallpadBilling(event.target.value)}
+                disabled={!wallpadLinked}
+                className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950 disabled:bg-zinc-50"
+              >
+                <option value="HQ">본사 청구 (정산 포함)</option>
+                <option value="ONSITE">현장 결제 (정산 미포함)</option>
+              </select>
+            </label>
           </div>
+          {wallpadLinked && !wallpadHq ? (
+            <div className="grid grid-cols-2 gap-3">
+              <AmountInput label="월패드 금액 (현장 수금)" value={wallpadAmount} onChange={setWallpadAmount} />
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <AmountInput label="장거리 비용" value={longDistance} onChange={setLongDistance} />
             <AmountInput label="기타 청구 금액" value={extraClaim} onChange={setExtraClaim} />
@@ -188,7 +209,8 @@ export default function ApprovedCompletionPanel({
               <span className="font-extrabold">{preview.items.totalAmount.toLocaleString()}원</span>
               <span className="ml-2 text-xs text-zinc-500">
                 (연동비 {preview.items.linkageFee.toLocaleString()} · 출장비 {preview.items.travelFee.toLocaleString()} · 장거리{" "}
-                {preview.items.longDistanceFee.toLocaleString()} · 기타 {preview.items.extraClaimFee.toLocaleString()})
+                {preview.items.longDistanceFee.toLocaleString()} · 기타 {preview.items.extraClaimFee.toLocaleString()}
+                {preview.items.wallpadFee > 0 ? ` · 월패드 ${preview.items.wallpadFee.toLocaleString()}` : ""})
               </span>
             </div>
           ) : null}

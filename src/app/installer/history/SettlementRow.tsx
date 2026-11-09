@@ -20,6 +20,7 @@ export default function SettlementRow({ row }: { row: MonthlySettlementRow }) {
     { label: "야간/휴일", value: row.nightWeekendFee },
     { label: "용역비", value: row.serviceFee },
     { label: "기타 청구", value: row.extraClaimFee },
+    { label: "월패드 (본사 청구)", value: row.wallpadFee },
   ].filter((item) => item.value > 0);
 
   return (

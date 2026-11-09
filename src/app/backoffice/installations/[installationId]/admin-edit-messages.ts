@@ -22,6 +22,7 @@ const ADMIN_EDIT_ERROR_MESSAGES: Record<string, string> = {
   INVALID_AMOUNT: "금액을 확인해 주세요.",
   EXTRA_CLAIM_REASON_REQUIRED: "기타 청구 금액이 있으면 사유를 입력해 주세요.",
   EXTRA_CLAIM_REASON_TOO_LONG: "기타 청구 사유는 500자 이내로 입력해 주세요.",
+  WALLPAD_BILLING_INVALID: "월패드 결제 방식을 확인해 주세요.",
 };
 
 export function getAdminEditErrorMessage(code: string) {

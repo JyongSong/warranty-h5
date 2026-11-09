@@ -30,7 +30,15 @@ export type PartnerInstallItem = {
   quantity: number;
   /** 고객이 현장에서 협력사에 직접 내는 작업 (본사 청구 대상 아님) */
   onsitePayment: boolean;
+  /**
+   * 고객이 온라인으로 이미 결제해 기사가 본사에 청구하는 월패드 연동.
+   * 기사 앱용 분리 모드(splitWallpad)에서만 붙고 DB 에는 저장하지 않는다.
+   */
+  hqClaim?: boolean;
 };
+
+/** 기사 앱에 보이는 월패드 연동 품목 이름. 앞에 (본사 청구)/(현장 결제) 가 붙는다. */
+export const INSTALLER_WALLPAD_ITEM_NAME = "월패드연동설치";
 
 export const PARTNER_INSTALL_ITEMS_MAX = 30;
 const ITEM_NAME_MAX = 60;
@@ -89,9 +97,17 @@ function isServiceSegment(name: string) {
  * - 같은 주문의 월패드 모듈 설치비는 K100/L100 도어락과 묶어 00049/00048, 남는 월패드는 00046
  * - 연동 설치비(현장결제)는 00046 + 현장결제 표시
  * - 출장비·용역매출·컨설팅·스마트홈 서비스는 뺀다. 코드표에 없는 용역은 이름만 정리해서 남긴다.
+ *
+ * splitWallpad(기사 앱용): 도어락과 월패드를 묶지 않는다. 월패드 모듈 설치비·도어락+월패드 연동 품목의
+ * 월패드는 "본사 청구" 월패드연동설치로, 연동 설치비(현장결제)는 "현장 결제" 월패드연동설치로 따로 보여 준다.
+ * 기사가 어느 쪽 돈인지(본사에 청구 / 고객에게 받기) 바로 알 수 있게 하려는 것이다.
  */
-export function deriveInstallItemsFromMemo(memo: string | null | undefined): PartnerInstallItem[] {
+export function deriveInstallItemsFromMemo(
+  memo: string | null | undefined,
+  options: { splitWallpad?: boolean } = {},
+): PartnerInstallItem[] {
   if (!memo) return [];
+  const split = options.splitWallpad === true;
 
   const segments = splitMemo(memo).filter((segment) => isServiceSegment(segment.name));
   const productModel = /\b(K100|L100|U100)\b/.exec(memo)?.[1] ?? null;
@@ -112,11 +128,16 @@ export function deriveInstallItemsFromMemo(memo: string | null | undefined): Par
         items.push(catalogItem("00061", segment.quantity));
         continue;
       }
+      if (doorlock[2] && split) {
+        items.push(catalogItem(DOORLOCK_CODE[model], segment.quantity));
+        wallpadLeft += segment.quantity;
+        continue;
+      }
       if (doorlock[2] && DOORLOCK_WALLPAD_CODE[model]) {
         items.push(catalogItem(DOORLOCK_WALLPAD_CODE[model], segment.quantity));
         continue;
       }
-      const combined = DOORLOCK_WALLPAD_CODE[model] ? Math.min(segment.quantity, wallpadLeft) : 0;
+      const combined = !split && DOORLOCK_WALLPAD_CODE[model] ? Math.min(segment.quantity, wallpadLeft) : 0;
       if (combined > 0) {
         items.push(catalogItem(DOORLOCK_WALLPAD_CODE[model], combined));
         wallpadLeft -= combined;
@@ -130,6 +151,10 @@ export function deriveInstallItemsFromMemo(memo: string | null | undefined): Par
     const bare = name.replace(/^용역\s*/, "");
     const onsitePayment = /\(현장\s*결제\)/.test(bare);
     const rule = SERVICE_ITEM_RULES.find((candidate) => candidate.match.test(bare));
+    if (split && rule?.code === "00046") {
+      items.push({ code: "00046", name: INSTALLER_WALLPAD_ITEM_NAME, quantity: segment.quantity, onsitePayment });
+      continue;
+    }
     if (rule?.code) {
       items.push(catalogItem(rule.code, segment.quantity, onsitePayment));
     } else {
@@ -142,7 +167,13 @@ export function deriveInstallItemsFromMemo(memo: string | null | undefined): Par
     }
   }
 
-  if (wallpadLeft > 0) items.push(catalogItem("00046", wallpadLeft));
+  if (wallpadLeft > 0) {
+    items.push(
+      split
+        ? { code: "00046", name: INSTALLER_WALLPAD_ITEM_NAME, quantity: wallpadLeft, onsitePayment: false, hqClaim: true }
+        : catalogItem("00046", wallpadLeft),
+    );
+  }
   // 이카운트처럼 도어락 작업을 맨 앞에 둔다 (나머지는 메모 순서 그대로).
   const merged = mergeSameItems(items);
   return [...merged.filter(isDoorlockItem), ...merged.filter((item) => !isDoorlockItem(item))];
@@ -166,7 +197,10 @@ function mergeSameItems(items: PartnerInstallItem[]) {
   for (const item of items) {
     const same = merged.find(
       (existing) =>
-        existing.code === item.code && existing.name === item.name && existing.onsitePayment === item.onsitePayment,
+        existing.code === item.code &&
+        existing.name === item.name &&
+        existing.onsitePayment === item.onsitePayment &&
+        existing.hqClaim === item.hqClaim,
     );
     if (same) same.quantity += item.quantity;
     else merged.push({ ...item });
@@ -221,6 +255,26 @@ export function resolvePartnerInstallItems(stored: unknown, memo: string | null 
   return saved
     ? { items: saved, edited: true }
     : { items: deriveInstallItemsFromMemo(memo), edited: false };
+}
+
+/**
+ * 기사 앱에 보여 줄 한 줄. 결제 방식을 앞에 붙인다.
+ * 예) "(본사 청구) 월패드연동설치 ×1", "(현장 결제) 월패드연동설치 ×1"
+ */
+export function formatInstallerInstallItem(item: PartnerInstallItem) {
+  const prefix = item.hqClaim ? "(본사 청구) " : item.onsitePayment ? "(현장 결제) " : "";
+  return `${prefix}${item.name} ×${item.quantity}`;
+}
+
+/**
+ * 이 주문의 월패드 연동이 어느 쪽 결제인지. 기사 앱 품목(splitWallpad)에서 본다.
+ * 완료 등록 화면의 기본 선택과 "주문과 다르다" 안내에 쓴다.
+ */
+export function wallpadBillingOfItems(items: PartnerInstallItem[]): { hq: boolean; onsite: boolean } {
+  return {
+    hq: items.some((item) => item.hqClaim === true),
+    onsite: items.some((item) => item.code === "00046" && item.onsitePayment),
+  };
 }
 
 export function formatInstallItemsText(items: PartnerInstallItem[]) {
