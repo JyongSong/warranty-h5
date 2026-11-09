@@ -40,6 +40,8 @@ export const SYSTEM_SETTING_KEYS = {
   settlementNightEndHour: "installation.settlement.nightEndHour",
   // 총판 대행 건의 기본 출장비 기본값. 총판이 완료 등록 때 고칠 수 있고 본사가 승인 때 확정한다.
   settlementAgentProxyBaseFee: "installation.settlement.agentProxyBaseFee",
+  // 기사 앱 「정산 정보 등록」에서 증빙 종류(전자/종이 세금계산서·현금영수증) 선택을 보일지. 기본은 숨김.
+  installerTaxDocTypeEnabled: "installer.settlementInfo.taxDocTypeEnabled",
 } as const;
 
 export const ASSIGNMENT_SMS_LIMIT_DEFAULTS = {
@@ -240,6 +242,13 @@ const SYSTEM_SETTING_SPECS = ([
     max: 23,
     defaultValue: 20,
     validationHint: "0-23 사이의 정수(시)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.installerTaxDocTypeEnabled,
+    description: "기사 앱 정산 정보 등록에서 증빙 종류(전자/종이 세금계산서·현금영수증) 선택 표시 여부",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
   },
   {
     key: SYSTEM_SETTING_KEYS.notificationsAlimtalkEnabled,

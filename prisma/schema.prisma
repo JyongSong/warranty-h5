@@ -91,6 +91,7 @@ model Installer {
   geocodedAddress         String?                                @map("geocoded_address")
   geocodedAt              DateTime?                              @map("geocoded_at") @db.Timestamptz(6)
   drivingDistances        InstallerDrivingDistance[]
+  settlementInfo          InstallerSettlementInfo?
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
@@ -966,6 +967,38 @@ model InstallationIssue {
 }
 
 // ── P4 정산 (settlement) ────────────────────────────────────────────────
+// 기사 정산 정보: 증빙 종류(전자세금계산서 / 종이 세금계산서 / 현금영수증) + 사업자·계좌 정보 + 사진.
+// 기사가 앱에서 등록하고 본사가 승인한다. 다시 제출하면 SUBMITTED 로 돌아간다.
+// 계좌번호는 암호화(piiCrypto). 사진은 installation-photos 버킷의 installer-docs/<installerId>/ 아래.
+model InstallerSettlementInfo {
+  id                       String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId              String    @unique @map("installer_id")
+  installer                Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+  // E_TAX_INVOICE | PAPER_TAX_INVOICE | CASH_RECEIPT
+  // 증빙 종류 선택을 숨긴 동안(시스템 설정 installer.settlementInfo.taxDocTypeEnabled=false) 제출하면 비어 있다.
+  taxDocType               String?   @map("tax_doc_type")
+  businessNumber           String    @map("business_number")
+  businessName             String    @map("business_name")
+  representativeName       String    @map("representative_name")
+  invoiceEmail             String?   @map("invoice_email")
+  bankName                 String    @map("bank_name")
+  accountNumberEncrypted   String    @map("account_number_encrypted")
+  accountHolder            String    @map("account_holder")
+  businessLicensePhotoPath String    @map("business_license_photo_path")
+  bankbookPhotoPath        String    @map("bankbook_photo_path")
+  // SUBMITTED | APPROVED | REJECTED
+  status                   String    @default("SUBMITTED")
+  rejectReason             String?   @map("reject_reason")
+  submittedAt              DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt               DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewedByAdminId        String?   @map("reviewed_by_admin_id")
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("installer_settlement_infos")
+}
+
 // Per-installer rate overrides. Null column = fall back to global default
 // (system_settings installation.settlement.*). Amounts in KRW (won), integer.
 model InstallerRate {

@@ -8,6 +8,8 @@ import BackofficePageHeader from "../../BackofficePageHeader";
 import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import InstallerForm from "../InstallerForm";
 import type { InstallerItem } from "../shared";
+import { getSettlementInfo } from "@/lib/installer/settlement-info";
+import SettlementInfoPanel from "./SettlementInfoPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,10 @@ export default async function BackofficeInstallerDetailPage({
 
   const row = await prisma.installer.findUnique({ where: { id } });
   if (!row) notFound();
+  const settlementInfo = await getSettlementInfo(id).catch((error) => {
+    console.error("[backoffice/installer/settlement-info]", error);
+    return null;
+  });
 
   const item: InstallerItem = {
     ...row,
@@ -41,6 +47,7 @@ export default async function BackofficeInstallerDetailPage({
           </Link>
         }
       />
+      <SettlementInfoPanel installerId={id} info={settlementInfo} canManage={canEditBackoffice(admin.level)} />
       <InstallerForm item={item} canManage={canEditBackoffice(admin.level)} />
     </div>
   );
