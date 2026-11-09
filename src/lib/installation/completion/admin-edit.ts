@@ -16,6 +16,8 @@ import {
   recordCompletionWallpadCase,
   removeCompletionWallpadCase,
 } from "@/lib/installation/wallpad/service";
+import { WALLPAD_BILLINGS } from "@/lib/installation/settlement/compute";
+import { isOneOf } from "@/lib/installation/wallpad/constants";
 import { EXTRA_CLAIM_REASON_MAX_LENGTH, InstallationCompletionError } from "./service";
 
 const ACHIEVED_CAPABILITIES = ["NONE", "DOORLOCK_AND_APP", "DOORLOCK_AND_APP_AND_HUB"];
@@ -126,6 +128,8 @@ export type ApprovedCompletionEditInput = {
   achievedAqaraAppCapability: string;
   wallpadLinked: boolean;
   wallpadAmount: number | null;
+  /** HQ 본사 청구 / ONSITE 현장 결제. undefined 면 지금 값을 그대로 둔다. */
+  wallpadBilling?: string | null;
   longDistanceAmount: number | null;
   extraClaimAmount: number | null;
   extraClaimReason: string | null;
@@ -146,7 +150,9 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
       throw new InstallationCompletionError("INVALID_AMOUNT");
     }
   }
-  const wallpadAmount = input.wallpadLinked ? input.wallpadAmount : null;
+  if (input.wallpadBilling && !isOneOf(WALLPAD_BILLINGS, input.wallpadBilling)) {
+    throw new InstallationCompletionError("WALLPAD_BILLING_INVALID");
+  }
   const extraClaimAmount = input.extraClaimAmount ? input.extraClaimAmount : null;
   const extraClaimReason = extraClaimAmount ? input.extraClaimReason?.trim() || null : null;
   if (extraClaimAmount && !extraClaimReason) {
@@ -159,9 +165,18 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
   const caseNeedingSiteName = await prisma.$transaction(async (tx) => {
     const { order, completion } = await getApprovedCompletionOrder(tx, input.orderId);
 
+    // 연동 성공일 때만 결제 방식이 있다. 본사 청구는 금액이 고정이라 현장 금액을 남기지 않는다.
+    const wallpadBilling = input.wallpadLinked
+      ? input.wallpadBilling === undefined
+        ? completion.wallpadBilling
+        : input.wallpadBilling || "ONSITE"
+      : null;
+    const wallpadAmount = input.wallpadLinked && wallpadBilling !== "HQ" ? input.wallpadAmount : null;
+
     const before = {
       achievedAqaraAppCapability: completion.achievedAqaraAppCapability,
       wallpadLinked: completion.wallpadLinked,
+      wallpadBilling: completion.wallpadBilling,
       wallpadAmount: completion.wallpadAmount,
       longDistanceAmount: completion.longDistanceAmount,
       extraClaimAmount: completion.extraClaimAmount,
@@ -170,6 +185,7 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
     const after = {
       achievedAqaraAppCapability: input.achievedAqaraAppCapability,
       wallpadLinked: input.wallpadLinked,
+      wallpadBilling,
       wallpadAmount,
       longDistanceAmount: input.longDistanceAmount,
       extraClaimAmount,

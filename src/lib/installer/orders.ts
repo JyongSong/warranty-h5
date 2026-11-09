@@ -132,7 +132,8 @@ function shapeOrder(
     status,
     erpOrderNo: order.source?.sourceKey ?? "",
     productSummary: summarizeProducts(order.source?.memo),
-    installItems: deriveInstallItemsFromMemo(order.source?.memo),
+    // 기사 앱은 월패드를 도어락과 묶지 않고 본사 청구/현장 결제로 나눠 보여 준다.
+    installItems: deriveInstallItemsFromMemo(order.source?.memo, { splitWallpad: true }),
     installDate: req?.installDate ?? null,
     installTimeSlot: req?.installTimeSlot ?? null,
     address,

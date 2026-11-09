@@ -40,6 +40,8 @@ export type QueuedCompletionInput = {
   wallpadModel?: string | null;
   wallpadFailReason?: string | null;
   wallpadNote?: string | null;
+  // 월패드 연동 성공 건의 결제 방식(HQ/ONSITE). 옛 대기열 항목에는 없고, 없으면 현장 결제.
+  wallpadBilling?: string | null;
   installEndAt: string;
   photos: Blob[];
 };
@@ -217,6 +219,7 @@ export async function uploadAndSubmitCompletion(
       wallpadModel: entry.wallpadModel ?? null,
       wallpadFailReason: entry.wallpadFailReason ?? null,
       wallpadNote: entry.wallpadNote ?? null,
+      wallpadBilling: entry.wallpadBilling ?? null,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });

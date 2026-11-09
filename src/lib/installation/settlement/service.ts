@@ -147,6 +147,9 @@ export type SettlementLineView = {
   nightWeekendFee: number;
   serviceFee: number;
   extraClaimFee: number;
+  /** 월패드 본사 청구(정산 포함) */
+  wallpadFee: number;
+  /** 월패드 현장 수금(참고, 정산 미포함) */
   wallpadAmount: number;
   totalAmount: number;
   periodId: string | null;
@@ -197,6 +200,7 @@ export async function listSettlementLines(
     nightWeekendFee: l.nightWeekendFee,
     serviceFee: l.serviceFee,
     extraClaimFee: l.extraClaimFee,
+    wallpadFee: l.wallpadFee,
     wallpadAmount: l.wallpadAmount,
     totalAmount: l.totalAmount,
     periodId: l.periodId,
@@ -214,6 +218,7 @@ export type InstallerSettlementSummary = {
   nightWeekendFee: number;
   serviceFee: number;
   extraClaimFee: number;
+  wallpadFee: number;
   totalAmount: number;
 };
 
@@ -237,6 +242,7 @@ export async function aggregateSettlementByInstaller(
         nightWeekendFee: 0,
         serviceFee: 0,
         extraClaimFee: 0,
+        wallpadFee: 0,
         totalAmount: 0,
       };
       byInstaller.set(l.installerId, row);
@@ -249,6 +255,7 @@ export async function aggregateSettlementByInstaller(
     row.nightWeekendFee += l.nightWeekendFee;
     row.serviceFee += l.serviceFee;
     row.extraClaimFee += l.extraClaimFee;
+    row.wallpadFee += l.wallpadFee;
     row.totalAmount += l.totalAmount;
   }
   return [...byInstaller.values()].sort((a, b) => b.totalAmount - a.totalAmount);

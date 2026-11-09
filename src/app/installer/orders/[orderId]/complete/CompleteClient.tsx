@@ -31,9 +31,11 @@ const CAPABILITIES = [
 
 const WALLPAD_OPTIONS: Array<{ value: WallpadResult; label: string }> = [
   { value: "NOT_ATTEMPTED", label: "연동 안 함" },
-  { value: "SUCCESS", label: "연동 성공 (현장 결제)" },
+  { value: "SUCCESS", label: "연동 성공" },
   { value: "FAIL", label: "시도했지만 실패" },
 ];
+
+type WallpadBilling = "HQ" | "ONSITE";
 
 // 장거리 구간. 기사 등록 주소와 고객 설치 주소 사이의 거리로 고른다.
 const LONG_DISTANCE_OPTIONS = [
@@ -59,6 +61,7 @@ const ERR: Record<string, string> = {
   WALLPAD_FAIL_REASON_INVALID: "월패드 연동 실패 사유를 다시 골라 주세요.",
   WALLPAD_MODEL_TOO_LONG: "월패드 모델명이 너무 깁니다.",
   WALLPAD_NOTE_TOO_LONG: "월패드 메모는 500자 이내로 입력해 주세요.",
+  WALLPAD_BILLING_INVALID: "월패드 결제 방식(본사 청구/현장 결제)을 다시 골라 주세요.",
   UNAUTHORIZED: "로그인이 필요합니다.",
   DEFAULT: "제출에 실패했습니다. 다시 시도해 주세요.",
 };
@@ -70,6 +73,8 @@ export default function CompleteClient({
   linkageAppFee,
   linkageHubFee,
   wallpadModels,
+  orderWallpadBilling,
+  wallpadHqFee,
 }: {
   orderId: string;
   erpOrderNo: string;
@@ -79,6 +84,10 @@ export default function CompleteClient({
   linkageHubFee: number;
   /** 월패드 모델명 자동완성 목록(호환 DB). 비어 있어도 직접 입력할 수 있다. */
   wallpadModels: Array<{ brand: string; model: string }>;
+  /** 주문 품목 기준 월패드 결제 방식. hq: 온라인 결제(본사 청구) 품목, onsite: 현장결제 품목이 있다. */
+  orderWallpadBilling: { hq: boolean; onsite: boolean };
+  /** 본사 청구 월패드 고정 금액 */
+  wallpadHqFee: number;
 }) {
   const router = useRouter();
   const [capability, setCapability] = useState<string>("NONE");
@@ -88,6 +97,11 @@ export default function CompleteClient({
   const [wallpadFailReason, setWallpadFailReason] = useState("");
   const [wallpadNote, setWallpadNote] = useState("");
   const [wallpadAmount, setWallpadAmount] = useState("");
+  // 주문 품목대로 미리 골라 둔다. 기사가 바꿀 수 있고, 주문과 다르면 제출 때 한 번 더 묻는다.
+  const [wallpadBilling, setWallpadBilling] = useState<WallpadBilling>(
+    orderWallpadBilling.hq ? "HQ" : "ONSITE",
+  );
+  const [billingMismatchOpen, setBillingMismatchOpen] = useState(false);
   const [longDistanceAmount, setLongDistanceAmount] = useState(0);
   const [extraClaimAmount, setExtraClaimAmount] = useState("");
   const [extraClaimReason, setExtraClaimReason] = useState("");
@@ -119,6 +133,8 @@ export default function CompleteClient({
   // 월패드는 실패도 남긴다. 제조사·모델·사유는 모를 수 있어 모두 선택이다.
   const wallpadLinked = wallpadResult === "SUCCESS";
   const wallpadAttempted = wallpadResult !== "NOT_ATTEMPTED";
+  const wallpadHq = wallpadLinked && wallpadBilling === "HQ";
+  const billingMismatch = wallpadLinked ? describeBillingMismatch(wallpadBilling, orderWallpadBilling) : null;
   const wallpadModelOptions = wallpadModels.filter(
     (m) => !wallpadBrand || !WALLPAD_BRANDS.includes(m.brand as never) || m.brand === wallpadBrand,
   );
@@ -167,8 +183,14 @@ export default function CompleteClient({
   }
 
   // 제출 버튼은 곧바로 보내지 않고 금액을 먼저 계산해 보여준다.
-  async function askConfirm() {
+  // 월패드 결제 방식이 주문과 다르면 그 전에 한 번 확인받는다.
+  async function askConfirm(skipBillingCheck = false) {
     setError(null);
+    if (billingMismatch && !skipBillingCheck) {
+      setBillingMismatchOpen(true);
+      return;
+    }
+    setBillingMismatchOpen(false);
     setBusy(true);
 
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
@@ -179,7 +201,8 @@ export default function CompleteClient({
           capability,
           longDistanceAmount: longDistanceAmount > 0 ? longDistanceAmount : null,
           extraClaimAmount: hasExtraClaim ? toNumberOrNull(extraClaimAmount) : null,
-          wallpadAmount: wallpadLinked ? toNumberOrNull(wallpadAmount) : null,
+          wallpadAmount: wallpadLinked && !wallpadHq ? toNumberOrNull(wallpadAmount) : null,
+          wallpadBilling: wallpadLinked ? wallpadBilling : null,
         });
 
     setPreview(result);
@@ -196,8 +219,9 @@ export default function CompleteClient({
       orderId,
       capability,
       wallpadLinked,
-      // 현장 금액은 연동에 성공했을 때만 보낸다.
-      wallpadAmount: wallpadLinked && amount ? Number(amount) : null,
+      // 현장 금액은 연동에 성공한 현장 결제 건만 보낸다. 본사 청구는 금액이 고정이다.
+      wallpadAmount: wallpadLinked && !wallpadHq && amount ? Number(amount) : null,
+      wallpadBilling: wallpadLinked ? wallpadBilling : null,
       wallpadResult,
       wallpadBrand: wallpadAttempted ? wallpadBrand || null : null,
       wallpadModel: wallpadAttempted ? wallpadModel.trim() || null : null,
@@ -372,12 +396,50 @@ export default function CompleteClient({
                       />
                     </>
                   ) : (
-                    <div style={{ marginTop: 10 }}>
-                      <MoneyInput
-                        value={wallpadAmount}
-                        onChange={setWallpadAmount}
-                        placeholder="현장 금액 (선택)"
-                      />
+                    <div style={billingBox}>
+                      <div style={{ ...ui.label, marginBottom: 2 }}>결제 방식</div>
+                      <label style={radioRow}>
+                        <input
+                          type="radio"
+                          name="wallpadBilling"
+                          checked={wallpadBilling === "HQ"}
+                          onChange={() => setWallpadBilling("HQ")}
+                        />
+                        <span style={optionLabel}>
+                          본사 청구
+                          {orderWallpadBilling.hq ? <span style={orderTag}>주문 품목</span> : null}
+                        </span>
+                        <OptionAmount amount={wallpadHqFee} />
+                      </label>
+                      <label style={radioRow}>
+                        <input
+                          type="radio"
+                          name="wallpadBilling"
+                          checked={wallpadBilling === "ONSITE"}
+                          onChange={() => setWallpadBilling("ONSITE")}
+                        />
+                        <span style={optionLabel}>
+                          현장 결제
+                          {orderWallpadBilling.onsite ? <span style={orderTag}>주문 품목</span> : null}
+                        </span>
+                      </label>
+                      {wallpadHq ? (
+                        <div style={{ ...helpText, margin: "4px 0 0" }}>
+                          고객이 온라인으로 이미 결제한 건입니다. 금액 입력 없이{" "}
+                          {wallpadHqFee.toLocaleString()}원이 정산에 포함됩니다.
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 6 }}>
+                          <div style={{ ...helpText, margin: "0 0 8px" }}>
+                            고객에게 현장에서 직접 받은 금액입니다. 정산에는 포함되지 않습니다.
+                          </div>
+                          <MoneyInput
+                            value={wallpadAmount}
+                            onChange={setWallpadAmount}
+                            placeholder="현장 금액 (선택)"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                   <PhotoPicker
@@ -478,7 +540,7 @@ export default function CompleteClient({
             {error ? <div style={ui.errorText}>{error}</div> : null}
 
             <div style={{ marginTop: 8 }}>
-              <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={askConfirm}>
+              <button style={ui.primaryButton(!canSubmit)} disabled={!canSubmit} onClick={() => void askConfirm()}>
                 {busy ? "제출 중…" : "완료 제출"}
               </button>
             </div>
@@ -491,6 +553,34 @@ export default function CompleteClient({
         fees={{ DOORLOCK_AND_APP: linkageAppFee, DOORLOCK_AND_APP_AND_HUB: linkageHubFee }}
         onClose={() => setGuideFor(null)}
       />
+
+      {billingMismatchOpen && billingMismatch ? (
+        <div style={backdrop} role="dialog" aria-modal="true" aria-label="월패드 결제 방식 확인">
+          <div style={sheet}>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>월패드 결제 방식이 주문과 다릅니다</div>
+            <div style={{ fontSize: 14, color: "#3f3f46", lineHeight: 1.6, marginTop: 10 }}>{billingMismatch}</div>
+            <div style={{ fontSize: 13, color: "#71717a", lineHeight: 1.6, marginTop: 8 }}>
+              선택: <b>{wallpadBilling === "HQ" ? "본사 청구" : "현장 결제"}</b>. 맞으면 그대로 제출하고, 아니면 다시
+              선택해 주세요.
+            </div>
+            <div style={{ marginTop: 18 }}>
+              <button
+                style={ui.primaryButton(false)}
+                onClick={() => {
+                  setBillingMismatchOpen(false);
+                  window.history.back();
+                }}
+              >
+                다시 선택
+              </button>
+              <div style={{ height: 8 }} />
+              <button style={ui.secondaryButton} onClick={() => void askConfirm(true)}>
+                이대로 제출
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ConfirmAmountDialog
         open={confirming}
@@ -550,6 +640,22 @@ function toNumberOrNull(value: string): number | null {
   return digits ? Number(digits) : null;
 }
 
+/** 고른 결제 방식이 주문 품목과 다르면 기사에게 보여 줄 문장. 같으면 null. */
+function describeBillingMismatch(
+  chosen: WallpadBilling,
+  order: { hq: boolean; onsite: boolean },
+): string | null {
+  if (chosen === "HQ" && !order.hq) {
+    return order.onsite
+      ? "이 주문의 월패드 연동은 현장 결제 건입니다. 고객에게 현장에서 받아야 합니다."
+      : "이 주문에는 본사 청구 월패드 연동 품목이 없습니다.";
+  }
+  if (chosen === "ONSITE" && order.hq && !order.onsite) {
+    return "이 주문은 고객이 월패드 연동비를 온라인으로 이미 결제한 건입니다. 본사 청구로 등록해야 합니다.";
+  }
+  return null;
+}
+
 function previewLines(preview: SettlementPreview | null): AmountLine[] {
   if (!preview?.ok) return [];
   return [
@@ -557,6 +663,7 @@ function previewLines(preview: SettlementPreview | null): AmountLine[] {
     { label: "출장비", value: preview.travelFee },
     { label: "장거리", value: preview.longDistanceFee },
     { label: "기타 청구", value: preview.extraClaimFee },
+    { label: "월패드 (본사 청구)", value: preview.wallpadFee },
     // 할증 폐지 전에 처음 제출했던 건을 다시 올릴 때만 남아 있는 항목.
     ...(preview.nightWeekendFee > 0 ? [{ label: "야간/휴일", value: preview.nightWeekendFee }] : []),
   ];
@@ -606,6 +713,40 @@ const helpText: CSSProperties = {
   color: "#71717a",
   lineHeight: 1.5,
   margin: "0 0 10px",
+};
+
+const billingBox: CSSProperties = {
+  marginTop: 10,
+  padding: "8px 12px",
+  border: `1px solid ${ui.BORDER}`,
+  borderRadius: 10,
+};
+const orderTag: CSSProperties = {
+  marginLeft: 6,
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#2563eb",
+  background: "#eff6ff",
+  borderRadius: 6,
+  padding: "2px 6px",
+  verticalAlign: "middle",
+};
+const backdrop: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  zIndex: 100,
+};
+const sheet: CSSProperties = {
+  width: "100%",
+  maxWidth: 460,
+  background: "#fff",
+  borderRadius: "16px 16px 0 0",
+  padding: "22px 18px calc(22px + env(safe-area-inset-bottom))",
+  boxSizing: "border-box",
 };
 
 const radioRow: CSSProperties = {

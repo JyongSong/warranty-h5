@@ -41,6 +41,12 @@ export function isWeekend(installEndAt: Date): boolean {
   return kstDay === 0 || kstDay === 6; // Sun | Sat
 }
 
+/** 월패드 본사 청구 금액. 고객이 온라인으로 결제한 건이라 기사가 본사에 청구한다. 금액은 고정. */
+export const WALLPAD_HQ_FEE = 50000;
+
+export const WALLPAD_BILLINGS = ["HQ", "ONSITE"] as const;
+export type WallpadBilling = (typeof WALLPAD_BILLINGS)[number];
+
 export type SettlementLineItems = {
   linkageFee: number;
   travelFee: number;
@@ -49,6 +55,9 @@ export type SettlementLineItems = {
   serviceFee: number;
   /** 기타 청구 — 본사가 승인한 금액 */
   extraClaimFee: number;
+  /** 월패드 본사 청구(정산 포함). 현장 결제 건은 0 */
+  wallpadFee: number;
+  /** 월패드 현장 수금(참고용, 정산 미포함) */
   wallpadAmount: number;
   totalAmount: number;
 };
@@ -60,12 +69,15 @@ export type InstallBreakdown = {
 };
 
 // Compute the frozen line items for an approved INSTALL completion.
-// wallpadAmount is recorded (₩0 billing) — not added to the payable total.
+// 월패드: 본사 청구(HQ)면 고정 금액을 정산에 넣는다. 현장 결제면 wallpadAmount 는
+// 기사가 고객에게 직접 받은 금액이라 기록만 하고 정산 합계에는 넣지 않는다.
 export function computeInstallLineItems(input: {
   achievedAqaraAppCapability: string;
   longDistanceAmount: number | null;
   extraClaimAmount?: number | null;
   wallpadAmount: number | null;
+  /** HQ | ONSITE. 비어 있으면(이 항목이 생기기 전 제출) 현장 결제로 본다. */
+  wallpadBilling?: string | null;
   installEndAt: Date;
   /** 완료 건이 처음 제출된 시각. 할증 폐지 전 건인지 가린다. */
   firstSubmittedAt: Date;
@@ -80,9 +92,11 @@ export function computeInstallLineItems(input: {
   const night = eligible && isNight(input.installEndAt, rates.nightStartHour, rates.nightEndHour);
   const weekend = eligible && isWeekend(input.installEndAt);
   const nightWeekendFee = (night ? rates.nightSurcharge : 0) + (weekend ? rates.weekendSurcharge : 0);
-  const wallpadAmount = Math.max(0, input.wallpadAmount ?? 0);
+  const hqWallpad = input.wallpadBilling === "HQ";
+  const wallpadFee = hqWallpad ? WALLPAD_HQ_FEE : 0;
+  const wallpadAmount = hqWallpad ? 0 : Math.max(0, input.wallpadAmount ?? 0);
 
-  const totalAmount = linkageFee + travelFee + longDistanceFee + nightWeekendFee + extraClaimFee;
+  const totalAmount = linkageFee + travelFee + longDistanceFee + nightWeekendFee + extraClaimFee + wallpadFee;
 
   return {
     items: {
@@ -92,6 +106,7 @@ export function computeInstallLineItems(input: {
       nightWeekendFee,
       serviceFee: 0,
       extraClaimFee,
+      wallpadFee,
       wallpadAmount,
       totalAmount,
     },
@@ -113,6 +128,7 @@ export function computeAsLineItems(serviceFee: number | null): SettlementLineIte
     nightWeekendFee: 0,
     serviceFee: fee,
     extraClaimFee: 0,
+    wallpadFee: 0,
     wallpadAmount: 0,
     totalAmount: fee,
   };

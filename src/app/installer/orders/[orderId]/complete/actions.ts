@@ -93,6 +93,8 @@ export async function submitCompletionAction(input: {
   wallpadModel?: string | null;
   wallpadFailReason?: string | null;
   wallpadNote?: string | null;
+  /** HQ | ONSITE. 없으면(옛 화면·옛 대기열) 현장 결제. */
+  wallpadBilling?: string | null;
   installEndAt?: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
@@ -172,6 +174,7 @@ export async function submitCompletionAction(input: {
       wallpadModel: input.wallpadModel ?? null,
       wallpadFailReason: input.wallpadFailReason ?? null,
       wallpadNote: input.wallpadNote ?? null,
+      wallpadBilling: typeof input.wallpadBilling === "string" ? input.wallpadBilling : null,
       installEndAt,
       photoPaths,
     });
@@ -191,6 +194,7 @@ export type SettlementPreview =
       longDistanceFee: number;
       nightWeekendFee: number;
       extraClaimFee: number;
+      wallpadFee: number;
       wallpadAmount: number;
       totalAmount: number;
       night: boolean;
@@ -213,6 +217,7 @@ export async function previewInstallSettlementAction(input: {
   longDistanceAmount: number | null;
   extraClaimAmount?: number | null;
   wallpadAmount: number | null;
+  wallpadBilling?: string | null;
 }): Promise<SettlementPreview> {
   try {
     const installer = await getCurrentInstaller();
@@ -236,6 +241,7 @@ export async function previewInstallSettlementAction(input: {
       longDistanceAmount: input.longDistanceAmount,
       extraClaimAmount: input.extraClaimAmount ?? null,
       wallpadAmount: input.wallpadAmount,
+      wallpadBilling: input.wallpadBilling ?? null,
       installEndAt: existing?.installEndAt ?? now,
       firstSubmittedAt: existing?.createdAt ?? now,
       rates,
@@ -248,6 +254,7 @@ export async function previewInstallSettlementAction(input: {
       longDistanceFee: items.longDistanceFee,
       nightWeekendFee: items.nightWeekendFee,
       extraClaimFee: items.extraClaimFee,
+      wallpadFee: items.wallpadFee,
       wallpadAmount: items.wallpadAmount,
       totalAmount: items.totalAmount,
       night: breakdown.night,

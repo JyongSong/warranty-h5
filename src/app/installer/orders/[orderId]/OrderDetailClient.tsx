@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallerOrderItem } from "@/lib/installer/orders";
+import { formatInstallerInstallItem } from "@/lib/installation/partner/install-items";
 import { respondToAssignmentAction } from "../../actions";
 import PhoneRow from "../../PhoneRow";
 import * as ui from "../../ui";
@@ -90,9 +91,7 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           {item.installItems.length > 0 ? (
             <Row
               label="설치 품목"
-              value={item.installItems
-                .map((i) => `${i.name} ×${i.quantity}${i.onsitePayment ? " (현장결제)" : ""}`)
-                .join("\n")}
+              value={item.installItems.map(formatInstallerInstallItem).join("\n")}
             />
           ) : item.productSummary ? (
             <Row label="제품" value={item.productSummary} />

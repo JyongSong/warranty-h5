@@ -3,6 +3,8 @@ import { requireInstallerPage } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
 import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
 import { listWallpadModelNames } from "@/lib/installation/wallpad/service";
+import { wallpadBillingOfItems } from "@/lib/installation/partner/install-items";
+import { WALLPAD_HQ_FEE } from "@/lib/installation/settlement/compute";
 import CompleteClient from "./CompleteClient";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +33,8 @@ export default async function InstallerCompletePage({
       linkageAppFee={rates.linkageAppFee}
       linkageHubFee={rates.linkageHubFee}
       wallpadModels={wallpadModels}
+      orderWallpadBilling={wallpadBillingOfItems(view.installItems)}
+      wallpadHqFee={WALLPAD_HQ_FEE}
     />
   );
 }

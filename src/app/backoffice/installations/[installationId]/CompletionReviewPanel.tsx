@@ -19,7 +19,10 @@ const CAP_LABEL: Record<string, string> = {
 };
 // 월패드 칸 한 줄 요약. 결과가 없는 옛 제출은 wallpadLinked 만 보여 준다.
 function wallpadSummary(c: InstallationCompletionView): string {
-  const amount = c.wallpadAmount ? ` · ${c.wallpadAmount.toLocaleString()}원` : "";
+  const amount =
+    c.wallpadBilling === "HQ"
+      ? " · 본사 청구"
+      : `${c.wallpadBilling === "ONSITE" ? " · 현장 결제" : ""}${c.wallpadAmount ? ` · ${c.wallpadAmount.toLocaleString()}원` : ""}`;
   const device = [c.wallpadBrand, c.wallpadModel].filter(Boolean).join(" ");
   if (c.wallpadResult === "SUCCESS") return `연동 성공${device ? ` · ${device}` : ""}${amount}`;
   if (c.wallpadResult === "FAIL") {
@@ -75,6 +78,7 @@ export default function CompletionReviewPanel({
           longDistanceAmount: Number(longDistance.replace(/[^\d]/g, "") || 0),
           extraClaimAmount: Number(extraClaim.replace(/[^\d]/g, "") || 0),
           wallpadAmount: completion.wallpadAmount,
+          wallpadBilling: completion.wallpadBilling,
           installEndAt: new Date(completion.installEndAt),
           firstSubmittedAt: new Date(completion.firstSubmittedAt),
           rates,
@@ -229,6 +233,7 @@ export default function CompletionReviewPanel({
             <AmountLine label="출장비" value={preview.items.travelFee} />
             <AmountLine label="장거리" value={preview.items.longDistanceFee} />
             <AmountLine label="기타 청구" value={preview.items.extraClaimFee} />
+            <AmountLine label="월패드 (본사 청구)" value={preview.items.wallpadFee} />
             {/* 할증 폐지 전에 제출된 건에만 남아 있는 항목. */}
             {preview.items.nightWeekendFee > 0 ? (
               <AmountLine label="야간/휴일" value={preview.items.nightWeekendFee} />

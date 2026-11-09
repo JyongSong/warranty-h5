@@ -27,6 +27,8 @@ export type MonthlySettlementRow = {
   nightWeekendFee: number;
   serviceFee: number;
   extraClaimFee: number;
+  /** 월패드 본사 청구. 정산 합계에 포함된다. */
+  wallpadFee: number;
   /** 현장에서 기사가 직접 받은 금액. 정산 합계에 포함되지 않는다. */
   wallpadAmount: number;
   totalAmount: number;
@@ -111,6 +113,7 @@ export async function getInstallerMonthlySettlement(
       nightWeekendFee: line.nightWeekendFee,
       serviceFee: line.serviceFee,
       extraClaimFee: line.extraClaimFee,
+      wallpadFee: line.wallpadFee,
       wallpadAmount: line.wallpadAmount,
       totalAmount: line.totalAmount,
     };
