@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { LoadingButton } from "@/app/_components/LoadingIndicator";
 import { signOutBackofficeAction } from "@/app/login/actions";
 import BackofficePasswordDialog from "./BackofficePasswordDialog";
@@ -87,6 +88,14 @@ export default function BackofficeUserMenu({
           >
             비밀번호 변경
           </button>
+          <Link
+            href="/backoffice/settings/notifications"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex h-8 w-full items-center justify-start whitespace-nowrap rounded border border-transparent px-3 text-left text-xs font-semibold text-slate-700 transition hover:border-slate-200 hover:bg-slate-50"
+          >
+            알림 설정
+          </Link>
           <LoadingButton
             type="button"
             role="menuitem"

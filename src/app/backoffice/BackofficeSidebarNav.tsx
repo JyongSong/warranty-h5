@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { hasBackofficeAccess, type BackofficeAccess } from "@/lib/login/backofficeRoles";
+import { useAttentionCount } from "./attentionAlertStore";
 
 type MenuItem = {
   href: string;
@@ -28,6 +29,8 @@ type MenuItem = {
   external?: boolean;
   // 이 메뉴를 보려면 필요한 권한. 기본은 view (승인된 모든 유저).
   access?: BackofficeAccess;
+  // 처리 필요/예외 건수를 옆에 숫자로 보여 준다.
+  showAttentionCount?: boolean;
 };
 
 const menuItems: MenuItem[] = [
@@ -35,6 +38,7 @@ const menuItems: MenuItem[] = [
     href: "/backoffice/installation-dashboard",
     label: "주문",
     icon: "orders",
+    showAttentionCount: true,
     subItems: [
       {
         href: "/backoffice/installation-dashboard",
@@ -50,6 +54,7 @@ const menuItems: MenuItem[] = [
         href: "/backoffice/installations?statusView=active",
         label: "설치 업무 큐",
         icon: "queue",
+        showAttentionCount: true,
       },
       {
         href: "/backoffice/installation-search",
@@ -199,6 +204,11 @@ const menuItems: MenuItem[] = [
         icon: "settings",
       },
       {
+        href: "/backoffice/settings/notifications",
+        label: "알림 설정",
+        icon: "settings",
+      },
+      {
         href: "/backoffice/settings/system-status",
         label: "시스템 상태",
         icon: "settings",
@@ -336,6 +346,7 @@ function BackofficeSidebarNavItem({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const attentionCount = useAttentionCount();
   const isChildActive = Boolean(item.subItems?.some((sub) => isBackofficeMenuItemActive(pathname, sub.href, searchParams)));
   const isActive = isBackofficeMenuItemActive(pathname, item.href, searchParams) || isChildActive;
   const hasSubItems = Boolean(item.subItems?.length);
@@ -391,6 +402,7 @@ function BackofficeSidebarNavItem({
             <span className={collapsed ? "flex items-center" : "flex min-w-0 items-center gap-2"}>
               <SidebarItemIcon icon={item.icon} />
               <span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span>
+              {item.showAttentionCount ? <AttentionCountBadge count={attentionCount} collapsed={collapsed} /> : null}
             </span>
             <span
               aria-hidden="true"
@@ -478,13 +490,32 @@ function BackofficeSidebarNavItem({
                     className="absolute -left-[15px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-slate-950"
                   />
                 ) : null}
-                {subItem.label}
+                <span className="flex items-center gap-2">
+                  <span className="min-w-0 truncate">{subItem.label}</span>
+                  {subItem.showAttentionCount ? <AttentionCountBadge count={attentionCount} collapsed={false} /> : null}
+                </span>
               </Link>
             );
           })}
         </nav>
       ) : null}
     </div>
+  );
+}
+
+function AttentionCountBadge({ count, collapsed }: { count: number | null; collapsed: boolean }) {
+  if (!count) return null;
+  const label = count > 99 ? "99+" : String(count);
+  return (
+    <span
+      title={`처리 필요/예외 ${count}건`}
+      className={[
+        "shrink-0 rounded-full bg-rose-600 px-1.5 text-[11px] font-semibold leading-[18px] text-white",
+        collapsed ? "absolute -right-1 -top-1" : "",
+      ].join(" ")}
+    >
+      {label}
+    </span>
   );
 }
 
