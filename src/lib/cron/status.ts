@@ -35,6 +35,16 @@ export const SATISFACTION_SURVEY_SEND_CRON_JOB: CronJobDefinition = {
   enabledSettingKey: "survey.autoSend.enabled",
 };
 
+// CJ 온스타일 주문번호 명단 자동 수신. 회사 PC 가 매시 CJ API 를 조회해
+// 밀어 넣는다(Vercel cron 아님). 마지막 수신 시각·결과를 보는 용도.
+export const CJ_ORDER_PUSH_JOB: CronJobDefinition = {
+  key: "cj.orderPush",
+  label: "CJ 주문번호 자동 수신",
+  path: "/api/internal/cj/order-push",
+  schedule: "회사 PC 작업 스케줄러, 매시",
+  enabledSettingKey: "cj.orderPush.enabled",
+};
+
 export const INSTALLATION_CRON_JOBS = [
   INSTALLATION_SYNC_ORDERS_CRON_JOB,
   INSTALLATION_DISPATCHER_CRON_JOB,
