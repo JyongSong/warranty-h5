@@ -42,6 +42,9 @@ export type QueuedCompletionInput = {
   wallpadNote?: string | null;
   // 월패드 연동 성공 건의 결제 방식(HQ/ONSITE). 옛 대기열 항목에는 없고, 없으면 현장 결제.
   wallpadBilling?: string | null;
+  // 총판 대행 건의 기본 출장비·실제 시공자. 대행 건에서만 보낸다(설치 사진도 0장일 수 있다).
+  agentProxyBaseFee?: number | null;
+  actualInstaller?: string | null;
   installEndAt: string;
   photos: Blob[];
 };
@@ -166,7 +169,11 @@ export async function uploadAndSubmitCompletion(
   entry: QueuedCompletionInput,
 ): Promise<{ ok: true } | { ok: false; retriable: boolean; error: string }> {
   try {
-    const targetsRes = await getCompletionUploadTargetsAction(entry.orderId, entry.photos.length);
+    // 총판 대행 건은 설치 사진 없이 올 수 있다. 그때는 업로드 자리를 받지 않는다.
+    const targetsRes =
+      entry.photos.length === 0
+        ? ({ ok: true, bucket: "", targets: [] } as const)
+        : await getCompletionUploadTargetsAction(entry.orderId, entry.photos.length);
     if (!targetsRes.ok) {
       // A transient auth blip must not discard the queued completion.
       return { ok: false, retriable: targetsRes.error === "UNAUTHORIZED", error: targetsRes.error };
@@ -220,6 +227,8 @@ export async function uploadAndSubmitCompletion(
       wallpadFailReason: entry.wallpadFailReason ?? null,
       wallpadNote: entry.wallpadNote ?? null,
       wallpadBilling: entry.wallpadBilling ?? null,
+      agentProxyBaseFee: entry.agentProxyBaseFee ?? null,
+      actualInstaller: entry.actualInstaller ?? null,
       installEndAt: entry.installEndAt,
       photoPaths: paths,
     });

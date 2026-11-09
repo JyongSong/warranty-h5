@@ -93,11 +93,13 @@ async function computeInstallSnapshotData(tx: Tx, orderId: string) {
       extraClaimAmount: true,
       wallpadAmount: true,
       wallpadBilling: true,
+      agentProxyBaseFee: true,
       installEndAt: true,
       createdAt: true,
     },
   });
   if (!completion) return null;
+  const agentProxy = completion.agentProxyBaseFee !== null;
 
   const { rates, source } = await resolveInstallerRates(completion.submittedInstallerId, tx);
   const { items, breakdown } = computeInstallLineItems({
@@ -109,6 +111,7 @@ async function computeInstallSnapshotData(tx: Tx, orderId: string) {
     installEndAt: completion.installEndAt,
     firstSubmittedAt: completion.createdAt,
     rates,
+    agentProxyBaseFee: completion.agentProxyBaseFee,
   });
 
   return {
@@ -123,7 +126,8 @@ async function computeInstallSnapshotData(tx: Tx, orderId: string) {
     wallpadFee: items.wallpadFee,
     wallpadAmount: items.wallpadAmount,
     totalAmount: items.totalAmount,
-    rateSource: source as unknown as Prisma.InputJsonValue,
+    // 대행 건은 기사 단가를 쓰지 않는다. 출장비는 승인된 대행 기본 출장비다.
+    rateSource: (agentProxy ? { travelFee: "agent-proxy" } : source) as unknown as Prisma.InputJsonValue,
     breakdown: breakdown as unknown as Prisma.InputJsonValue,
   };
 }

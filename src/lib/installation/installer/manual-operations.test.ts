@@ -427,6 +427,8 @@ describe("installation manual operations", () => {
       data: {
         activeAssignmentId: "assignment-2",
         currentInstallerId: "installer-2",
+        agentProxy: false,
+        agentProxyAssignedAt: null,
         status: "WAITING_INSTALLER_RESPONSE",
         statusChangedAt: now,
       },

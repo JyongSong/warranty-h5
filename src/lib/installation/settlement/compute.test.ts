@@ -229,3 +229,47 @@ describe("월패드 결제 방식", () => {
     }
   });
 });
+
+describe("총판 대행 (agentProxyBaseFee)", () => {
+  const base = {
+    achievedAqaraAppCapability: "DOORLOCK_AND_APP_AND_HUB",
+    longDistanceAmount: 40000,
+    wallpadAmount: 30000,
+    wallpadBilling: "HQ",
+    installEndAt: kst("2026-11-14", 22), // 토요일 밤 — 일반 건이었다면 할증 대상
+    firstSubmittedAt: BEFORE_END,
+    rates: RATES,
+  };
+
+  it("pays only the base fee + approved extra claim, ignoring installer rates and other items", () => {
+    const { items, breakdown } = computeInstallLineItems({
+      ...base,
+      extraClaimAmount: 30000,
+      agentProxyBaseFee: 60000,
+    });
+    expect(items).toEqual({
+      linkageFee: 0,
+      travelFee: 60000,
+      longDistanceFee: 0,
+      nightWeekendFee: 0,
+      serviceFee: 0,
+      extraClaimFee: 30000,
+      wallpadFee: 0,
+      wallpadAmount: 0,
+      totalAmount: 90000,
+    });
+    expect(breakdown.agentProxy).toBe(true);
+  });
+
+  it("allows a 0 base fee and no extra claim", () => {
+    const { items } = computeInstallLineItems({ ...base, extraClaimAmount: null, agentProxyBaseFee: 0 });
+    expect(items.totalAmount).toBe(0);
+  });
+
+  it("treats null/undefined base fee as a normal completion", () => {
+    const normal = computeInstallLineItems({ ...base, extraClaimAmount: null, agentProxyBaseFee: null });
+    expect(normal.breakdown.agentProxy).toBeUndefined();
+    expect(normal.items.linkageFee).toBe(25000);
+    expect(normal.items.wallpadFee).toBe(WALLPAD_HQ_FEE);
+  });
+});

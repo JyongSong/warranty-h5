@@ -23,7 +23,8 @@ import CustomerRequestEditPanel from "./CustomerRequestEditPanel";
 import { isCustomerRequestEditableByAdmin } from "@/lib/installation/customer/admin-edit";
 import PartnerAssignmentPanel from "./PartnerAssignmentPanel";
 import { getBackofficePartnerPanelData } from "@/lib/installation/partner/views";
-import { resolveInstallerRates } from "@/lib/installation/settlement/rates";
+import { getAgentProxyBaseFeeDefault, resolveInstallerRates } from "@/lib/installation/settlement/rates";
+import { findAgentInstaller } from "@/lib/installation/installer/manual-operations";
 
 export const dynamic = "force-dynamic";
 
@@ -67,9 +68,14 @@ export async function renderInstallationOrderDetailPage({
     notFound();
   }
 
-  const [completion, partnerPanel] = await Promise.all([
+  const [completion, partnerPanel, agentInstaller, agentProxyDefaultFee] = await Promise.all([
     getInstallationCompletionForOrder(installationId),
     getBackofficePartnerPanelData(installationId),
+    findAgentInstaller().catch((error) => {
+      console.error("[backoffice/installation-detail/agent]", error);
+      return null;
+    }),
+    getAgentProxyBaseFeeDefault().catch(() => null),
   ]);
 
   const requiredCapabilities = parseRequiredCapabilitiesText(order.requiredCapabilities);
@@ -136,6 +142,7 @@ export async function renderInstallationOrderDetailPage({
     requiredAqaraAppCapability,
     installerCandidates,
     manualAssignmentInstallers,
+    agentInstaller,
     candidateRuns,
     statusChangedAt: order.statusChangedAt.toISOString(),
     customerRequests: order.customerRequests.map((request: any) => ({
@@ -222,6 +229,7 @@ export async function renderInstallationOrderDetailPage({
           orderId={installationId}
           completion={completion}
           rates={settlementRates}
+          agentProxyDefaultFee={agentProxyDefaultFee}
         />
       ) : null}
       {completion ? (
@@ -231,6 +239,7 @@ export async function renderInstallationOrderDetailPage({
           requiredAqaraAppCapability={requiredAqaraAppCapability}
           completion={completion}
           rates={settlementRates}
+          agentProxyDefaultFee={agentProxyDefaultFee}
         />
       ) : null}
       <InstallationOrderDetail

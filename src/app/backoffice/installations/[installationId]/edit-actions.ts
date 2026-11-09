@@ -85,6 +85,7 @@ export async function editApprovedCompletionAction(input: {
   longDistanceAmount: number | null;
   extraClaimAmount: number | null;
   extraClaimReason: string | null;
+  agentProxyBaseFee?: number;
 }): Promise<AdminEditActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;

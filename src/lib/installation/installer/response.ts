@@ -595,6 +595,8 @@ async function rejectAssignment(
       orderData: {
         activeAssignmentId: nextAssignment.id,
         currentInstallerId: nextCandidate.businessNumber,
+        // 다음 후보 자동 배정은 일반 기사 배정이다. 대행 표시를 푼다.
+        agentProxy: false,
       },
       event: {
         eventType,

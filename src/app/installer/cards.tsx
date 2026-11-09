@@ -32,7 +32,13 @@ export function Section({
 export function OrderCard({ item }: { item: InstallerOrderItem }) {
   return (
     <Link href={`/installer/orders/${item.orderId}`} style={cardLink}>
-      <div style={{ ...ui.card, ...(item.rejectionReason ? { border: "2px solid #ef4444" } : {}) }}>
+      <div
+        style={{
+          ...ui.card,
+          ...(item.agentProxy ? { border: `2px solid ${AGENT_PROXY_COLOR}` } : {}),
+          ...(item.rejectionReason ? { border: "2px solid #ef4444" } : {}),
+        }}
+      >
         {item.rejectionReason ? (
           <div style={rejectBanner}>
             ⚠ 반려됨 · 재등록 필요
@@ -40,7 +46,10 @@ export function OrderCard({ item }: { item: InstallerOrderItem }) {
           </div>
         ) : null}
         <div style={cardHeader}>
-          <StatusBadge status={item.status} />
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <StatusBadge status={item.status} />
+            {item.agentProxy ? <AgentProxyBadge /> : null}
+          </span>
           <span style={{ fontSize: 12, color: "#a1a1aa" }}>{item.erpOrderNo}</span>
         </div>
         {item.productSummary ? <div style={{ ...ui.rowValue, marginBottom: 8 }}>{item.productSummary}</div> : null}
@@ -49,11 +58,30 @@ export function OrderCard({ item }: { item: InstallerOrderItem }) {
         {item.status !== "PENDING" && item.customerName ? (
           <Row label="고객" value={item.customerName} />
         ) : null}
+        {item.agentProxy && item.status === "PENDING" ? <AgentProxyNotice baseFee={item.agentProxyBaseFee} /> : null}
         {item.status === "PENDING" ? (
           <div style={pendingNote}>고객 정보는 수락 후 표시됩니다.</div>
         ) : null}
       </div>
     </Link>
+  );
+}
+
+// 총판 대행 건 표시. 상태 색(노랑·초록·파랑)과 섞이지 않게 보라색을 쓴다.
+export const AGENT_PROXY_COLOR = "#7c3aed";
+
+export function AgentProxyBadge() {
+  return <span style={ui.badge("#ede9fe", "#5b21b6")}>총판 대행</span>;
+}
+
+/** 수락 전 안내: 담당 기사가 없는 지역이라 현지 기사를 찾아야 하고, 금액은 기본 출장비 + 기타 청구다. */
+export function AgentProxyNotice({ baseFee }: { baseFee?: number | null }) {
+  return (
+    <div style={agentProxyNotice}>
+      담당 기사 없는 지역 · 현지 기사 섭외 필요
+      <br />
+      기본 출장비{typeof baseFee === "number" ? ` ${baseFee.toLocaleString()}원` : ""} + 기타 청구
+    </div>
   );
 }
 
@@ -159,5 +187,16 @@ const rejectBanner: CSSProperties = {
 };
 
 const emptyStyle: CSSProperties = { fontSize: 13, color: "#a1a1aa", margin: "0 0 8px" };
+
+const agentProxyNotice: CSSProperties = {
+  background: "#f5f3ff",
+  color: "#5b21b6",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.6,
+  marginTop: 8,
+};
 
 const pendingNote: CSSProperties = { fontSize: 12, color: "#92400e", marginTop: 6 };

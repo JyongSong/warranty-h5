@@ -176,6 +176,7 @@ export async function listInstallationOrderStatuses({
         select: installationAssignmentAttemptListSelect,
       },
       currentInstallerId: true,
+      agentProxy: true,
       partnerStatus: true,
       partnerClaimAmount: true,
       partnerInstallItems: true,

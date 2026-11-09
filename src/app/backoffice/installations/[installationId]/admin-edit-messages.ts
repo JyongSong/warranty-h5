@@ -23,6 +23,8 @@ const ADMIN_EDIT_ERROR_MESSAGES: Record<string, string> = {
   EXTRA_CLAIM_REASON_REQUIRED: "기타 청구 금액이 있으면 사유를 입력해 주세요.",
   EXTRA_CLAIM_REASON_TOO_LONG: "기타 청구 사유는 500자 이내로 입력해 주세요.",
   WALLPAD_BILLING_INVALID: "월패드 결제 방식을 확인해 주세요.",
+  AGENT_PROXY_BASE_FEE_INVALID: "기본 출장비를 확인해 주세요.",
+  NOT_AGENT_PROXY_COMPLETION: "총판 대행 건이 아닙니다.",
 };
 
 export function getAdminEditErrorMessage(code: string) {

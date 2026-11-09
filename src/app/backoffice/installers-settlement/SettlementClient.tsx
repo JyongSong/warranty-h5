@@ -33,6 +33,7 @@ export default function SettlementClient({
   summary,
   rateDefaults,
   rateOverrides,
+  agentProxyBaseFee,
 }: {
   tab: string;
   periods: SettlementPeriodView[];
@@ -42,6 +43,7 @@ export default function SettlementClient({
   summary: InstallerSettlementSummary[];
   rateDefaults: EffectiveRates;
   rateOverrides: InstallerRateOverrideView[];
+  agentProxyBaseFee: number;
 }) {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -54,7 +56,7 @@ export default function SettlementClient({
       </div>
 
       {tab === "rates" ? (
-        <RatesTab rateDefaults={rateDefaults} rateOverrides={rateOverrides} />
+        <RatesTab rateDefaults={rateDefaults} rateOverrides={rateOverrides} agentProxyBaseFee={agentProxyBaseFee} />
       ) : (
         <SettlementTab
           periods={periods}
@@ -343,7 +345,14 @@ function SettlementTab({
                       {lines.map((l) => (
                         <tr key={l.id} className="border-b last:border-0">
                           <td className="py-2 font-medium">{l.installerName}</td>
-                          <td>{SOURCE_LABEL[l.sourceType] ?? l.sourceType}</td>
+                          <td>
+                            {SOURCE_LABEL[l.sourceType] ?? l.sourceType}
+                            {l.agentProxy ? (
+                              <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-800">
+                                대행
+                              </span>
+                            ) : null}
+                          </td>
                           <td className="text-zinc-600">{kstDate(l.completedAt)}</td>
                           <td className="text-right font-semibold">{won(l.totalAmount)}</td>
                           <td className="text-zinc-500">{l.periodId ? "배정됨" : "미배정"}</td>
@@ -376,9 +385,11 @@ function SettlementTab({
 function RatesTab({
   rateDefaults,
   rateOverrides,
+  agentProxyBaseFee,
 }: {
   rateDefaults: EffectiveRates;
   rateOverrides: InstallerRateOverrideView[];
+  agentProxyBaseFee: number;
 }) {
   return (
     <div className="space-y-6">
@@ -391,6 +402,7 @@ function RatesTab({
           <Stat label="연동비 · APP" value={won(rateDefaults.linkageAppFee)} />
           <Stat label="연동비 · 허브" value={won(rateDefaults.linkageHubFee)} />
           <Stat label="출장비" value={won(rateDefaults.travelFee)} />
+          <Stat label="총판 대행 기본 출장비" value={won(agentProxyBaseFee)} />
         </div>
       </section>
 

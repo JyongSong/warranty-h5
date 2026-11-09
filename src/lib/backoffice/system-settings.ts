@@ -38,6 +38,8 @@ export const SYSTEM_SETTING_KEYS = {
   settlementWeekendSurcharge: "installation.settlement.weekendSurcharge",
   settlementNightStartHour: "installation.settlement.nightStartHour",
   settlementNightEndHour: "installation.settlement.nightEndHour",
+  // 총판 대행 건의 기본 출장비 기본값. 총판이 완료 등록 때 고칠 수 있고 본사가 승인 때 확정한다.
+  settlementAgentProxyBaseFee: "installation.settlement.agentProxyBaseFee",
 } as const;
 
 export const ASSIGNMENT_SMS_LIMIT_DEFAULTS = {
@@ -201,6 +203,15 @@ const SYSTEM_SETTING_SPECS = ([
     min: 0,
     max: 10000000,
     defaultValue: 0,
+    validationHint: "0-10000000 사이의 정수(원)",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.settlementAgentProxyBaseFee,
+    description: "총판 대행 기본 출장비 기본값(원). 총판이 완료 등록 때 고칠 수 있고 본사가 승인 때 확정",
+    type: "integer" as const,
+    min: 0,
+    max: 10000000,
+    defaultValue: 50000,
     validationHint: "0-10000000 사이의 정수(원)",
   },
   {
