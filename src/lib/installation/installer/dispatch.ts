@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
   findBestMatchingInstallers,
+  type InstallationMatchTier,
 } from "@/lib/installation/installer/matcher";
 import {
   getInstallerContact,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { shouldRouteToPartner } from "@/lib/installation/partner/routing";
+import { rankInstallersByDistance } from "@/lib/installation/installer/distance-ranking";
 import {
   decryptNullablePii,
   encryptNullablePii,
@@ -113,7 +115,7 @@ type CandidateRunInput = {
   requiredAqaraAppCapability: string;
   installAddress: string | null;
   installDate: string | null;
-  candidates: DispatchCandidateInstaller[];
+  candidates: Array<DispatchCandidateInstaller & { distanceMeters?: number; distanceSource?: "DRIVING" | "STRAIGHT" }>;
   selectedInstallerId?: string | null;
 };
 
@@ -242,9 +244,38 @@ export async function dispatchReadyInstallationOrders({
       requiredCapabilities,
       requiredAqaraAppCapability,
     });
-    const candidates = findBestMatchingInstallers(installAddress, installers);
+    const selection = await selectDispatchCandidates(installAddress, installers);
+    const candidates = selection.candidates;
     const candidate = candidates[0];
-    // 그 시·군·구를 실제로 담당하는 기사(EXACT_DISTRICT)가 있을 때만 자동으로 배차한다.
+    // 거리 기준: 지역이 맞고 20km 안에 있는 기사가 있을 때만 자동 후보로 올린다. 없으면 관리자에게 넘긴다.
+    if (selection.mode === "DISTANCE" && !candidate) {
+      await markNoCandidateFound(
+        order.id,
+        customerRequest.id,
+        selection.excludedCount > 0
+          ? `20km 안에 담당 가능한 기사가 없습니다 (지역은 맞지만 20km 밖이거나 좌표 없는 기사 ${selection.excludedCount}명). 관리자 확인이 필요합니다.`
+          : "조건에 맞는 후보 기사가 없습니다.",
+        now,
+        {
+          customerRequestId: customerRequest.id,
+          assignmentSource: "AUTO",
+          reasonCode:
+            selection.excludedCount > 0
+              ? "NO_CANDIDATE_WITHIN_DISTANCE"
+              : installers.length === 0
+                ? "NO_CAPABILITY_MATCH"
+                : "NO_REGION_MATCH",
+          requiredCapabilities,
+          requiredAqaraAppCapability,
+          installAddress,
+          installDate: customerRequest.installDate,
+          candidates: [],
+        },
+      );
+      skippedCount += 1;
+      continue;
+    }
+    // (거리를 못 구한 경우의 기존 규칙) 그 시·군·구를 실제로 담당하는 기사(EXACT_DISTRICT)가 있을 때만 자동으로 배차한다.
     // 도 단위만 걸치는 광역 후보(REGION_ONLY)밖에 없다면 그 지역에 담당 기사가
     // 없다는 뜻이므로, 멀리 있는 사람에게 조용히 넘기지 않고 관리자에게 넘긴다.
     // 후보 목록 자체는 candidateRun 에 그대로 남겨서 관리자가 보고 고를 수 있게 한다.
@@ -417,13 +448,16 @@ export async function retryInstallationOrderAssignmentByAdmin(
     requiredCapabilities,
     requiredAqaraAppCapability,
   });
-  const candidates = findBestMatchingInstallers(installAddress, installers);
+  const selection = await selectDispatchCandidates(installAddress, installers);
+  const candidates = selection.candidates;
   const candidate = candidates[0];
   if (!candidate) {
     return markAdminRetryNoCandidateFound(
       order.id,
       customerRequest.id,
-      "관리자 재실행 결과 조건에 맞는 후보 기사가 없습니다.",
+      selection.mode === "DISTANCE" && selection.excludedCount > 0
+        ? "관리자 재실행 결과 20km 안에 담당 가능한 기사가 없습니다."
+        : "관리자 재실행 결과 조건에 맞는 후보 기사가 없습니다.",
       now,
       adminId,
       reason,
@@ -1085,12 +1119,44 @@ async function recordCandidateRun(
           monthlyDispatchCount: candidate.monthlyDispatchCount ?? 0,
           lastRequestedAt: candidate.lastRequestedAt ?? null,
           excludedReason: null,
-          decisionReason: `${candidate.matchTier ?? "MATCHED"} / 월 ${candidate.monthlyDispatchCount ?? 0}건`,
+          decisionReason: [
+            candidate.matchTier ?? "MATCHED",
+            typeof candidate.distanceMeters === "number"
+              ? `${(candidate.distanceMeters / 1000).toFixed(1)}km${candidate.distanceSource === "STRAIGHT" ? "(직선)" : ""}`
+              : null,
+            `월 ${candidate.monthlyDispatchCount ?? 0}건`,
+          ]
+            .filter(Boolean)
+            .join(" / "),
         })),
       },
     },
   });
 }
+
+/**
+ * 자동 배정 후보. 거리 + 지역 기준(20km 이내)으로 고르고, 고객 주소 좌표를 못 구하거나
+ * 지도 API 가 실패하면 기존 지역 기준으로 돌아간다(그때는 시·군·구 일치 기사만 자동 배정).
+ */
+async function selectDispatchCandidates(
+  installAddress: string,
+  installers: Awaited<ReturnType<typeof listDispatchCandidateInstallers>>,
+): Promise<
+  | { mode: "DISTANCE"; candidates: DispatchCandidate[]; excludedCount: number }
+  | { mode: "REGION"; candidates: DispatchCandidate[]; excludedCount: 0 }
+> {
+  const ranked = await rankInstallersByDistance(installAddress, installers);
+  if (ranked.status === "OK") {
+    return { mode: "DISTANCE", candidates: ranked.candidates, excludedCount: ranked.excludedCount };
+  }
+  return { mode: "REGION", candidates: findBestMatchingInstallers(installAddress, installers), excludedCount: 0 };
+}
+
+type DispatchCandidate = DispatchCandidateInstaller & {
+  matchTier: InstallationMatchTier;
+  distanceMeters?: number;
+  distanceSource?: "DRIVING" | "STRAIGHT";
+};
 
 export class InstallationDispatchError extends Error {
   constructor(message: string) {

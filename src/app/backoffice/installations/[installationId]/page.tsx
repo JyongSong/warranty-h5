@@ -25,6 +25,7 @@ import PartnerAssignmentPanel from "./PartnerAssignmentPanel";
 import { getBackofficePartnerPanelData } from "@/lib/installation/partner/views";
 import { getAgentProxyBaseFeeDefault, resolveInstallerRates } from "@/lib/installation/settlement/rates";
 import { findAgentInstaller } from "@/lib/installation/installer/manual-operations";
+import { listInstallerAppStatus } from "@/lib/installer/devices";
 
 export const dynamic = "force-dynamic";
 
@@ -94,13 +95,21 @@ export async function renderInstallationOrderDetailPage({
   const matchedInstallerById = new Map(
     matchedInstallers.map((installer) => [installer.businessNumber, installer]),
   );
+  // 기사 앱 설치 여부. 조회가 실패해도 배정 화면은 열려야 하므로 빈 값으로 둔다.
+  const appStatus = await listInstallerAppStatus(dispatchInstallers.map((installer) => installer.businessNumber)).catch(
+    (error) => {
+      console.error("[backoffice/installation-detail/app-status]", error);
+      return null;
+    },
+  );
   const installerCandidates = matchedInstallers.map((candidate, index) =>
-    toInstallerCandidateItem(candidate, index + 1),
+    toInstallerCandidateItem(candidate, index + 1, appStatus),
   );
   const manualAssignmentInstallers = dispatchInstallers.map((installer, index) =>
     toInstallerCandidateItem(
       withMatchedTier(installer, matchedInstallerById.get(installer.businessNumber)?.matchTier),
       index + 1,
+      appStatus,
     ),
   );
   const candidateRuns = order.candidateRuns.map((run: any) => ({
@@ -258,13 +267,22 @@ function withMatchedTier(
   return matchTier ? { ...installer, matchTier } : installer;
 }
 
-function toInstallerCandidateItem(candidate: InstallationOrderInstaller, rank: number) {
+function toInstallerCandidateItem(
+  candidate: InstallationOrderInstaller,
+  rank: number,
+  appStatus: Map<string, Date> | null,
+) {
   const installer = candidate as DispatchCandidateInstaller;
+  const appLastSeenAt = appStatus?.get(installer.businessNumber) ?? null;
   return {
     rank,
     installerId: installer.businessNumber,
     installerName: installer.branchName,
     installerBranch: installer.branchName,
+    personName: installer.personName ?? null,
+    // null = 조회 실패(모름), true/false = 기사 앱 기기 등록 여부
+    appInstalled: appStatus ? appLastSeenAt !== null : null,
+    appLastSeenAt: appLastSeenAt?.toISOString() ?? null,
     phone: installer.phone,
     region: installer.installationRegion,
     serviceAreas: installer.serviceAreas ?? [],

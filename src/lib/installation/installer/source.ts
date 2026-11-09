@@ -28,6 +28,8 @@ export type InstallerContactClient = {
 };
 
 export type DispatchCandidateInstaller = InstallationOrderInstaller & {
+  /** 기사 본인 이름 (branchName 은 상호가 있으면 상호다) */
+  personName?: string;
   serviceAreas: string[];
   capabilities: string[];
   aqaraAppCapability: string;
@@ -173,6 +175,7 @@ export async function getInstallerContact(
 function toDispatchCandidateInstaller(installer: InstallerRow): DispatchCandidateInstaller {
   return {
     businessNumber: installer.id,
+    personName: installer.name,
     branchName: installer.branch?.trim() || installer.name,
     phone: installer.phone,
     installationRegion: installer.region ?? "",

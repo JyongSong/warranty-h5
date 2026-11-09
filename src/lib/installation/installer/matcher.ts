@@ -233,3 +233,22 @@ export function findBestMatchingInstallers(
       matchTier: candidate.matchTier as InstallationMatchTier,
     }))
 }
+
+/**
+ * 주소를 담당할 수 있는 기사 전부(시·군·구 일치 + 광역 담당)를 등급과 함께 돌려준다.
+ * findBestMatchingInstallers 와 달리 가장 높은 등급만 남기지 않는다 — 거리 기준 배정이
+ * 등급을 섞어 거리로 다시 고르기 때문이다. 순서는 입력 순서 그대로다.
+ */
+export function findRegionEligibleInstallers<T extends InstallationOrderInstaller>(
+  address: string,
+  installers: readonly T[],
+): Array<T & { matchTier: InstallationMatchTier }> {
+  const normalizedAddress = normalizeRegionKey(address)
+  if (!normalizedAddress) return []
+  return installers.flatMap((installer) => {
+    const matchTier = getInstallerAddressMatchTier(installer, normalizedAddress)
+    return matchTier ? [{ ...installer, matchTier }] : []
+  })
+}
+
+export { getTierRank as getMatchTierRank, getMonthlyDispatchCount, getLastRequestedTime }
