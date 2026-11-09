@@ -466,6 +466,7 @@ describe("installation installer response", () => {
       data: {
         activeAssignmentId: "assignment-2",
         currentInstallerId: "installer-2",
+        agentProxy: false,
         status: "WAITING_INSTALLER_RESPONSE",
         statusChangedAt: now,
       },

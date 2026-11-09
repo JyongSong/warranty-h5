@@ -66,7 +66,15 @@ export type InstallBreakdown = {
   achievedAqaraAppCapability: string;
   night: boolean;
   weekend: boolean;
+  /** 총판 대행 건. 월 정산·이력에서 「대행」 표시에 쓴다. 일반 건에는 없다. */
+  agentProxy?: true;
 };
+
+/** 총판 대행 기본 출장비의 처음 기본값. 본사 단가 설정(시스템 설정)에서 바꿀 수 있다. */
+export const AGENT_PROXY_DEFAULT_BASE_FEE = 50000;
+
+/** 총판 대행 금액 입력 상한(원). 오타로 자릿수가 늘어난 값을 막는 정도의 범위다. */
+export const AGENT_PROXY_FEE_MAX = 10000000;
 
 // Compute the frozen line items for an approved INSTALL completion.
 // 월패드: 본사 청구(HQ)면 고정 금액을 정산에 넣는다. 현장 결제면 wallpadAmount 는
@@ -82,8 +90,19 @@ export function computeInstallLineItems(input: {
   /** 완료 건이 처음 제출된 시각. 할증 폐지 전 건인지 가린다. */
   firstSubmittedAt: Date;
   rates: EffectiveRates;
+  /**
+   * 총판 대행 건의 기본 출장비. 값이 있으면 대행 건이라 정산은 이 금액 + 기타 청구뿐이다
+   * (연동비·장거리·할증·월패드 없음, 기사 단가도 쓰지 않는다).
+   */
+  agentProxyBaseFee?: number | null;
 }): { items: SettlementLineItems; breakdown: InstallBreakdown } {
   const { rates } = input;
+  if (input.agentProxyBaseFee !== null && input.agentProxyBaseFee !== undefined) {
+    return computeAgentProxyLineItems({
+      baseFee: input.agentProxyBaseFee,
+      extraClaimAmount: input.extraClaimAmount ?? null,
+    });
+  }
   const linkageFee = linkageFeeForCapability(input.achievedAqaraAppCapability, rates);
   const travelFee = rates.travelFee;
   const longDistanceFee = Math.max(0, input.longDistanceAmount ?? 0);
@@ -114,6 +133,34 @@ export function computeInstallLineItems(input: {
       achievedAqaraAppCapability: input.achievedAqaraAppCapability,
       night,
       weekend,
+    },
+  };
+}
+
+// 총판 대행 건: 기본 출장비 + 기타 청구. 나머지 항목은 0 이다.
+export function computeAgentProxyLineItems(input: {
+  baseFee: number;
+  extraClaimAmount: number | null;
+}): { items: SettlementLineItems; breakdown: InstallBreakdown } {
+  const travelFee = Math.max(0, input.baseFee);
+  const extraClaimFee = Math.max(0, input.extraClaimAmount ?? 0);
+  return {
+    items: {
+      linkageFee: 0,
+      travelFee,
+      longDistanceFee: 0,
+      nightWeekendFee: 0,
+      serviceFee: 0,
+      extraClaimFee,
+      wallpadFee: 0,
+      wallpadAmount: 0,
+      totalAmount: travelFee + extraClaimFee,
+    },
+    breakdown: {
+      achievedAqaraAppCapability: "NONE",
+      night: false,
+      weekend: false,
+      agentProxy: true,
     },
   };
 }

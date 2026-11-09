@@ -153,6 +153,8 @@ export type SettlementLineView = {
   wallpadAmount: number;
   totalAmount: number;
   periodId: string | null;
+  /** 총판 대행 건 (승인 때 breakdown 에 남긴 표시) */
+  agentProxy: boolean;
 };
 
 export type SettlementLineFilter = {
@@ -177,6 +179,12 @@ function buildLineWhere(filter: SettlementLineFilter): Prisma.SettlementLineWher
     };
   }
   return where;
+}
+
+function isAgentProxyBreakdown(breakdown: Prisma.JsonValue | null): boolean {
+  return Boolean(
+    breakdown && typeof breakdown === "object" && !Array.isArray(breakdown) && breakdown.agentProxy === true,
+  );
 }
 
 export async function listSettlementLines(
@@ -204,6 +212,7 @@ export async function listSettlementLines(
     wallpadAmount: l.wallpadAmount,
     totalAmount: l.totalAmount,
     periodId: l.periodId,
+    agentProxy: isAgentProxyBreakdown(l.breakdown),
   }));
 }
 

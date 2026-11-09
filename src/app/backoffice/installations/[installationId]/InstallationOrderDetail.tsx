@@ -17,6 +17,7 @@ import installationEventLabels from "@/lib/installation/orders/views/label-insta
 import installationStatusLabels from "@/lib/installation/orders/views/label-installation-status.json";
 import {
   approveInstallationAssignmentAction,
+  assignInstallationToAgentAction,
   cancelInstallationOrderAction,
   completeInstallationOrderAction,
   createManualInstallationAssignmentAction,
@@ -50,6 +51,10 @@ export type InstallationOrderDetailItem = {
     branch: string | null;
   } | null;
   partnerId?: string | null;
+  /** 총판 대행 건 */
+  agentProxy?: boolean;
+  /** 총판 대행을 받는 계정. 설정돼 있지 않으면 null (대행 배정 버튼이 꺼진다). */
+  agentInstaller?: { id: string; name: string; branch: string | null } | null;
   hasOpenIssue: boolean;
   lastIssueId: string | null;
   statusChangedAt: string;
@@ -212,6 +217,7 @@ type AdminDialogState =
   | { kind: "sendCustomerInputSms" }
   | { kind: "manualAssignment"; installerId: string; manualReason: string }
   | { kind: "reassignInstaller"; installerId: string; reason: string }
+  | { kind: "agentProxyAssignment" }
   | { kind: "switchToManual"; reason: string }
   | { kind: "adminRetryAssignment"; reason: string }
   | { kind: "approveAssignment" }
@@ -315,6 +321,10 @@ export default function InstallationOrderDetail({
     openDialog({ kind: "reassignInstaller", installerId: "", reason: "" });
   }
 
+  function assignToAgent() {
+    openDialog({ kind: "agentProxyAssignment" });
+  }
+
   function sendCustomerInputSms() {
     openDialog({ kind: "sendCustomerInputSms" });
   }
@@ -406,6 +416,14 @@ export default function InstallationOrderDetail({
       }
       const ok = await runAction("reassignInstaller", () =>
         reassignInstallationOrderInstallerAction({ installationId: item.id, installerId, reason }),
+      );
+      if (ok) setDialog(null);
+      return;
+    }
+
+    if (dialog.kind === "agentProxyAssignment") {
+      const ok = await runAction("agentProxyAssignment", () =>
+        assignInstallationToAgentAction({ installationId: item.id }),
       );
       if (ok) setDialog(null);
       return;
@@ -603,6 +621,9 @@ export default function InstallationOrderDetail({
             fallbackUsed={Boolean(activeCustomerRequest?.fallbackUsed)}
             activeAssignmentId={item.activeAssignmentId}
             reassignable={canReassignInstaller(item.status, item.currentInstallerId, item.partnerId)}
+            agentProxyAssignable={canAssignToAgent(item)}
+            agentInstaller={item.agentInstaller ?? null}
+            onAgentProxyAssign={assignToAgent}
             onSendCustomerInputSms={sendCustomerInputSms}
             onApproveAssignment={approveAssignment}
             onManualAssign={manualAssign}
@@ -724,6 +745,8 @@ export default function InstallationOrderDetail({
               ? item.manualAssignmentInstallers.filter((installer) => installer.installerId !== item.currentInstallerId)
               : item.manualAssignmentInstallers
           }
+          agentInstaller={item.agentInstaller ?? null}
+          reassigning={canReassignInstaller(item.status, item.currentInstallerId, item.partnerId)}
           pending={pending}
           onCancel={() => {
             if (pending) return;
@@ -743,6 +766,8 @@ function AdminActionDialog({
   dialog,
   error,
   installerCandidates,
+  agentInstaller,
+  reassigning,
   pending,
   onCancel,
   onChange,
@@ -752,6 +777,9 @@ function AdminActionDialog({
   dialog: AdminDialogState;
   error: string | null;
   installerCandidates: InstallationOrderDetailItem["installerCandidates"];
+  agentInstaller: { name: string; branch: string | null } | null;
+  /** 이미 기사가 있는 주문이면 대행 배정이 재배정이 된다(이전 기사에게 취소 알림). */
+  reassigning: boolean;
   pending: boolean;
   onCancel: () => void;
   onChange: (dialog: AdminDialogState) => void;
@@ -799,6 +827,22 @@ function AdminActionDialog({
         </div>
 
         <div className="space-y-3">
+          {dialog.kind === "agentProxyAssignment" ? (
+            <div className="rounded-md border border-violet-200 bg-violet-50 px-3 py-3 text-sm text-violet-900">
+              <div className="font-semibold">
+                {agentInstaller ? formatAgentName(agentInstaller) : "총판 계정 없음"}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-violet-800">
+                기본 출장비(기본값, 총판이 수정 가능) + 기타 청구 · 사진 선택 · 완료 후 본사 검수
+              </div>
+              {reassigning ? (
+                <div className="mt-2 text-xs font-semibold text-rose-700">
+                  지금 배정된 기사의 배정은 취소되고, 그 기사에게 배정 취소 알림이 갑니다.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {dialog.kind === "reassignInstaller" ? (
             <ManualAssignmentInstallerSelector
               candidates={installerCandidates}
@@ -1122,6 +1166,7 @@ function normalizeManualAssignmentSearchText(value: string) {
 }
 
 function getAdminDialogTitle(dialog: AdminDialogState) {
+  if (dialog.kind === "agentProxyAssignment") return "총판 대행 배정";
   if (dialog.kind === "sendCustomerInputSms") return "고객 입력 문자 발송";
   if (dialog.kind === "manualAssignment") return "기사 직접 지정";
   if (dialog.kind === "reassignInstaller") return "기사 재배정";
@@ -1134,6 +1179,9 @@ function getAdminDialogTitle(dialog: AdminDialogState) {
 }
 
 function getAdminDialogDescription(dialog: AdminDialogState) {
+  if (dialog.kind === "agentProxyAssignment") {
+    return "담당 기사가 없는 지역 주문을 총판에게 보냅니다. 총판이 수락하면 현지 기사를 찾아 처리하고 완료 등록을 올립니다.";
+  }
   if (dialog.kind === "sendCustomerInputSms") {
     return "고객에게 설치 희망일과 주소를 입력할 수 있는 링크를 SMS로 보냅니다. 발송 요청이 생성되면 고객 입력 대기 상태로 전환됩니다.";
   }
@@ -1162,6 +1210,7 @@ function getAdminDialogDescription(dialog: AdminDialogState) {
 }
 
 function getAdminDialogSubmitLabel(dialog: AdminDialogState) {
+  if (dialog.kind === "agentProxyAssignment") return "대행 배정";
   if (dialog.kind === "sendCustomerInputSms") return "문자 발송";
   if (dialog.kind === "manualAssignment") return "수동 배정";
   if (dialog.kind === "reassignInstaller") return "재배정";
@@ -1304,6 +1353,9 @@ function StatusActions({
   fallbackUsed,
   activeAssignmentId,
   reassignable,
+  agentProxyAssignable,
+  agentInstaller,
+  onAgentProxyAssign,
   onSendCustomerInputSms,
   onManualAssign,
   onReassignInstaller,
@@ -1320,6 +1372,9 @@ function StatusActions({
   fallbackUsed: boolean;
   activeAssignmentId: string | null;
   reassignable: boolean;
+  agentProxyAssignable: boolean;
+  agentInstaller: { name: string; branch: string | null } | null;
+  onAgentProxyAssign: () => void;
   onSendCustomerInputSms: () => void;
   onApproveAssignment: () => void;
   onManualAssign: () => void;
@@ -1346,6 +1401,25 @@ function StatusActions({
     fallbackUsed,
     reassignable,
   );
+  // 총판 대행은 담당 기사가 없는 지역의 예외 처리라 맨 끝(취소 앞)에 둔다.
+  const agentAction: StatusActionDefinition = {
+    key: "agentProxyAssignment",
+    label: "총판 대행 배정",
+    buttonLabel: "총판 대행 배정",
+    resultStatusLabel: statusLabels.WAITING_INSTALLER_RESPONSE,
+    description: agentInstaller
+      ? `담당 기사가 없는 지역 주문을 총판(${formatAgentName(agentInstaller)})에게 보냅니다. 총판이 현지 기사를 찾아 처리하고, 완료 등록 때 기본 출장비 + 기타 청구로 정산합니다(사진 선택, 본사 검수).`
+      : "총판 대행 계정이 설정되지 않았습니다.",
+    tone: "primary",
+    enabled: agentProxyAssignable && Boolean(agentInstaller),
+    disabledReason: agentInstaller
+      ? "기사 배정 전·응답 대기·배정 확정 상태에서만 보낼 수 있습니다. 이미 총판 대행 건이면 다시 보낼 수 없습니다."
+      : "총판 계정이 설정되지 않았습니다(installers.is_agent).",
+    onClick: onAgentProxyAssign,
+  };
+  const cancelIndex = statusActions.findIndex((action) => action.key === "cancelOrder");
+  if (cancelIndex >= 0) statusActions.splice(cancelIndex, 0, agentAction);
+  else statusActions.push(agentAction);
 
   return (
     <div className="grid gap-3">
@@ -2073,6 +2147,9 @@ export function formatOperationalMessage(value: string | null | undefined) {
     ORDER_NOT_REASSIGNABLE: "현재 상태에서는 기사를 재배정할 수 없음",
     REASSIGNMENT_REASON_REQUIRED: "재배정 사유를 입력하세요",
     REASSIGNMENT_SAME_INSTALLER: "현재 배정된 기사와 같은 기사입니다",
+    AGENT_NOT_CONFIGURED: "총판 계정이 설정되지 않았습니다 (is_agent 계정이 정확히 1명이어야 함)",
+    ALREADY_AGENT_PROXY: "이미 총판 대행으로 배정된 주문입니다",
+    AGENT_PROXY_ASSIGNMENT_FAILED: "총판 대행 배정 실패",
     ORDER_PRODUCT_REQUIREMENT_UNMAPPED: "제품 요구사항 미매핑",
     PHONE_11_DIGITS_REQUIRED: "휴대전화번호 형식 오류",
     REVALIDATION_FAILED: "후보 재검증 실패",
@@ -2441,6 +2518,26 @@ export function canManuallyAssign(status: string, hasOpenIssue: boolean, fallbac
   }
 
   return (hasOpenIssue || fallbackUsed) && canSwitchToManual(status);
+}
+
+function formatAgentName(agent: { name: string; branch: string | null }) {
+  return agent.branch ? `${agent.name} · ${agent.branch}` : agent.name;
+}
+
+/** 총판 대행 배정을 보낼 수 있는 주문인가. 협력사 건·이미 총판 대행인 건은 제외. */
+export function canAssignToAgent(
+  item: Pick<
+    InstallationOrderDetailItem,
+    "status" | "hasOpenIssue" | "currentInstallerId" | "partnerId" | "agentProxy" | "agentInstaller"
+  > & { customerRequests: Array<{ fallbackUsed?: boolean | null }> },
+) {
+  if (!item.agentInstaller || item.partnerId) return false;
+  if (item.agentProxy && item.currentInstallerId === item.agentInstaller.id) return false;
+  const fallbackUsed = item.customerRequests.some((request) => Boolean(request.fallbackUsed));
+  return (
+    canManuallyAssign(item.status, item.hasOpenIssue, fallbackUsed) ||
+    canReassignInstaller(item.status, item.currentInstallerId, item.partnerId)
+  );
 }
 
 export function canReassignInstaller(

@@ -20,10 +20,12 @@ export default function ApprovedCompletionPanel({
   orderId,
   completion,
   rates,
+  agentProxyDefaultFee,
 }: {
   orderId: string;
   completion: InstallationCompletionView;
   rates: EffectiveRates | null;
+  agentProxyDefaultFee?: number | null;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("idle");
@@ -40,6 +42,9 @@ export default function ApprovedCompletionPanel({
   const [extraClaim, setExtraClaim] = useState(toInput(completion.extraClaimAmount));
   const [extraClaimReason, setExtraClaimReason] = useState(completion.extraClaimReason ?? "");
   const [reason, setReason] = useState("");
+  // 총판 대행 건은 기본 출장비 + 기타 청구만 고친다(연동·월패드·장거리 없음).
+  const agentProxy = completion.agentProxyBaseFee !== null;
+  const [baseFee, setBaseFee] = useState(toInput(completion.agentProxyBaseFee));
 
   const preview =
     rates && mode === "edit"
@@ -52,6 +57,7 @@ export default function ApprovedCompletionPanel({
           installEndAt: new Date(completion.installEndAt),
           firstSubmittedAt: new Date(completion.firstSubmittedAt),
           rates,
+          agentProxyBaseFee: agentProxy ? (toAmount(baseFee) ?? 0) : null,
         })
       : null;
 
@@ -63,6 +69,7 @@ export default function ApprovedCompletionPanel({
     setLongDistance(toInput(completion.longDistanceAmount));
     setExtraClaim(toInput(completion.extraClaimAmount));
     setExtraClaimReason(completion.extraClaimReason ?? "");
+    setBaseFee(toInput(completion.agentProxyBaseFee));
     setReason("");
     setError(null);
     setNotice(null);
@@ -86,6 +93,7 @@ export default function ApprovedCompletionPanel({
       longDistanceAmount: toAmount(longDistance),
       extraClaimAmount: toAmount(extraClaim),
       extraClaimReason: extraClaimReason || null,
+      ...(agentProxy ? { agentProxyBaseFee: toAmount(baseFee) ?? 0 } : {}),
     });
     setBusy(false);
     if (!result.ok) {
@@ -118,7 +126,14 @@ export default function ApprovedCompletionPanel({
     <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-extrabold text-zinc-950">승인된 완료 관리</h2>
+          <h2 className="text-base font-extrabold text-zinc-950">
+            승인된 완료 관리
+            {agentProxy ? (
+              <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 align-middle text-xs font-bold text-violet-800">
+                총판 대행
+              </span>
+            ) : null}
+          </h2>
           <p className="mt-0.5 text-xs text-zinc-500">
             승인한 완료 내용을 고치거나, 승인을 취소하고 기사에게 다시 제출하게 할 수 있습니다.
           </p>
@@ -147,6 +162,16 @@ export default function ApprovedCompletionPanel({
 
       {mode === "edit" ? (
         <div className="mt-4 grid gap-3">
+          {agentProxy ? (
+            <div className="grid grid-cols-2 gap-3">
+              <AmountInput label="기본 출장비 (총판 대행)" value={baseFee} onChange={setBaseFee} />
+              <div className="pt-6 text-xs text-zinc-500">
+                실제 시공자: {completion.actualInstaller ?? "미입력"}
+                {agentProxyDefaultFee != null ? ` · 기본값 ${agentProxyDefaultFee.toLocaleString()}원` : ""}
+              </div>
+            </div>
+          ) : (
+          <>
           <label className="grid gap-1">
             <span className="text-xs font-bold text-zinc-600">앱 연동 결과</span>
             <select
@@ -189,8 +214,10 @@ export default function ApprovedCompletionPanel({
               <AmountInput label="월패드 금액 (현장 수금)" value={wallpadAmount} onChange={setWallpadAmount} />
             </div>
           ) : null}
+          </>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <AmountInput label="장거리 비용" value={longDistance} onChange={setLongDistance} />
+            {agentProxy ? null : <AmountInput label="장거리 비용" value={longDistance} onChange={setLongDistance} />}
             <AmountInput label="기타 청구 금액" value={extraClaim} onChange={setExtraClaim} />
           </div>
           <label className="grid gap-1">

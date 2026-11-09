@@ -18,7 +18,7 @@ import {
 } from "@/lib/installation/wallpad/service";
 import { WALLPAD_BILLINGS } from "@/lib/installation/settlement/compute";
 import { isOneOf } from "@/lib/installation/wallpad/constants";
-import { EXTRA_CLAIM_REASON_MAX_LENGTH, InstallationCompletionError } from "./service";
+import { EXTRA_CLAIM_REASON_MAX_LENGTH, InstallationCompletionError, isValidAgentProxyFee } from "./service";
 
 const ACHIEVED_CAPABILITIES = ["NONE", "DOORLOCK_AND_APP", "DOORLOCK_AND_APP_AND_HUB"];
 
@@ -133,6 +133,8 @@ export type ApprovedCompletionEditInput = {
   longDistanceAmount: number | null;
   extraClaimAmount: number | null;
   extraClaimReason: string | null;
+  /** 총판 대행 건의 기본 출장비. 대행 건에서만 받고, undefined 면 지금 값을 그대로 둔다. */
+  agentProxyBaseFee?: number;
 };
 
 /**
@@ -150,6 +152,9 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
       throw new InstallationCompletionError("INVALID_AMOUNT");
     }
   }
+  if (input.agentProxyBaseFee !== undefined && !isValidAgentProxyFee(input.agentProxyBaseFee)) {
+    throw new InstallationCompletionError("AGENT_PROXY_BASE_FEE_INVALID");
+  }
   if (input.wallpadBilling && !isOneOf(WALLPAD_BILLINGS, input.wallpadBilling)) {
     throw new InstallationCompletionError("WALLPAD_BILLING_INVALID");
   }
@@ -164,6 +169,10 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
 
   const caseNeedingSiteName = await prisma.$transaction(async (tx) => {
     const { order, completion } = await getApprovedCompletionOrder(tx, input.orderId);
+    const agentProxy = completion.agentProxyBaseFee !== null;
+    if (input.agentProxyBaseFee !== undefined && !agentProxy) {
+      throw new InstallationCompletionError("NOT_AGENT_PROXY_COMPLETION");
+    }
 
     // 연동 성공일 때만 결제 방식이 있다. 본사 청구는 금액이 고정이라 현장 금액을 남기지 않는다.
     const wallpadBilling = input.wallpadLinked
@@ -181,6 +190,7 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
       longDistanceAmount: completion.longDistanceAmount,
       extraClaimAmount: completion.extraClaimAmount,
       extraClaimReason: completion.extraClaimReason,
+      agentProxyBaseFee: completion.agentProxyBaseFee,
     };
     const after = {
       achievedAqaraAppCapability: input.achievedAqaraAppCapability,
@@ -190,6 +200,8 @@ export async function editApprovedCompletion(input: ApprovedCompletionEditInput)
       longDistanceAmount: input.longDistanceAmount,
       extraClaimAmount,
       extraClaimReason,
+      agentProxyBaseFee:
+        agentProxy && input.agentProxyBaseFee !== undefined ? input.agentProxyBaseFee : completion.agentProxyBaseFee,
     };
     const changes = (Object.keys(after) as Array<keyof typeof after>)
       .filter((key) => (before[key] ?? null) !== (after[key] ?? null))

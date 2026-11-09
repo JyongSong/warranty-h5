@@ -7,6 +7,7 @@ import type { InstallerOrderItem } from "@/lib/installer/orders";
 import { formatInstallerInstallItem } from "@/lib/installation/partner/install-items";
 import { respondToAssignmentAction } from "../../actions";
 import PhoneRow from "../../PhoneRow";
+import { AgentProxyBadge, AgentProxyNotice } from "../../cards";
 import * as ui from "../../ui";
 
 const REJECT_REASONS = [
@@ -74,9 +75,15 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
         </button>
 
         <h1 style={ui.h1}>작업 상세</h1>
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 14, display: "flex", gap: 6, alignItems: "center" }}>
           <StatusBadge status={item.status} />
+          {item.agentProxy ? <AgentProxyBadge /> : null}
         </div>
+        {item.agentProxy && item.status === "PENDING" ? (
+          <div style={{ marginBottom: 14 }}>
+            <AgentProxyNotice baseFee={item.agentProxyBaseFee} />
+          </div>
+        ) : null}
 
         {item.rejectionReason ? (
           <div style={rejectAlert}>

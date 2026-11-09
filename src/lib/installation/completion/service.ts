@@ -7,7 +7,7 @@ import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/instal
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSms } from "@/lib/sms";
 import { createInstallSettlementSnapshot } from "@/lib/installation/settlement/snapshot";
-import { WALLPAD_BILLINGS } from "@/lib/installation/settlement/compute";
+import { AGENT_PROXY_FEE_MAX, WALLPAD_BILLINGS } from "@/lib/installation/settlement/compute";
 import {
   WALLPAD_BRANDS,
   WALLPAD_FAIL_REASONS,
@@ -64,11 +64,19 @@ export type SubmitCompletionInput = {
    * 없으면(이 항목이 생기기 전 화면·대기열) 현장 결제로 본다.
    */
   wallpadBilling?: string | null;
+  /**
+   * 총판 대행 건의 기본 출장비. 대행 건에서만 쓰고 필수다(일반 건은 버린다).
+   * 대행 건은 연동·월패드·장거리를 받지 않고 설치 사진도 선택이다.
+   */
+  agentProxyBaseFee?: number | null;
+  /** 총판 대행 건에서 실제로 시공한 현지 기사 (선택, 자유 입력). */
+  actualInstaller?: string | null;
   installEndAt: Date;
   photoPaths: string[];
 };
 
 export const EXTRA_CLAIM_REASON_MAX_LENGTH = 500;
+export const ACTUAL_INSTALLER_MAX_LENGTH = 100;
 export const EXTRA_CLAIM_PHOTO_MAX = 4;
 export const LINKAGE_PHOTO_MAX = 4;
 export const WALLPAD_PHOTO_MAX = 4;
@@ -209,24 +217,72 @@ function normalizeExtraClaim(input: SubmitCompletionInput): {
   return { extraClaimAmount: amount, extraClaimReason: reason, extraClaimPhotoPaths: photoPaths };
 }
 
-export async function submitInstallerCompletion(input: SubmitCompletionInput): Promise<void> {
+/** 대행 기본 출장비: 0 이상 정수, 상한 이하. */
+export function isValidAgentProxyFee(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= AGENT_PROXY_FEE_MAX;
+}
+
+/**
+ * 총판 대행 건 제출을 일반 건 형식으로 맞춘다.
+ * 연동·월패드·장거리는 대행 건에서 받지 않으므로 "없음" 으로 덮어쓴다(옛 대기열·조작된 요청 대비).
+ */
+function toAgentProxySubmission(input: SubmitCompletionInput): {
+  input: SubmitCompletionInput;
+  agentProxyBaseFee: number;
+  actualInstaller: string | null;
+} {
+  if (!isValidAgentProxyFee(input.agentProxyBaseFee)) {
+    throw new InstallationCompletionError("AGENT_PROXY_BASE_FEE_INVALID");
+  }
+  const actualInstaller = input.actualInstaller?.replace(/\s+/g, " ").trim() || null;
+  if (actualInstaller && actualInstaller.length > ACTUAL_INSTALLER_MAX_LENGTH) {
+    throw new InstallationCompletionError("ACTUAL_INSTALLER_TOO_LONG");
+  }
+  return {
+    input: {
+      ...input,
+      achievedAqaraAppCapability: "NONE",
+      wallpadLinked: false,
+      wallpadAmount: null,
+      wallpadResult: "NOT_ATTEMPTED",
+      wallpadBilling: null,
+      longDistanceAmount: null,
+      linkagePhotoPaths: [],
+      wallpadPhotoPaths: [],
+    },
+    agentProxyBaseFee: input.agentProxyBaseFee,
+    actualInstaller,
+  };
+}
+
+export async function submitInstallerCompletion(rawInput: SubmitCompletionInput): Promise<void> {
   const order = await prisma.installationOrder.findUnique({
-    where: { id: input.orderId },
-    select: { id: true, currentInstallerId: true, status: true },
+    where: { id: rawInput.orderId },
+    select: { id: true, currentInstallerId: true, status: true, agentProxy: true },
   });
-  if (!order || order.currentInstallerId !== input.installerId) {
+  if (!order || order.currentInstallerId !== rawInput.installerId) {
     throw new InstallationCompletionError("NOT_YOUR_ORDER");
   }
   if (order.status !== INSTALLATION_ORDER_STATUSES.INSTALLER_ASSIGNED) {
     throw new InstallationCompletionError("ORDER_NOT_SUBMITTABLE");
   }
+
+  // 대행 건은 기본 출장비·실제 시공자를 받고 사진이 선택이다. 일반 건은 두 값을 버린다.
+  const proxy = order.agentProxy ? toAgentProxySubmission(rawInput) : null;
+  const input = proxy?.input ?? rawInput;
+  const agentProxyFields = {
+    agentProxyBaseFee: proxy?.agentProxyBaseFee ?? null,
+    actualInstaller: proxy?.actualInstaller ?? null,
+  };
+
   if (!ACHIEVED_CAPABILITIES.includes(input.achievedAqaraAppCapability as AchievedCapability)) {
     throw new InstallationCompletionError("INVALID_CAPABILITY");
   }
   if (!(input.installEndAt instanceof Date) || Number.isNaN(input.installEndAt.getTime())) {
     throw new InstallationCompletionError("INSTALL_END_REQUIRED");
   }
-  if (input.photoPaths.length < 1 || input.photoPaths.length > 4) {
+  const minPhotos = proxy ? 0 : 1;
+  if (input.photoPaths.length < minPhotos || input.photoPaths.length > 4) {
     throw new InstallationCompletionError("PHOTO_COUNT_INVALID");
   }
   const extraClaim = normalizeExtraClaim(input);
@@ -244,6 +300,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         longDistanceAmount: input.longDistanceAmount,
         ...extraClaim,
         ...optionPhotos,
+        ...agentProxyFields,
         installEndAt: input.installEndAt,
         photoPaths: input.photoPaths,
         reviewStatus: "PENDING",
@@ -257,6 +314,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
         // 재제출은 기타 청구도 통째로 바꾼다. 이번에 비워서 올렸으면 청구를 철회한 것이다.
         ...extraClaim,
         ...optionPhotos,
+        ...agentProxyFields,
         // installEndAt 은 덮어쓰지 않는다. 이제 기사가 입력하는 값이 아니라 제출
         // 시각이라, 반려 후 재제출 때 바꾸면 설치일과 정산 월이 재제출일로 밀린다.
         photoPaths: input.photoPaths,
@@ -280,6 +338,7 @@ export async function submitInstallerCompletion(input: SubmitCompletionInput): P
             wallpadLinked: wallpad.wallpadLinked,
             wallpadResult: wallpad.wallpadResult,
             wallpadBilling: wallpad.wallpadBilling,
+            ...(proxy ? { agentProxy: true, agentProxyBaseFee: proxy.agentProxyBaseFee } : {}),
           },
         },
       },
@@ -297,7 +356,12 @@ export async function approveInstallerCompletion(input: {
   // 기타 청구도 같은 방식이다: 기사가 올린 금액을 본사가 승인 시점에 확정한다.
   // 0 이나 null 로 승인하면 그 청구는 인정하지 않은 것이다.
   extraClaimAmount?: number | null;
+  // 총판 대행 건의 기본 출장비. 총판이 올린 금액을 본사가 승인 시점에 확정한다. 대행 건에만 쓴다.
+  agentProxyBaseFee?: number;
 }): Promise<void> {
+  if (input.agentProxyBaseFee !== undefined && !isValidAgentProxyFee(input.agentProxyBaseFee)) {
+    throw new InstallationCompletionError("AGENT_PROXY_BASE_FEE_INVALID");
+  }
   const caseNeedingSiteName = await prisma.$transaction(async (tx) => {
     const order = await tx.installationOrder.findUnique({
       where: { id: input.orderId },
@@ -315,6 +379,17 @@ export async function approveInstallerCompletion(input: {
       });
     }
 
+    if (input.agentProxyBaseFee !== undefined) {
+      // 일반 건에 대행 금액이 들어가면 정산 방식 자체가 바뀌므로 막는다.
+      const current = await tx.installationCompletion.findUnique({
+        where: { installationOrderId: input.orderId },
+        select: { agentProxyBaseFee: true },
+      });
+      if (current?.agentProxyBaseFee === null || current?.agentProxyBaseFee === undefined) {
+        throw new InstallationCompletionError("NOT_AGENT_PROXY_COMPLETION");
+      }
+    }
+
     await tx.installationCompletion.update({
       where: { installationOrderId: input.orderId },
       data: {
@@ -328,6 +403,7 @@ export async function approveInstallerCompletion(input: {
         ...(input.extraClaimAmount === undefined
           ? {}
           : { extraClaimAmount: input.extraClaimAmount }),
+        ...(input.agentProxyBaseFee === undefined ? {} : { agentProxyBaseFee: input.agentProxyBaseFee }),
       },
     });
 
@@ -461,6 +537,10 @@ export type InstallationCompletionView = {
   extraClaimPhotos: CompletionPhoto[];
   linkagePhotos: CompletionPhoto[];
   wallpadPhotos: CompletionPhoto[];
+  /** 총판 대행 건의 기본 출장비. null 이면 일반 건 완료. */
+  agentProxyBaseFee: number | null;
+  /** 총판 대행 건의 실제 시공자 (선택) */
+  actualInstaller: string | null;
   installEndAt: string;
   reviewStatus: string;
   rejectionReason: string | null;
@@ -482,6 +562,8 @@ export async function getInstallationCompletionForOrder(
     wallpadLinked: c.wallpadLinked,
     wallpadAmount: c.wallpadAmount,
     wallpadBilling: c.wallpadBilling,
+    agentProxyBaseFee: c.agentProxyBaseFee,
+    actualInstaller: c.actualInstaller,
     wallpadResult: c.wallpadResult,
     wallpadBrand: c.wallpadBrand,
     wallpadModel: c.wallpadModel,

@@ -40,6 +40,7 @@ export async function getInstallOrderAmounts(
         extraClaimAmount: true,
         wallpadAmount: true,
         wallpadBilling: true,
+        agentProxyBaseFee: true,
         installEndAt: true,
         createdAt: true,
         installationOrder: { select: { currentInstallerId: true } },
@@ -72,6 +73,7 @@ export async function getInstallOrderAmounts(
       installEndAt: completion.installEndAt,
       firstSubmittedAt: completion.createdAt,
       rates,
+      agentProxyBaseFee: completion.agentProxyBaseFee,
     });
 
     result.set(completion.installationOrderId, {

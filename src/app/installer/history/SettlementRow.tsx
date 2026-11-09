@@ -15,7 +15,7 @@ export default function SettlementRow({ row }: { row: MonthlySettlementRow }) {
 
   const items = [
     { label: "연동비", value: row.linkageFee },
-    { label: "출장비", value: row.travelFee },
+    { label: row.agentProxy ? "기본 출장비 (대행)" : "출장비", value: row.travelFee },
     { label: "장거리", value: row.longDistanceFee },
     { label: "야간/휴일", value: row.nightWeekendFee },
     { label: "용역비", value: row.serviceFee },
@@ -36,6 +36,7 @@ export default function SettlementRow({ row }: { row: MonthlySettlementRow }) {
             <span style={ui.badge(...typeBadge(row.sourceType))}>
               {row.sourceType === "AS" ? "A/S" : "설치"}
             </span>
+            {row.agentProxy ? <span style={ui.badge("#ede9fe", "#5b21b6")}>대행</span> : null}
             <span style={{ fontSize: 12, color: "#71717a" }}>{shortDate(row.completedDate)}</span>
           </div>
           <div style={labelLine}>{row.label}</div>

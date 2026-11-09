@@ -40,7 +40,56 @@ type ManualAssignmentOptions = AdminOperationOptions & {
   manualReason?: string | null;
   baseUrl?: string;
   tokenFactory?: () => string;
+  /**
+   * 총판 대행 배정. 주문에 대행 표시를 하고, 지역·능력 조건을 보지 않는다
+   * (담당 기사가 없는 지역이라 총판이 현지 기사를 찾는다). 일반 배정·재배정은 대행 표시를 푼다.
+   */
+  agentProxy?: boolean;
 };
+
+export const AGENT_PROXY_MANUAL_REASON = "총판 대행";
+
+type AgentProxyAssignmentOptions = AdminOperationOptions & {
+  baseUrl?: string;
+  tokenFactory?: () => string;
+};
+
+/** 총판 대행을 받는 계정. 지금은 한 명만 둔다 — 없거나 여럿이면 배정하지 않는다. */
+export async function findAgentInstaller(): Promise<{ id: string; name: string; branch: string | null } | null> {
+  const agents = await prisma.installer.findMany({
+    where: { isAgent: true, active: true },
+    select: { id: true, name: true, branch: true },
+    take: 2,
+  });
+  return agents.length === 1 ? agents[0] : null;
+}
+
+/**
+ * 담당 기사가 없는 지역 주문을 총판 계정에 보낸다.
+ * 기사가 아직 없으면 직접 지정처럼, 이미 기사가 있으면(응답 대기·수락) 재배정처럼 처리한다.
+ */
+export async function assignInstallationOrderToAgent(orderId: string, options: AgentProxyAssignmentOptions) {
+  const agent = await findAgentInstaller();
+  if (!agent) throw new InstallationManualOperationError("AGENT_NOT_CONFIGURED");
+
+  const order = await prisma.installationOrder.findUnique({
+    where: { id: orderId },
+    select: { status: true, currentInstallerId: true, partnerId: true, agentProxy: true },
+  });
+  if (!order) throw new InstallationManualOperationError("ORDER_NOT_FOUND");
+  if (order.agentProxy && order.currentInstallerId === agent.id) {
+    throw new InstallationManualOperationError("ALREADY_AGENT_PROXY");
+  }
+
+  const reassign = canReassignInstallerFromOrder(order);
+  const { result, previousInstallerId } = await createManualAssignmentAttempt(
+    orderId,
+    { ...options, installerId: agent.id, manualReason: AGENT_PROXY_MANUAL_REASON, agentProxy: true },
+    reassign ? "REASSIGN" : "ASSIGN",
+  );
+  if (previousInstallerId) await notifyInstallerOfReassignment(previousInstallerId);
+  return result;
+}
 
 type ReassignmentOptions = Omit<ManualAssignmentOptions, "manualReason"> & {
   reason: string;
@@ -139,6 +188,7 @@ async function createManualAssignmentAttempt(
     now = new Date(),
     baseUrl,
     tokenFactory = createInstallerResponseToken,
+    agentProxy = false,
   }: ManualAssignmentOptions,
   mode: "ASSIGN" | "REASSIGN",
 ) {
@@ -219,7 +269,11 @@ async function createManualAssignmentAttempt(
     if (!installer?.phone) {
       throw new InstallationManualOperationError("INSTALLER_PHONE_NOT_FOUND");
     }
-    validateManualInstallerEligibility(typedOrder, installer);
+    if (agentProxy) {
+      if (installer.active === false) throw new InstallationManualOperationError("INSTALLER_NOT_ACTIVE");
+    } else {
+      validateManualInstallerEligibility(typedOrder, installer);
+    }
     const normalizedManualReason = manualReason?.trim() || null;
     const installAddress = decryptNullablePii(typedOrder.customerRequests?.[0]?.installAddressEncrypted);
     const regionMatched = isInstallerRegionMatched(installAddress, installer);
@@ -325,6 +379,8 @@ async function createManualAssignmentAttempt(
         orderData: {
           activeAssignmentId: assignment.id,
           currentInstallerId: installerId,
+          agentProxy,
+          agentProxyAssignedAt: agentProxy ? now : null,
         },
         event: {
           eventType: isReassign ? "ADMIN_REASSIGNED_INSTALLER" : "MANUAL_ASSIGNMENT_CREATED",
@@ -337,6 +393,7 @@ async function createManualAssignmentAttempt(
             installerId,
             manualReason: normalizedManualReason,
             regionMatched,
+            ...(agentProxy ? { agentProxy: true } : {}),
             ...(isReassign
               ? {
                   previousInstallerId: typedOrder.currentInstallerId ?? null,

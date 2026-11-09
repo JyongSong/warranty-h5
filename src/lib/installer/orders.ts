@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import { deriveInstallItemsFromMemo, type PartnerInstallItem } from "@/lib/installation/partner/install-items";
+import { getAgentProxyBaseFeeDefault } from "@/lib/installation/settlement/rates";
 
 // REVIEW = 완료 등록 후 본사 승인 대기. A/S 쪽과 같은 취급이다.
 export type InstallerOrderStatus =
@@ -31,6 +32,10 @@ export type InstallerOrderItem = {
   backupPhone?: string | null;
   completedDate?: string | null; // YYYY-MM-DD (KST), set for COMPLETED items
   rejectionReason?: string | null; // set on ACCEPTED items with an unhandled HQ rejection
+  // 총판 대행 건. 카드·상세·완료 등록 화면이 이 값으로 대행 표시와 대행 완료 양식을 쓴다.
+  agentProxy: boolean;
+  // 총판 대행 건의 기본 출장비 기본값 (카드 안내용). 대행 건에만 채운다.
+  agentProxyBaseFee?: number | null;
 };
 
 export type InstallerOrdersGrouped = {
@@ -45,6 +50,7 @@ const orderContentSelect = {
   status: true,
   activeAssignmentId: true,
   currentInstallerId: true,
+  agentProxy: true,
   source: {
     select: {
       sourceKey: true,
@@ -76,6 +82,7 @@ type OrderContent = {
   status: string;
   activeAssignmentId: string | null;
   currentInstallerId: string | null;
+  agentProxy: boolean;
   source: {
     sourceKey: string;
     customerNameEncrypted: string | null;
@@ -145,7 +152,15 @@ function shapeOrder(
     // CJ 건의 주문자 번호. 현장 번호가 안 될 때 쓰는 예비 연락처.
     backupPhone: piiVisible ? decryptNullablePii(req?.ordererPhoneEncrypted) : null,
     rejectionReason,
+    agentProxy: Boolean(order.agentProxy),
   };
+}
+
+/** 대행 건에 기본 출장비 기본값을 붙인다. 대행 건이 없으면 설정을 읽지 않는다. */
+async function withAgentProxyFee<T extends InstallerOrderItem>(items: T[]): Promise<T[]> {
+  if (!items.some((item) => item.agentProxy)) return items;
+  const fee = await getAgentProxyBaseFeeDefault().catch(() => null);
+  return items.map((item) => (item.agentProxy ? { ...item, agentProxyBaseFee: fee } : item));
 }
 
 export async function getInstallerOrders(installerId: string): Promise<InstallerOrdersGrouped> {
@@ -213,7 +228,12 @@ export async function getInstallerOrders(installerId: string): Promise<Installer
     }),
   );
 
-  return { pending, active, completed, history };
+  return {
+    pending: await withAgentProxyFee(pending),
+    active: await withAgentProxyFee(active),
+    completed,
+    history,
+  };
 }
 
 function toKstDateStr(d: Date): string {
@@ -223,6 +243,16 @@ function toKstDateStr(d: Date): string {
 // Single order for the detail / accept-reject page, scoped to this installer.
 // Returns null if the order isn't the installer's (no attempt and not current).
 export async function getInstallerOrderView(
+  installerId: string,
+  orderId: string,
+): Promise<InstallerOrderItem | null> {
+  const view = await getInstallerOrderViewBase(installerId, orderId);
+  if (!view?.agentProxy) return view;
+  const [withFee] = await withAgentProxyFee([view]);
+  return withFee;
+}
+
+async function getInstallerOrderViewBase(
   installerId: string,
   orderId: string,
 ): Promise<InstallerOrderItem | null> {

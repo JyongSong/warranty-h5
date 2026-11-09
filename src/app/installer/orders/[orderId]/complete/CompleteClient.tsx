@@ -604,7 +604,7 @@ function OptionAmount({ amount }: { amount: number }) {
 
 // 금액 입력란. 숫자만 받아 천 단위로 끊어 보여 주고 "원" 은 오른쪽에 붙박아 둔다.
 // value 는 숫자만 담은 문자열이다.
-function MoneyInput({
+export function MoneyInput({
   value,
   onChange,
   placeholder,
@@ -635,7 +635,7 @@ function MoneyInput({
   );
 }
 
-function toNumberOrNull(value: string): number | null {
+export function toNumberOrNull(value: string): number | null {
   const digits = value.replace(/[^\d]/g, "");
   return digits ? Number(digits) : null;
 }

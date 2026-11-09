@@ -46,12 +46,15 @@ export default function CompletionReviewPanel({
   requiredAqaraAppCapability,
   completion,
   rates,
+  agentProxyDefaultFee,
 }: {
   orderId: string;
   orderStatus: string;
   requiredAqaraAppCapability: string;
   completion: InstallationCompletionView;
   rates: EffectiveRates | null;
+  /** 총판 대행 기본 출장비의 현재 기본값. 총판 신청 금액과 다르면 표시한다. */
+  agentProxyDefaultFee?: number | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -65,6 +68,10 @@ export default function CompletionReviewPanel({
   const [extraClaim, setExtraClaim] = useState(
     completion.extraClaimAmount != null ? String(completion.extraClaimAmount) : "",
   );
+  // 총판 대행 건: 기본 출장비 + 기타 청구만 정산한다. 연동·월패드·장거리 칸은 보여 주지 않는다.
+  const agentProxy = completion.agentProxyBaseFee !== null;
+  const [baseFee, setBaseFee] = useState(agentProxy ? String(completion.agentProxyBaseFee) : "");
+  const baseFeeDigits = baseFee.replace(/[^\d]/g, "");
 
   const canReview = orderStatus === "WAITING_HQ_REVIEW";
 
@@ -82,6 +89,7 @@ export default function CompletionReviewPanel({
           installEndAt: new Date(completion.installEndAt),
           firstSubmittedAt: new Date(completion.firstSubmittedAt),
           rates,
+          agentProxyBaseFee: agentProxy ? Number(baseFeeDigits || 0) : null,
         })
       : null;
   const belowRequirement =
@@ -92,9 +100,18 @@ export default function CompletionReviewPanel({
     const amount = digits === "" ? null : Number(digits);
     const extraDigits = extraClaim.replace(/[^\d]/g, "");
     const extraAmount = extraDigits === "" ? null : Number(extraDigits);
+    if (agentProxy && baseFeeDigits === "") {
+      setError("기본 출장비를 입력해 주세요 (인정하지 않으면 0).");
+      return;
+    }
     setBusy(true);
     setError(null);
-    const res = await approveInstallationCompletionAction(orderId, amount, extraAmount);
+    const res = await approveInstallationCompletionAction(
+      orderId,
+      agentProxy ? null : amount,
+      extraAmount,
+      agentProxy ? Number(baseFeeDigits) : undefined,
+    );
     setBusy(false);
     if (res.ok) router.refresh();
     else setError(res.error);
@@ -116,10 +133,30 @@ export default function CompletionReviewPanel({
   return (
     <section style={panel}>
       <div style={headerRow}>
-        <h2 style={title}>완료 검수</h2>
+        <h2 style={title}>
+          완료 검수
+          {agentProxy ? <span style={agentProxyBadge}>총판 대행</span> : null}
+        </h2>
         <span style={statusBadge(completion.reviewStatus)}>{reviewLabel(completion.reviewStatus)}</span>
       </div>
 
+      {agentProxy ? (
+        <div style={grid}>
+          <Field label="설치 종료" value={formatDateTime(completion.installEndAt)} />
+          <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
+          <Field label="실제 시공자" value={completion.actualInstaller ?? "미입력"} />
+          <Field
+            label="기본 출장비 (총판 신청)"
+            value={`${(completion.agentProxyBaseFee ?? 0).toLocaleString()}원`}
+            warn={agentProxyDefaultFee != null && completion.agentProxyBaseFee !== agentProxyDefaultFee}
+            warnText={
+              agentProxyDefaultFee != null && completion.agentProxyBaseFee !== agentProxyDefaultFee
+                ? `기본값 ${agentProxyDefaultFee.toLocaleString()}원과 다름`
+                : undefined
+            }
+          />
+        </div>
+      ) : (
       <div style={grid}>
         <Field label="설치 종료" value={formatDateTime(completion.installEndAt)} />
         <Field
@@ -138,6 +175,7 @@ export default function CompletionReviewPanel({
         />
         <Field label="제출 시각" value={formatDateTime(completion.submittedAt)} />
       </div>
+      )}
 
       {completion.achievedAqaraAppCapability !== "NONE" ? (
         <OptionPhotos
@@ -157,7 +195,9 @@ export default function CompletionReviewPanel({
 
       {completion.extraClaimAmount != null || completion.extraClaimReason ? (
         <div style={extraClaimBox}>
-          <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>기타 청구 (기사 신고)</div>
+          <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>
+            기타 청구 ({agentProxy ? "총판 신청" : "기사 신고"})
+          </div>
           <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
             {completion.extraClaimAmount != null
               ? `${completion.extraClaimAmount.toLocaleString()}원`
@@ -209,7 +249,9 @@ export default function CompletionReviewPanel({
           )}
         </div>
       ) : (
-        <div style={{ fontSize: 13, color: "#a1a1aa" }}>첨부된 사진이 없습니다.</div>
+        <div style={{ fontSize: 13, color: "#a1a1aa" }}>
+          {agentProxy ? "사진 없음 (총판 대행 건은 사진이 선택입니다)" : "첨부된 사진이 없습니다."}
+        </div>
       )}
 
       {completion.reviewStatus === "REJECTED" && completion.rejectionReason ? (
@@ -230,7 +272,7 @@ export default function CompletionReviewPanel({
           </div>
           <div style={amountLines}>
             <AmountLine label="연동비" value={preview.items.linkageFee} />
-            <AmountLine label="출장비" value={preview.items.travelFee} />
+            <AmountLine label={agentProxy ? "기본 출장비 (대행)" : "출장비"} value={preview.items.travelFee} />
             <AmountLine label="장거리" value={preview.items.longDistanceFee} />
             <AmountLine label="기타 청구" value={preview.items.extraClaimFee} />
             <AmountLine label="월패드 (본사 청구)" value={preview.items.wallpadFee} />
@@ -258,16 +300,33 @@ export default function CompletionReviewPanel({
       {canReview ? (
         !rejectOpen ? (
           <div>
-            <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
-              장거리 비용 (원, 승인 시 확정 · 정산 반영)
-            </label>
-            <input
-              style={longDistanceInput}
-              value={longDistance}
-              onChange={(e) => setLongDistance(e.target.value)}
-              inputMode="numeric"
-              placeholder="0"
-            />
+            {agentProxy ? (
+              <>
+                <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
+                  기본 출장비 (원, 승인 시 확정 · 정산 반영)
+                </label>
+                <input
+                  style={longDistanceInput}
+                  value={baseFee}
+                  onChange={(e) => setBaseFee(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="0"
+                />
+              </>
+            ) : (
+              <>
+                <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
+                  장거리 비용 (원, 승인 시 확정 · 정산 반영)
+                </label>
+                <input
+                  style={longDistanceInput}
+                  value={longDistance}
+                  onChange={(e) => setLongDistance(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="0"
+                />
+              </>
+            )}
             {completion.extraClaimAmount != null ? (
               <>
                 <label style={{ fontSize: 12, color: "#71717a", fontWeight: 700, display: "block", marginTop: 12 }}>
@@ -393,6 +452,16 @@ const panel: CSSProperties = {
 };
 const headerRow: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 };
 const title: CSSProperties = { fontSize: 16, fontWeight: 800, margin: 0 };
+const agentProxyBadge: CSSProperties = {
+  marginLeft: 8,
+  fontSize: 12,
+  fontWeight: 700,
+  padding: "3px 8px",
+  borderRadius: 999,
+  background: "#ede9fe",
+  color: "#5b21b6",
+  verticalAlign: "middle",
+};
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 };
 const extraClaimBox: CSSProperties = {
   border: "1px solid #fde68a",

@@ -62,6 +62,11 @@ export async function getGlobalDefaults(): Promise<EffectiveRates> {
   };
 }
 
+/** 총판 대행 기본 출장비의 현재 기본값(시스템 설정). 완료 등록 화면에 미리 채워 둔다. */
+export async function getAgentProxyBaseFeeDefault(): Promise<number> {
+  return getEffectiveIntegerSetting(SYSTEM_SETTING_KEYS.settlementAgentProxyBaseFee);
+}
+
 // Same resolution as resolveInstallerRates, but for many installers at once.
 // A list screen that shows an amount per row would otherwise fire one settings
 // read + one override read per row.

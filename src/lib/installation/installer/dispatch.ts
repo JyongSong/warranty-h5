@@ -570,6 +570,8 @@ export async function approveInstallationAssignmentByAdmin(
         orderData: {
           activeAssignmentId: assignment.id,
           currentInstallerId: assignment.installerId,
+          // 자동 배정은 일반 기사 배정이다. 예전에 총판 대행이었던 건이면 대행 표시를 푼다.
+          agentProxy: false,
         },
         event: {
           eventType: "ADMIN_APPROVED_ASSIGNMENT",
@@ -940,6 +942,8 @@ async function createWaitingInstallerResponseAssignment(
         orderData: {
           activeAssignmentId: assignment.id,
           currentInstallerId: candidate.businessNumber,
+          // 자동 배정은 일반 기사 배정이다. 예전에 총판 대행이었던 건이면 대행 표시를 푼다.
+          agentProxy: false,
           ...issueResolutionOrderData,
         },
         event: {

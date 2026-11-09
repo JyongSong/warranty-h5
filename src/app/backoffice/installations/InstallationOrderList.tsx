@@ -56,6 +56,8 @@ export type InstallationOrderListItem = {
   currentInstallerId: string | null;
   /** 외부 협력사(PL) 배정 건이면 협력사명과 협력사 진행 상태 */
   partner?: { name: string; status: string | null; claimAmount: number | null } | null;
+  /** 총판 대행 건 */
+  agentProxy?: boolean;
   hasOpenIssue: boolean;
   issueCodes: string[];
   statusChangedAt: string;
@@ -1304,6 +1306,16 @@ function getNextActionLabel(row: InstallationOrderListItem) {
       return "기사 후보 다시 찾기";
     }
     return "열린 예외 확인";
+  }
+
+  // 총판 대행 건은 기사 단계를 총판 단계로 읽는다.
+  if (row.agentProxy) {
+    const agentLabels: Record<string, string> = {
+      WAITING_INSTALLER_RESPONSE: "총판 대행 응답 대기",
+      INSTALLER_ASSIGNED: "총판 대행 진행 중",
+      WAITING_HQ_REVIEW: "총판 대행 완료 검수",
+    };
+    if (agentLabels[row.status]) return agentLabels[row.status];
   }
 
   const nextActionLabels: Record<string, string> = {

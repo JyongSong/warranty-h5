@@ -5,7 +5,7 @@ import {
   listSettlementPeriods,
   type SettlementLineFilter,
 } from "@/lib/installation/settlement/service";
-import { getGlobalDefaults } from "@/lib/installation/settlement/rates";
+import { getAgentProxyBaseFeeDefault, getGlobalDefaults } from "@/lib/installation/settlement/rates";
 import { listInstallerRateOverrides } from "@/lib/installation/settlement/installer-rates";
 import SettlementClient from "./SettlementClient";
 
@@ -38,11 +38,12 @@ export default async function BackofficeInstallerSettlementPage({
   };
   const hasFilter = Boolean(filter.periodId || filter.startDate || filter.endDate || filter.installerId);
 
-  const [lines, summary, rateDefaults, rateOverrides] = await Promise.all([
+  const [lines, summary, rateDefaults, rateOverrides, agentProxyBaseFee] = await Promise.all([
     hasFilter ? listSettlementLines(filter) : Promise.resolve([]),
     hasFilter ? aggregateSettlementByInstaller(filter) : Promise.resolve([]),
     getGlobalDefaults(),
     listInstallerRateOverrides(),
+    getAgentProxyBaseFeeDefault(),
   ]);
 
   return (
@@ -61,6 +62,7 @@ export default async function BackofficeInstallerSettlementPage({
         summary={summary}
         rateDefaults={rateDefaults}
         rateOverrides={rateOverrides}
+        agentProxyBaseFee={agentProxyBaseFee}
       />
     </div>
   );

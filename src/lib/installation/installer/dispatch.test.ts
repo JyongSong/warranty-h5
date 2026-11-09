@@ -313,6 +313,7 @@ describe("dispatchReadyInstallationOrders", () => {
       data: {
         activeAssignmentId: "assignment-1",
         currentInstallerId: "installer-2",
+        agentProxy: false,
         hasOpenIssue: false,
         lastIssueId: null,
         status: "WAITING_ADMIN_REVIEW",
@@ -698,6 +699,7 @@ describe("dispatchReadyInstallationOrders", () => {
       data: {
         activeAssignmentId: "assignment-1",
         currentInstallerId: "installer-2",
+        agentProxy: false,
         status: "WAITING_INSTALLER_RESPONSE",
         statusChangedAt: now,
       },
@@ -1127,6 +1129,7 @@ describe("dispatchReadyInstallationOrders", () => {
       data: {
         activeAssignmentId: "assignment-3",
         currentInstallerId: "installer-2",
+        agentProxy: false,
         status: "WAITING_ADMIN_REVIEW",
         statusChangedAt: now,
       },

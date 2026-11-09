@@ -715,6 +715,11 @@ function getErrorMessage(error: unknown) {
  * 기기가 없거나(대부분의 기사가 아직 앱 미설치) 푸시가 실패하면 false 를
  * 돌려 즉시 문자로 폴백한다. 기다리게 하면 배정만 늦어진다.
  */
+/** 배정 요청 푸시 제목. 총판 대행 건은 앞에 [총판 대행] 을 붙여 알림만 보고도 구분되게 한다. */
+function assignmentPushTitle(agentProxy: boolean | null | undefined) {
+  return agentProxy ? "[총판 대행] 새 작업이 배정되었습니다" : "새 작업이 배정되었습니다";
+}
+
 async function tryPushInsteadOfSms(
   notification: InstallationNotificationForSend,
   now: Date,
@@ -729,7 +734,7 @@ async function tryPushInsteadOfSms(
 
   const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({
     where: { id: notification.assignmentAttemptId },
-    select: { installerId: true },
+    select: { installerId: true, installationOrder: { select: { agentProxy: true } } },
   });
   if (!attempt) return false;
 
@@ -738,7 +743,7 @@ async function tryPushInsteadOfSms(
     if (tokens.length === 0) return false;
 
     const deliveredCount = await sendAssignmentPushToInstaller(attempt.installerId, {
-      title: "새 작업이 배정되었습니다",
+      title: assignmentPushTitle(attempt.installationOrder?.agentProxy),
       body: "앱에서 확인하고 수락/거절해 주세요.",
     });
     // 등록된 토큰이 모두 거부되면(앱 삭제 등) 예외 없이 0 이 온다. 이것을
@@ -1023,7 +1028,7 @@ async function runPostSendNotificationEffects(
                 installerTokenExpiresAt: getInstallerResponseExpiresAt(now),
               }),
         },
-        select: { installerId: true },
+        select: { installerId: true, installationOrder: { select: { agentProxy: true } } },
       });
 
       // 문자가 첫 알림이었던 경우에만 푸시를 덧붙인다(기기가 늦게 등록됐을 수
@@ -1031,7 +1036,7 @@ async function runPostSendNotificationEffects(
       if (!pushAlreadySent) {
         try {
           await sendAssignmentPushToInstaller(attempt.installerId, {
-            title: "새 작업이 배정되었습니다",
+            title: assignmentPushTitle(attempt.installationOrder?.agentProxy),
             body: "앱에서 확인하고 수락/거절해 주세요.",
           });
         } catch (pushError) {

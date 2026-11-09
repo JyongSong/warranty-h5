@@ -10,6 +10,7 @@ import {
 import {
   cancelInstallationOrder,
   completeInstallationOrder,
+  assignInstallationOrderToAgent,
   createManualInstallerAssignment,
   InstallationManualOperationError,
   reassignInstallationOrderInstaller,
@@ -151,6 +152,33 @@ export async function createManualInstallationAssignmentAction(
     }
     console.error("[action/installations/manual-assignment]", error);
     return { ok: false, error: "MANUAL_ASSIGNMENT_FAILED" };
+  }
+}
+
+export async function assignInstallationToAgentAction(input: {
+  installationId: string;
+}): Promise<InstallationActionResult> {
+  const auth = await requireInstallationAdmin();
+  if (!auth.ok) return auth;
+
+  const normalizedOrderId = input.installationId.trim();
+  if (!normalizedOrderId) return { ok: false, error: "ORDER_ID_REQUIRED" };
+
+  try {
+    const result = await assignInstallationOrderToAgent(normalizedOrderId, {
+      adminId: auth.admin.id,
+      baseUrl: getSmsLinkBaseUrl(),
+    });
+    return normalizeAssignmentResult(result, {
+      status: "WAITING_INSTALLER_RESPONSE",
+      assignmentType: "MANUAL_DIRECT",
+    });
+  } catch (error) {
+    if (error instanceof InstallationManualOperationError) {
+      return { ok: false, error: toPublicManualAssignmentError(error.message) };
+    }
+    console.error("[action/installations/agent-proxy-assignment]", error);
+    return { ok: false, error: "AGENT_PROXY_ASSIGNMENT_FAILED" };
   }
 }
 
@@ -534,6 +562,8 @@ export async function approveInstallationCompletionAction(
   orderId: string,
   longDistanceAmount?: number | null,
   extraClaimAmount?: number | null,
+  /** 총판 대행 건의 기본 출장비. 대행 건 검수에서만 보낸다. */
+  agentProxyBaseFee?: number,
 ): Promise<InstallationActionResult> {
   const auth = await requireInstallationAdmin();
   if (!auth.ok) return auth;
@@ -569,6 +599,7 @@ export async function approveInstallationCompletionAction(
       orderId: normalizedOrderId,
       longDistanceAmount: normalizedLongDistance,
       extraClaimAmount: normalizedExtraClaim,
+      agentProxyBaseFee,
     });
     return { ok: true, status: "COMPLETED" };
   } catch (error) {

@@ -32,6 +32,8 @@ export type MonthlySettlementRow = {
   /** 현장에서 기사가 직접 받은 금액. 정산 합계에 포함되지 않는다. */
   wallpadAmount: number;
   totalAmount: number;
+  /** 총판 대행 건 */
+  agentProxy: boolean;
 };
 
 export type MonthlySettlement = {
@@ -116,6 +118,7 @@ export async function getInstallerMonthlySettlement(
       wallpadFee: line.wallpadFee,
       wallpadAmount: line.wallpadAmount,
       totalAmount: line.totalAmount,
+      agentProxy: line.agentProxy,
     };
   });
 

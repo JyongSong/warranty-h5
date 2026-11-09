@@ -95,6 +95,9 @@ export async function submitCompletionAction(input: {
   wallpadNote?: string | null;
   /** HQ | ONSITE. 없으면(옛 화면·옛 대기열) 현장 결제. */
   wallpadBilling?: string | null;
+  /** 총판 대행 건의 기본 출장비·실제 시공자. 대행 건에서만 쓴다. */
+  agentProxyBaseFee?: number | null;
+  actualInstaller?: string | null;
   installEndAt?: string;
   photoPaths: string[];
 }): Promise<SubmitCompletionResult> {
@@ -108,7 +111,9 @@ export async function submitCompletionAction(input: {
   const installEndAt = resolveInstallEndAt(input.installEndAt);
 
   const photoPaths = Array.isArray(input.photoPaths) ? input.photoPaths : [];
-  if (photoPaths.length < 1 || photoPaths.length > 4) return { ok: false, error: "PHOTO_COUNT_INVALID" };
+  // 총판 대행 건은 설치 사진이 선택이다.
+  const minPhotos = view.agentProxy ? 0 : 1;
+  if (photoPaths.length < minPhotos || photoPaths.length > 4) return { ok: false, error: "PHOTO_COUNT_INVALID" };
   // Paths must belong to this order (they came from our signed targets).
   if (!photoPaths.every((p) => typeof p === "string" && p.startsWith(`orders/${orderId}/`))) {
     return { ok: false, error: "INVALID_PHOTO_PATHS" };
@@ -175,6 +180,8 @@ export async function submitCompletionAction(input: {
       wallpadFailReason: input.wallpadFailReason ?? null,
       wallpadNote: input.wallpadNote ?? null,
       wallpadBilling: typeof input.wallpadBilling === "string" ? input.wallpadBilling : null,
+      agentProxyBaseFee: typeof input.agentProxyBaseFee === "number" ? input.agentProxyBaseFee : null,
+      actualInstaller: typeof input.actualInstaller === "string" ? input.actualInstaller : null,
       installEndAt,
       photoPaths,
     });
@@ -218,6 +225,8 @@ export async function previewInstallSettlementAction(input: {
   extraClaimAmount?: number | null;
   wallpadAmount: number | null;
   wallpadBilling?: string | null;
+  /** 총판 대행 건의 기본 출장비. 대행 건이면 이 값 + 기타 청구로 계산한다. */
+  agentProxyBaseFee?: number | null;
 }): Promise<SettlementPreview> {
   try {
     const installer = await getCurrentInstaller();
@@ -245,6 +254,8 @@ export async function previewInstallSettlementAction(input: {
       installEndAt: existing?.installEndAt ?? now,
       firstSubmittedAt: existing?.createdAt ?? now,
       rates,
+      // 대행 건이 아니면 넘어온 값이 있어도 무시한다(서버 제출도 같은 기준).
+      agentProxyBaseFee: view.agentProxy ? (input.agentProxyBaseFee ?? 0) : null,
     });
 
     return {
