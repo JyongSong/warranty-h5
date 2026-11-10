@@ -12,12 +12,12 @@ export default function FeeSections() {
           <ul style={list}>
             {section.lines.map((line, index) => (
               <li key={line} style={listItem}>
-                {line}
+                <Emphasis text={line} />
                 {section.subLines?.[index] ? (
                   <ul style={{ ...list, marginTop: 4 }}>
                     {section.subLines[index].map((sub) => (
                       <li key={sub} style={subItem}>
-                        {sub}
+                        <Emphasis text={sub} />
                       </li>
                     ))}
                   </ul>
@@ -30,6 +30,26 @@ export default function FeeSections() {
     </>
   );
 }
+
+// 문안의 **…** 부분을 굵게 보여 준다. 기준이 되는 말(네이버 지도 최단 거리, 현장 결제 등)을 짚는 데 쓴다.
+function Emphasis({ text }: { text: string }) {
+  const parts = text.split("**");
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <strong key={index} style={strong}>
+            {part}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+const strong: CSSProperties = { fontWeight: 800, color: "#92400e" };
 
 const feeTitle: CSSProperties = { fontSize: 15, fontWeight: 800, margin: "0 0 6px" };
 

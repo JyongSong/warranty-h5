@@ -47,7 +47,7 @@ function acknowledge() {
 let acknowledgedInMemory = false;
 
 // 공지 팝업 켜기/끄기. 끄면 아무 화면에도 뜨지 않는다(자주 묻는 질문 화면은 그대로).
-const NOTICE_ENABLED = false;
+const NOTICE_ENABLED = true;
 
 const HIDDEN_PATH_PREFIXES = ["/installer/login", "/installer/guide", "/installer/faq"];
 

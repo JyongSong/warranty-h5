@@ -469,7 +469,7 @@ export default function CompleteClient({
                 </label>
               ))}
               <div style={{ ...helpText, margin: "6px 0 0" }}>
-                장거리 기준은 기사님 등록 주소와 고객 설치 주소 사이의 네이버 지도 최단 거리입니다. 본사에서
+                장거리 기준은 기사님 등록 주소와 고객 설치 주소 사이의 네이버 지도 기준 편도 최단 거리입니다. 본사에서
                 거리를 확인한 뒤 승인된 건에 한해 지급됩니다.
               </div>
             </div>

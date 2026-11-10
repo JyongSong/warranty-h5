@@ -31,13 +31,14 @@ describe("buildOrderGuideLines", () => {
     const out = texts(buildOrderGuideLines({ installItems: [item("K100도어락설치")], agentProxy: false, drivingMeters: null }));
     expect(out).toContain("기본 설치비 50,000원");
     expect(out).toContain("앱 설치 5,000원");
-    expect(out).not.toContain("장거리");
+    expect(out).not.toContain("장거리 예상");
+    expect(out).toContain("네이버 지도 기준 편도 최단 거리");
     expect(out).not.toContain("월패드");
   });
 
   it("shows the expected long-distance amount", () => {
     expect(texts(buildOrderGuideLines({ installItems: [], agentProxy: false, drivingMeters: 32400 }))).toContain(
-      "장거리 예상 20,000원 (약 32.4km",
+      "장거리 예상 20,000원 (앱 계산 약 32.4km",
     );
     expect(texts(buildOrderGuideLines({ installItems: [], agentProxy: false, drivingMeters: 8000 }))).toContain(
       "장거리 해당 없음",
@@ -65,10 +66,12 @@ describe("buildOrderGuideLines", () => {
         drivingMeters: null,
       }),
     );
-    expect(out).toContain("(현장 결제) 월패드 연동: 현행 기준대로 고객에게 직접 받습니다.");
+    expect(out).toContain("(현장 결제) 월패드 연동: 고객님께 현장에서 직접 받습니다.");
+    expect(out).toContain("본사가 고객님께 안내한 금액(참고)");
+    expect(out).toContain("약 12만 원");
   });
 
-  it("adds doorbell and curtain/blind notes", () => {
+  it("adds the doorbell note and nothing about curtain/blind", () => {
     const out = texts(
       buildOrderGuideLines({
         installItems: [item("도어벨설치"), item("블라인드 설치")],
@@ -76,7 +79,8 @@ describe("buildOrderGuideLines", () => {
         drivingMeters: null,
       }),
     );
-    expect(out).toContain("도어벨은 상시전원 설치 기준");
-    expect(out).toContain("커튼/블라인드 설치비는 기준 검토 중");
+    expect(out).toContain("도어벨 설치비 50,000원은 완료 등록 때 「기타 청구 금액」으로 제출");
+    expect(out).toContain("상시전원 설치 기준");
+    expect(out).not.toContain("커튼");
   });
 });
