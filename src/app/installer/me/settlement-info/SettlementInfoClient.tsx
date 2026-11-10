@@ -29,7 +29,7 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
-const DOC_TYPES: Array<{ value: TaxDocType; title: string; desc: string }> = [
+const DOC_TYPES: Array<{ value: TaxDocType; title: string; desc: string; warning?: string }> = [
   {
     value: "E_TAX_INVOICE",
     title: "전자세금계산서",
@@ -44,6 +44,7 @@ const DOC_TYPES: Array<{ value: TaxDocType; title: string; desc: string }> = [
     value: "CASH_RECEIPT",
     title: "현금영수증",
     desc: "간이과세자 등 세금계산서 발행이 어려운 경우. 정산 금액을 받은 뒤 본사 사업자번호로 지출증빙 현금영수증을 발급해 주세요.",
+    warning: "해당 거래 방식 추후 중단 예정",
   },
 ];
 
@@ -311,6 +312,18 @@ export default function SettlementInfoClient({
                     >
                       {t.desc}
                     </div>
+                    {t.warning ? (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 800,
+                          marginTop: 6,
+                          color: selected ? "#fca5a5" : "#b42318",
+                        }}
+                      >
+                        ⚠ {t.warning}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })}

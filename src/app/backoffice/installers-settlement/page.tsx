@@ -6,11 +6,22 @@ import {
 import { getAgentProxyBaseFeeDefault, getGlobalDefaults } from "@/lib/installation/settlement/rates";
 import { listInstallerRateOverrides } from "@/lib/installation/settlement/installer-rates";
 import SettlementClient from "./SettlementClient";
+import StatementsTab from "./StatementsTab";
+import {
+  currentYm,
+  isMonthIssued,
+  isSettlementLaunched,
+  isValidYm,
+  listMonthStatements,
+  previewMonth,
+  shiftYm,
+} from "@/lib/installation/settlement/statements";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = {
   tab?: string;
+  ym?: string;
   periodId?: string;
   startDate?: string;
   endDate?: string;
@@ -31,7 +42,30 @@ export default async function BackofficeInstallerSettlementPage({
 }) {
   await requireBackofficeUserPage("/backoffice/installers-settlement");
   const sp = await searchParams;
-  const tab = sp.tab === "rates" ? "rates" : "settlement";
+  const tab = sp.tab === "rates" ? "rates" : sp.tab === "statements" ? "statements" : "settlement";
+  const launched = await isSettlementLaunched();
+
+  if (tab === "statements") {
+    // 기본은 지난달: 이번 달은 아직 마감 전이라 발행할 수 없다.
+    const ym = sp.ym && isValidYm(sp.ym) ? sp.ym : shiftYm(currentYm(), -1);
+    const issued = await isMonthIssued(ym);
+    const [statements, preview] = await Promise.all([
+      issued ? listMonthStatements(ym) : Promise.resolve([]),
+      issued ? Promise.resolve([]) : previewMonth(ym),
+    ]);
+    return (
+      <div className="p-6">
+        <StatementsTab
+          ym={ym}
+          thisYm={currentYm()}
+          issued={issued}
+          statements={statements}
+          preview={preview}
+          launched={launched}
+        />
+      </div>
+    );
+  }
 
   const periods = await listSettlementPeriods();
 
@@ -58,6 +92,7 @@ export default async function BackofficeInstallerSettlementPage({
     <div className="p-6">
       <SettlementClient
         tab={tab}
+        showStatementsTab={launched}
         periods={periods}
         filter={{ periodId, startDate, endDate }}
         lines={lines}

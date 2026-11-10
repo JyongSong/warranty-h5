@@ -8,6 +8,7 @@ import {
   shiftYm,
 } from "@/lib/installer/monthlySettlement";
 import SettlementRow from "./SettlementRow";
+import { getInstallerStatement, isSettlementLaunched } from "@/lib/installation/settlement/statements";
 import * as ui from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,13 @@ export default async function InstallerHistoryPage({
   const thisMonth = currentYm();
   const ym = rawYm && isValidYm(rawYm) ? rawYm : thisMonth;
 
-  const summary = await getInstallerMonthlySettlement(installer.id, ym);
+  const [summary, statement] = await Promise.all([
+    getInstallerMonthlySettlement(installer.id, ym),
+    // 정산 기능 공개 전에는 정산서 카드를 띄우지 않는다.
+    isSettlementLaunched()
+      .then((launched) => (launched ? getInstallerStatement(installer.id, ym) : null))
+      .catch(() => null),
+  ]);
 
   const prevYm = shiftYm(ym, -1);
   const nextYm = shiftYm(ym, 1);
@@ -59,6 +66,18 @@ export default async function InstallerHistoryPage({
             총 {summary.installCount + summary.asCount}건
           </div>
         </div>
+
+        {statement ? (
+          <Link href={`/installer/statement/${ym}`} style={statementCard}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#71717a" }}>정산서</div>
+              <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>{won(statement.payAmount)}</div>
+            </div>
+            <span style={ui.badge(statementStage(statement).bg, statementStage(statement).color)}>
+              {statementStage(statement).text} ›
+            </span>
+          </Link>
+        ) : null}
 
         {summary.pendingReviewCount > 0 ? (
           <div style={pendingBox}>
@@ -102,6 +121,28 @@ export default async function InstallerHistoryPage({
   );
 }
 
+/** 기사 입장에서 지금 해야 할 일 */
+function statementStage(s: {
+  flow: string | null;
+  evidenceStatus: string;
+  paidAt: string | null;
+  infoStatus: string | null;
+}): { text: string; bg: string; color: string } {
+  const todo = { bg: "#fee2e2", color: "#991b1b" };
+  const wait = { bg: "#e0e7ff", color: "#3730a3" };
+  const done = { bg: "#d1fae5", color: "#065f46" };
+  if (!s.infoStatus || !s.flow) return { text: "정산 정보 등록 필요", ...todo };
+  if (s.evidenceStatus === "REJECTED") return { text: "반려 · 다시 제출", ...todo };
+  if (s.flow === "TAX") {
+    if (s.paidAt) return { text: "지급 완료", ...done };
+    if (s.evidenceStatus === "PENDING") return { text: "세금계산서 제출 필요", ...todo };
+    return { text: s.evidenceStatus === "CONFIRMED" ? "지급 대기" : "본사 확인 중", ...wait };
+  }
+  if (!s.paidAt) return { text: "지급 대기", ...wait };
+  if (s.evidenceStatus === "PENDING") return { text: "현금영수증 등록 필요", ...todo };
+  return { text: s.evidenceStatus === "CONFIRMED" ? "완료" : "본사 확인 중", ...(s.evidenceStatus === "CONFIRMED" ? done : wait) };
+}
+
 function BreakdownRow({ label, count, amount }: { label: string; count: number; amount: number }) {
   return (
     <div style={breakdownRow}>
@@ -117,6 +158,17 @@ function formatYm(ym: string): string {
   const [y, m] = ym.split("-");
   return `${y}년 ${Number(m)}월`;
 }
+
+const statementCard: CSSProperties = {
+  ...ui.card,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  textDecoration: "none",
+  color: "inherit",
+  border: "1px solid #18181b",
+};
 
 const monthNav: CSSProperties = {
   display: "flex",

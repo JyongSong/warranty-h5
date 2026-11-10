@@ -6,6 +6,7 @@ import { logoutInstallerAction } from "../actions";
 import { Row } from "../cards";
 import { formatKrPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
+import { isSettlementLaunched } from "@/lib/installation/settlement/statements";
 import * as ui from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ export default async function InstallerMePage() {
   const installer = await requireInstallerPage("/installer/me");
   // 세션에는 id/name 만 있어 지점·연락처는 등록부에서 읽는다.
   const profile = await getInstallerContact(installer.id).catch(() => null);
+  // 정산 기능 공개 전에는 「정산 정보 등록」 입구를 숨긴다.
+  const settlementLaunched = await isSettlementLaunched().catch(() => false);
   const settlementInfo = await prisma.installerSettlementInfo
     .findUnique({ where: { installerId: installer.id }, select: { status: true } })
     .catch(() => null);
@@ -38,10 +41,12 @@ export default async function InstallerMePage() {
           내 정보 확인·수정
         </Link>
 
-        <Link href="/installer/me/settlement-info" style={settlementLink}>
-          <span>정산 정보 등록</span>
-          <span style={ui.badge(settlementStatus.bg, settlementStatus.color)}>{settlementStatus.text}</span>
-        </Link>
+        {settlementLaunched ? (
+          <Link href="/installer/me/settlement-info" style={settlementLink}>
+            <span>정산 정보 등록</span>
+            <span style={ui.badge(settlementStatus.bg, settlementStatus.color)}>{settlementStatus.text}</span>
+          </Link>
+        ) : null}
 
         <Link href="/installer/faq" style={guideLink}>
           자주 묻는 질문 · 설치비 기준

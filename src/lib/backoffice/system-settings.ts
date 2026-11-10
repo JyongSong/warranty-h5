@@ -42,6 +42,17 @@ export const SYSTEM_SETTING_KEYS = {
   settlementAgentProxyBaseFee: "installation.settlement.agentProxyBaseFee",
   // 기사 앱 「정산 정보 등록」에서 증빙 종류(전자/종이 세금계산서·현금영수증) 선택을 보일지. 기본은 숨김.
   installerTaxDocTypeEnabled: "installer.settlementInfo.taxDocTypeEnabled",
+  // 기사 정산 기능 공개 스위치. 끄면 기사 앱에서 정산 정보 등록 입구·월 정산서·현금영수증 앱 제한이 모두 숨고,
+  // 백오피스 월 정산서 탭도 숨으며 발행이 막힌다. 앱 업데이트를 한 번에 공개하려고 둔다.
+  installerSettlementLaunched: "installer.settlement.launched",
+  // 본사(공급받는자) 정보. 기사가 세금계산서·현금영수증을 발행할 때 앱에 그대로 보여 준다.
+  hqBusinessNumber: "hq.invoice.businessNumber",
+  hqBusinessName: "hq.invoice.businessName",
+  hqRepresentative: "hq.invoice.representative",
+  hqAddress: "hq.invoice.address",
+  hqBusinessType: "hq.invoice.businessType",
+  hqBusinessItem: "hq.invoice.businessItem",
+  hqInvoiceEmail: "hq.invoice.email",
 } as const;
 
 export const ASSIGNMENT_SMS_LIMIT_DEFAULTS = {
@@ -72,6 +83,7 @@ type SystemSettingSpec = {
   | { type: "integer"; min: number; max: number; defaultValue: number }
   | { type: "time"; defaultValue: string }
   | { type: "phoneList"; defaultValue: "" }
+  | { type: "text"; defaultValue: "" }
 );
 
 const dispatcherLimitSpecs: SystemSettingSpec[] = Object.entries(dispatcherConfig.limits).map(([, spec]) => ({
@@ -243,6 +255,31 @@ const SYSTEM_SETTING_SPECS = ([
     defaultValue: 20,
     validationHint: "0-23 사이의 정수(시)",
   },
+  ...(
+    [
+      [SYSTEM_SETTING_KEYS.hqBusinessNumber, "본사 사업자등록번호 (기사 세금계산서·현금영수증 발행 안내용)"],
+      [SYSTEM_SETTING_KEYS.hqBusinessName, "본사 상호 (세금계산서 공급받는자)"],
+      [SYSTEM_SETTING_KEYS.hqRepresentative, "본사 대표자 (세금계산서 공급받는자)"],
+      [SYSTEM_SETTING_KEYS.hqAddress, "본사 사업장 주소 (세금계산서 공급받는자)"],
+      [SYSTEM_SETTING_KEYS.hqBusinessType, "본사 업태 (세금계산서 공급받는자)"],
+      [SYSTEM_SETTING_KEYS.hqBusinessItem, "본사 종목 (세금계산서 공급받는자)"],
+      [SYSTEM_SETTING_KEYS.hqInvoiceEmail, "본사 세금계산서 수신 이메일"],
+    ] as const
+  ).map(([key, description]) => ({
+    key,
+    description,
+    type: "text" as const,
+    defaultValue: "" as const,
+    validationHint: "1-200자 텍스트",
+  })),
+  {
+    key: SYSTEM_SETTING_KEYS.installerSettlementLaunched,
+    description:
+      "기사 정산 기능 공개 여부 (기사 앱 정산 정보 등록·월 정산서·현금영수증 앱 제한, 백오피스 월 정산서 탭). false 면 모두 숨김",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
+  },
   {
     key: SYSTEM_SETTING_KEYS.installerTaxDocTypeEnabled,
     description: "기사 앱 정산 정보 등록에서 증빙 종류(전자/종이 세금계산서·현금영수증) 선택 표시 여부",
@@ -364,6 +401,10 @@ export function validateSystemSettingValue(key: string, rawValue: string) {
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
       ? { ok: true as const, value }
       : { ok: false as const };
+  }
+
+  if (spec.type === "text") {
+    return value.length >= 1 && value.length <= 200 ? { ok: true as const, value } : { ok: false as const };
   }
 
   const recipients = value
