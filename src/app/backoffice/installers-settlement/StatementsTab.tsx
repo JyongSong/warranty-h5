@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { MonthPreviewRow, StatementView } from "@/lib/installation/settlement/statements";
 import { TAX_DOC_TYPE_LABEL } from "@/lib/installer/settlement-info-shared";
 import {
-  cancelMonthStatementsAction,
+  cancelStatementAction,
   issueMonthStatementsAction,
   markPaidAction,
   reviewEvidenceAction,
@@ -24,9 +24,10 @@ const shift = (ym: string, d: number) => {
 const ERR: Record<string, string> = {
   NOT_LAUNCHED: "정산 기능 공개 전이라 발행할 수 없습니다.",
   MONTH_NOT_CLOSED: "이번 달은 아직 마감 전이라 발행할 수 없습니다.",
-  ALREADY_ISSUED: "이미 발행된 달입니다.",
+  ALREADY_ISSUED: "선택한 기사는 이미 이 달 정산서가 발행됐습니다.",
+  NOTHING_SELECTED: "발행할 기사를 선택해 주세요.",
   NOTHING_TO_ISSUE: "발행할 정산 내역이 없습니다.",
-  ALREADY_IN_PROGRESS: "증빙 제출·지급이 시작된 건이 있어 발행을 취소할 수 없습니다.",
+  ALREADY_IN_PROGRESS: "증빙 제출 또는 지급이 시작돼 발행을 취소할 수 없습니다.",
   REJECT_REASON_REQUIRED: "반려 사유를 입력해 주세요.",
   SOME_NOT_PAYABLE: "지급 조건이 안 되는 건이 섞여 있습니다. 새로고침 후 다시 선택해 주세요.",
 };
@@ -57,7 +58,6 @@ function payable(s: StatementView): boolean {
 export default function StatementsTab({
   ym,
   thisYm,
-  issued,
   statements,
   preview,
   launched,
@@ -65,7 +65,6 @@ export default function StatementsTab({
   launched: boolean;
   ym: string;
   thisYm: string;
-  issued: boolean;
   statements: StatementView[];
   preview: MonthPreviewRow[];
 }) {
@@ -74,6 +73,11 @@ export default function StatementsTab({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
+  // 발행할 기사 선택. 기본은 전체 선택.
+  const [toIssue, setToIssue] = useState<Set<string>>(() => new Set(preview.map((p) => p.installerId)));
+  const issued = statements.length > 0;
+  const issueIds = preview.map((p) => p.installerId).filter((id) => toIssue.has(id));
+  const issueSum = preview.filter((p) => toIssue.has(p.installerId)).reduce((a, p) => a + p.baseAmount, 0);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
     setError(null);
@@ -134,16 +138,6 @@ export default function StatementsTab({
             <a className={secondaryBtn} href={`/api/settlement/statements/export?ym=${ym}`}>
               이체용 엑셀 ({totals.payableCount}건)
             </a>
-            <button
-              className={secondaryBtn}
-              disabled={pending}
-              onClick={() => {
-                if (confirm(`${fmtYm(ym)} 정산서 발행을 취소할까요? 증빙·지급이 시작되지 않았을 때만 됩니다.`))
-                  run(() => cancelMonthStatementsAction(ym));
-              }}
-            >
-              발행 취소
-            </button>
           </div>
         ) : null}
       </section>
@@ -162,25 +156,28 @@ export default function StatementsTab({
 
       {error ? <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
-      {!issued ? (
+      {preview.length > 0 || !issued ? (
         <section className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-zinc-700">발행 전 미리보기</h2>
+              <h2 className="text-sm font-bold text-zinc-700">
+                {issued ? `아직 발행하지 않은 기사 (${preview.length})` : "발행 전 미리보기"}
+              </h2>
               <p className="mt-1 text-xs text-zinc-500">
                 {fmtYm(ym)} 말일까지 완료·승인됐고 아직 정산서에 들어가지 않은 건입니다(이전 달에 늦게 승인된 건 포함).
-                발행하면 금액이 잠기고 기사 앱에 정산서가 전달됩니다.
+                발행할 기사를 고르세요. 발행하면 그 기사의 금액이 잠기고 기사 앱에 정산서가 전달됩니다. 고르지 않은 기사는 나중에
+                발행할 수 있습니다.
               </p>
             </div>
             <button
               className={primaryBtn}
-              disabled={!launched || pending || preview.length === 0 || ym >= thisYm}
+              disabled={!launched || pending || issueIds.length === 0 || ym >= thisYm}
               onClick={() => {
-                if (confirm(`${fmtYm(ym)} 정산서를 ${preview.length}명에게 발행할까요?`))
-                  run(() => issueMonthStatementsAction(ym));
+                if (confirm(`${fmtYm(ym)} 정산서를 선택한 ${issueIds.length}명에게 발행할까요? (합계 ${won(issueSum)})`))
+                  run(() => issueMonthStatementsAction(ym, issueIds));
               }}
             >
-              {ym >= thisYm ? "마감 전" : `정산서 발행 (${preview.length}명)`}
+              {ym >= thisYm ? "마감 전" : `선택한 ${issueIds.length}명 정산서 발행`}
             </button>
           </div>
           {preview.length === 0 ? (
@@ -189,7 +186,15 @@ export default function StatementsTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-zinc-500">
-                  <th className="py-2">기사</th>
+                  <th className="w-8 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="전체 선택"
+                      checked={preview.length > 0 && preview.every((p) => toIssue.has(p.installerId))}
+                      onChange={(e) => setToIssue(e.target.checked ? new Set(preview.map((p) => p.installerId)) : new Set())}
+                    />
+                  </th>
+                  <th>기사</th>
                   <th className="text-right">건수</th>
                   <th className="text-right">정산 금액</th>
                 </tr>
@@ -197,7 +202,22 @@ export default function StatementsTab({
               <tbody>
                 {preview.map((p) => (
                   <tr key={p.installerId} className="border-b last:border-0">
-                    <td className="py-2 font-medium">{p.installerName}</td>
+                    <td className="py-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`${p.installerName} 선택`}
+                        checked={toIssue.has(p.installerId)}
+                        onChange={(e) =>
+                          setToIssue((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(p.installerId);
+                            else next.delete(p.installerId);
+                            return next;
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="font-medium">{p.installerName}</td>
                     <td className="text-right">{p.lineCount}건</td>
                     <td className="text-right font-semibold">{won(p.baseAmount)}</td>
                   </tr>
@@ -206,7 +226,9 @@ export default function StatementsTab({
             </table>
           )}
         </section>
-      ) : (
+      ) : null}
+
+      {issued ? (
         <>
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="정산 금액 합계" value={won(totals.base)} />
@@ -276,6 +298,14 @@ export default function StatementsTab({
                         onReview={(approve, reason) =>
                           run(() => reviewEvidenceAction({ statementId: s.id, approve, rejectReason: reason }))
                         }
+                        onCancel={() => {
+                          if (
+                            confirm(
+                              `${s.installerName} 기사의 ${fmtYm(ym)} 정산서 발행을 취소할까요? 이 기사의 건은 다시 미발행으로 돌아갑니다.`,
+                            )
+                          )
+                            run(() => cancelStatementAction(s.id));
+                        }}
                       />
                     );
                   })}
@@ -284,7 +314,7 @@ export default function StatementsTab({
             </div>
           </section>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -299,6 +329,7 @@ function FragmentRow({
   onToggle,
   pending,
   onReview,
+  onCancel,
 }: {
   s: StatementView;
   st: { text: string; cls: string };
@@ -309,6 +340,7 @@ function FragmentRow({
   onToggle: () => void;
   pending: boolean;
   onReview: (approve: boolean, reason?: string) => void;
+  onCancel: () => void;
 }) {
   const [reason, setReason] = useState("");
   const infoWarning = s.infoStatus === null ? "정산 정보 미등록" : s.infoStatus !== "APPROVED" ? "정산 정보 미승인" : null;
@@ -374,6 +406,14 @@ function FragmentRow({
                     </div>
                   ),
                 )}
+              </div>
+            ) : null}
+            {!s.paidAt && s.evidenceStatus === "PENDING" ? (
+              <div>
+                <button className="text-xs font-semibold text-red-600 hover:underline" disabled={pending} onClick={onCancel}>
+                  이 기사 발행 취소
+                </button>
+                <span className="ml-2 text-xs text-zinc-400">증빙 제출·지급 전에만 됩니다</span>
               </div>
             ) : null}
             {s.evidenceStatus === "SUBMITTED" ? (

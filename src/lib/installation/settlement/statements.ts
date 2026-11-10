@@ -114,39 +114,64 @@ export async function isMonthIssued(ym: string): Promise<boolean> {
   return (await prisma.settlementStatement.count({ where: { ym } })) > 0;
 }
 
-export async function issueMonthStatements(input: { ym: string; adminId: string }): Promise<number> {
+/**
+ * 선택한 기사들의 정산서를 발행한다. 같은 달에 여러 번 나눠 발행할 수 있다.
+ * 선택하지 않은 기사의 라인은 묶이지 않고 남아, 나중에 이 달 또는 다음 달에 발행된다.
+ * 이미 이 달 정산서가 있는 기사는 건너뛴다.
+ */
+export async function issueMonthStatements(input: {
+  ym: string;
+  adminId: string;
+  installerIds: string[];
+}): Promise<number> {
   const { ym, adminId } = input;
+  const installerIds = [...new Set(input.installerIds)];
   if (!isValidYm(ym)) throw new StatementError("YM_INVALID");
   if (ym >= currentYm()) throw new StatementError("MONTH_NOT_CLOSED");
+  if (installerIds.length === 0) throw new StatementError("NOTHING_SELECTED");
   // 공개 전에 발행하면 기사에게 푸시가 나가므로 막는다.
   if (!(await isSettlementLaunched())) throw new StatementError("NOT_LAUNCHED");
   const { endExclusive, firstDate, lastDate } = ymBounds(ym);
+  const periodName = `${formatYm(ym)} 정산서`;
 
   const created = await prisma.$transaction(async (tx) => {
-    if ((await tx.settlementStatement.count({ where: { ym } })) > 0) throw new StatementError("ALREADY_ISSUED");
+    const already = await tx.settlementStatement.findMany({
+      where: { ym, installerId: { in: installerIds } },
+      select: { installerId: true },
+    });
+    const alreadySet = new Set(already.map((a) => a.installerId));
+    const targets = installerIds.filter((id) => !alreadySet.has(id));
+    if (targets.length === 0) throw new StatementError("ALREADY_ISSUED");
 
-    const period = await tx.settlementPeriod.create({
-      data: {
-        name: `${formatYm(ym)} 정산서`,
-        startDate: new Date(`${firstDate}T00:00:00.000Z`),
-        endDate: new Date(`${lastDate}T00:00:00.000Z`),
-        // 발행과 동시에 잠근다. 잠긴 주기의 라인은 승인 수정·취소로 금액이 바뀌지 않는다.
-        status: "SETTLED",
-        settledAt: new Date(),
-        settledByAdminId: adminId,
-        createdByAdminId: adminId,
-      },
+    // 이 달 정산 주기는 하나만 둔다. 먼저 발행한 기사가 있으면 그 주기에 붙인다.
+    const existing = await tx.settlementPeriod.findFirst({
+      where: { name: periodName, status: "SETTLED" },
       select: { id: true },
     });
+    const period =
+      existing ??
+      (await tx.settlementPeriod.create({
+        data: {
+          name: periodName,
+          startDate: new Date(`${firstDate}T00:00:00.000Z`),
+          endDate: new Date(`${lastDate}T00:00:00.000Z`),
+          // 발행과 동시에 잠근다. 잠긴 주기의 라인은 승인 수정·취소로 금액이 바뀌지 않는다.
+          status: "SETTLED",
+          settledAt: new Date(),
+          settledByAdminId: adminId,
+          createdByAdminId: adminId,
+        },
+        select: { id: true },
+      }));
 
     await tx.settlementLine.updateMany({
-      where: { periodId: null, completedAt: { lt: endExclusive } },
+      where: { periodId: null, installerId: { in: targets }, completedAt: { lt: endExclusive } },
       data: { periodId: period.id },
     });
 
     const groups = await tx.settlementLine.groupBy({
       by: ["installerId"],
-      where: { periodId: period.id },
+      where: { periodId: period.id, installerId: { in: targets } },
       _count: { _all: true },
       _sum: { totalAmount: true },
     });
@@ -173,21 +198,26 @@ export async function issueMonthStatements(input: { ym: string; adminId: string 
   return created.length;
 }
 
-/** 발행 취소. 아무 진행도 없을 때(증빙 제출·지급 전)만 된다. */
-export async function cancelMonthStatements(ym: string): Promise<void> {
+/**
+ * 정산서 한 장 발행 취소. 아무 진행도 없을 때(증빙 제출·지급 전)만 된다.
+ * 그 기사의 라인은 다시 미발행으로 돌아가고, 그 달에 정산서가 하나도 안 남으면 주기도 지운다.
+ */
+export async function cancelStatement(statementId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const statements = await tx.settlementStatement.findMany({
-      where: { ym },
-      select: { periodId: true, evidenceStatus: true, paidAt: true },
+    const st = await tx.settlementStatement.findUnique({
+      where: { id: statementId },
+      select: { id: true, periodId: true, installerId: true, evidenceStatus: true, paidAt: true },
     });
-    if (statements.length === 0) throw new StatementError("NOT_ISSUED");
-    if (statements.some((s) => s.paidAt || s.evidenceStatus !== "PENDING")) {
-      throw new StatementError("ALREADY_IN_PROGRESS");
+    if (!st) throw new StatementError("NOT_FOUND");
+    if (st.paidAt || st.evidenceStatus !== "PENDING") throw new StatementError("ALREADY_IN_PROGRESS");
+    await tx.settlementStatement.delete({ where: { id: st.id } });
+    await tx.settlementLine.updateMany({
+      where: { periodId: st.periodId, installerId: st.installerId },
+      data: { periodId: null },
+    });
+    if ((await tx.settlementStatement.count({ where: { periodId: st.periodId } })) === 0) {
+      await tx.settlementPeriod.delete({ where: { id: st.periodId } });
     }
-    const periodId = statements[0].periodId;
-    await tx.settlementStatement.deleteMany({ where: { ym } });
-    await tx.settlementLine.updateMany({ where: { periodId }, data: { periodId: null } });
-    await tx.settlementPeriod.delete({ where: { id: periodId } });
   });
 }
 

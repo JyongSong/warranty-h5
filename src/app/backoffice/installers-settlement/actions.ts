@@ -12,7 +12,7 @@ import {
 import { upsertInstallerRateOverride } from "@/lib/installation/settlement/installer-rates";
 import {
   StatementError,
-  cancelMonthStatements,
+  cancelStatement,
   issueMonthStatements,
   markPaid,
   reviewEvidence,
@@ -112,22 +112,25 @@ function failStatement(error: unknown): SettlementActionResult {
   return { ok: false, error: "STATEMENT_ACTION_FAILED" };
 }
 
-export async function issueMonthStatementsAction(ym: string): Promise<SettlementActionResult & { count?: number }> {
+export async function issueMonthStatementsAction(
+  ym: string,
+  installerIds: string[],
+): Promise<SettlementActionResult & { count?: number }> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
   try {
-    const count = await issueMonthStatements({ ym, adminId: auth.adminId });
+    const count = await issueMonthStatements({ ym, adminId: auth.adminId, installerIds });
     return { ok: true, count };
   } catch (error) {
     return failStatement(error);
   }
 }
 
-export async function cancelMonthStatementsAction(ym: string): Promise<SettlementActionResult> {
+export async function cancelStatementAction(statementId: string): Promise<SettlementActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
   try {
-    await cancelMonthStatements(ym);
+    await cancelStatement(statementId);
     return { ok: true };
   } catch (error) {
     return failStatement(error);
