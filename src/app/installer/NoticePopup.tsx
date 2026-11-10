@@ -46,6 +46,9 @@ function acknowledge() {
 
 let acknowledgedInMemory = false;
 
+// 공지 팝업 켜기/끄기. 끄면 아무 화면에도 뜨지 않는다(자주 묻는 질문 화면은 그대로).
+const NOTICE_ENABLED = false;
+
 const HIDDEN_PATH_PREFIXES = ["/installer/login", "/installer/guide", "/installer/faq"];
 
 export default function NoticePopup({ loggedIn }: { loggedIn: boolean }) {
@@ -57,7 +60,7 @@ export default function NoticePopup({ loggedIn }: { loggedIn: boolean }) {
   );
   const guideSeen = useSyncExternalStore(subscribe, hasSeenInstallerGuide, () => false);
 
-  if (!loggedIn || acknowledged || !guideSeen) return null;
+  if (!NOTICE_ENABLED || !loggedIn || acknowledged || !guideSeen) return null;
   if (HIDDEN_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
 
   return (
