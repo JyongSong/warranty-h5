@@ -32,6 +32,7 @@ type InstallerGroup = {
 
 export default function SettlementClient({
   tab,
+  showStatementsTab,
   periods,
   filter,
   lines,
@@ -40,6 +41,8 @@ export default function SettlementClient({
   agentProxyBaseFee,
 }: {
   tab: string;
+  /** 정산 기능 공개 전에는 월 정산서 탭을 숨긴다(주소로는 들어갈 수 있다) */
+  showStatementsTab: boolean;
   periods: SettlementPeriodView[];
   filter: Filter;
   lines: InstallSettlementLineView[];
@@ -53,6 +56,9 @@ export default function SettlementClient({
         <h1 className="text-2xl font-bold text-zinc-950">기사 정산</h1>
         <nav className="flex gap-2">
           <TabLink label="정산" active={tab === "settlement"} href="/backoffice/installers-settlement?tab=settlement" />
+          {showStatementsTab ? (
+            <TabLink label="월 정산서" active={tab === "statements"} href="/backoffice/installers-settlement?tab=statements" />
+          ) : null}
           <TabLink label="요율 설정" active={tab === "rates"} href="/backoffice/installers-settlement?tab=rates" />
         </nav>
       </div>
@@ -66,7 +72,7 @@ export default function SettlementClient({
   );
 }
 
-function TabLink({ label, active, href }: { label: string; active: boolean; href: string }) {
+export function TabLink({ label, active, href }: { label: string; active: boolean; href: string }) {
   return (
     <a
       href={href}

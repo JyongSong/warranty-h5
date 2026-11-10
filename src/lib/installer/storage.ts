@@ -118,6 +118,15 @@ export function createInstallerDocUploadTargets(installerId: string, count: numb
   return createUploadTargets(installerDocPrefix(installerId), count);
 }
 
+// 월 정산서 증빙(세금계산서·현금영수증) 사진. 경로 접두사는 statements 서비스의 검사와 맞춘다.
+export function statementEvidencePrefix(statementId: string) {
+  return `statements/${statementId}/`;
+}
+
+export function createStatementEvidenceUploadTargets(statementId: string, count: number) {
+  return createUploadTargets(statementEvidencePrefix(statementId), count);
+}
+
 /**
  * 제출된 경로가 실제로 Storage 에 올라와 있는지 확인한다.
  *

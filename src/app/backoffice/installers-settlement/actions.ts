@@ -10,6 +10,13 @@ import {
   setPeriodSettled,
 } from "@/lib/installation/settlement/service";
 import { upsertInstallerRateOverride } from "@/lib/installation/settlement/installer-rates";
+import {
+  StatementError,
+  cancelMonthStatements,
+  issueMonthStatements,
+  markPaid,
+  reviewEvidence,
+} from "@/lib/installation/settlement/statements";
 
 export type SettlementActionResult = { ok: true } | { ok: false; error: string };
 
@@ -94,5 +101,61 @@ export async function upsertInstallerRateOverrideAction(input: {
     return { ok: true };
   } catch (error) {
     return fail(error);
+  }
+}
+
+// ── 월 정산서 ─────────────────────────────────────────────────────────────
+
+function failStatement(error: unknown): SettlementActionResult {
+  if (error instanceof StatementError) return { ok: false, error: error.message };
+  console.error("[action/settlement/statements]", error);
+  return { ok: false, error: "STATEMENT_ACTION_FAILED" };
+}
+
+export async function issueMonthStatementsAction(ym: string): Promise<SettlementActionResult & { count?: number }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    const count = await issueMonthStatements({ ym, adminId: auth.adminId });
+    return { ok: true, count };
+  } catch (error) {
+    return failStatement(error);
+  }
+}
+
+export async function cancelMonthStatementsAction(ym: string): Promise<SettlementActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    await cancelMonthStatements(ym);
+    return { ok: true };
+  } catch (error) {
+    return failStatement(error);
+  }
+}
+
+export async function reviewEvidenceAction(input: {
+  statementId: string;
+  approve: boolean;
+  rejectReason?: string;
+}): Promise<SettlementActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    await reviewEvidence({ ...input, adminId: auth.adminId });
+    return { ok: true };
+  } catch (error) {
+    return failStatement(error);
+  }
+}
+
+export async function markPaidAction(statementIds: string[]): Promise<SettlementActionResult & { count?: number }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    const count = await markPaid({ statementIds, adminId: auth.adminId });
+    return { ok: true, count };
+  } catch (error) {
+    return failStatement(error);
   }
 }
