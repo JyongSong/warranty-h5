@@ -13,9 +13,10 @@ import type { TaxDocType } from "@/lib/installer/settlement-info-shared";
 /**
  * 월 정산서. 기사 1명 × 1개월 1장.
  *
- * 본사가 지난달 정산서를 「발행」하면, 그 달 말일까지 완료된(승인된) 정산 라인 중 아직 어디에도
- * 묶이지 않은 것을 모두 그 달 정산 주기에 묶고(주기는 바로 SETTLED → 라인 금액 잠금),
- * 기사별로 정산서를 만든다. 지난달에 늦게 승인된 건도 다음 달 발행 때 같이 들어간다.
+ * 설치 완료 월(KST) 기준이다 — 기사 앱 「이력·정산」의 월과 같다. M월 정산서에는 M월에 완료된 건만 들어간다.
+ * 본사가 M월 정산서를 「발행」하면, M월에 완료·승인됐고 아직 정산서에 안 들어간 라인을 기사별로 묶어
+ * 정산서를 만들고(라인 statement_id), M월 정산 주기(SETTLED)에 묶어 금액을 잠근다.
+ * 발행 뒤에 M월 건이 늦게 승인되면 다시 미발행으로 보이고, 발행하면 그 기사의 M월 「추가 정산서」(seq 2…)가 된다.
  *
  * 증빙 흐름(증빙 종류로 갈림):
  *   TAX  (전자·종이 세금계산서): 증빙 제출 → 본사 확인 → 지급.  지급액 = 공급가액 + 부가세(10%, 원 미만 절사)
@@ -85,12 +86,12 @@ export function computeAmounts(baseAmount: number, flow: EvidenceFlow | null) {
 
 export type MonthPreviewRow = { installerId: string; installerName: string; lineCount: number; baseAmount: number };
 
-/** 발행 전 미리보기: 이 달 말일까지 완료됐고 아직 묶이지 않은 라인을 기사별로 합산 */
+/** 발행 전 미리보기: 이 달에 완료·승인됐고 아직 정산서에 안 들어간 라인을 기사별로 합산 */
 export async function previewMonth(ym: string): Promise<MonthPreviewRow[]> {
-  const { endExclusive } = ymBounds(ym);
+  const { start, endExclusive } = ymBounds(ym);
   const groups = await prisma.settlementLine.groupBy({
     by: ["installerId"],
-    where: { periodId: null, completedAt: { lt: endExclusive } },
+    where: { statementId: null, completedAt: { gte: start, lt: endExclusive } },
     _count: { _all: true },
     _sum: { totalAmount: true },
   });
@@ -110,14 +111,26 @@ export async function previewMonth(ym: string): Promise<MonthPreviewRow[]> {
     .sort((a, b) => b.baseAmount - a.baseAmount);
 }
 
+/** 이 달보다 이전 달에 남은 미발행 건(관리자에게 「이전 달 미발행」 안내용). 가장 이른 달과 건수 */
+export async function earlierUnissued(ym: string): Promise<{ ym: string; count: number } | null> {
+  const { start } = ymBounds(ym);
+  const where = { statementId: null, completedAt: { lt: start } };
+  const [count, earliest] = await Promise.all([
+    prisma.settlementLine.count({ where }),
+    prisma.settlementLine.findFirst({ where, orderBy: { completedAt: "asc" }, select: { completedAt: true } }),
+  ]);
+  if (count === 0 || !earliest) return null;
+  return { ym: currentYm(earliest.completedAt), count };
+}
+
 export async function isMonthIssued(ym: string): Promise<boolean> {
   return (await prisma.settlementStatement.count({ where: { ym } })) > 0;
 }
 
 /**
- * 선택한 기사들의 정산서를 발행한다. 같은 달에 여러 번 나눠 발행할 수 있다.
- * 선택하지 않은 기사의 라인은 묶이지 않고 남아, 나중에 이 달 또는 다음 달에 발행된다.
- * 이미 이 달 정산서가 있는 기사는 건너뛴다.
+ * 선택한 기사들의 M월 정산서를 발행한다. 같은 달을 여러 번 나눠 발행할 수 있다.
+ * 그 기사의 M월 정산서가 이미 있으면 새 정산서는 추가 정산서(seq+1)가 된다.
+ * 선택하지 않은 기사의 라인은 그대로 남아 나중에 발행된다.
  */
 export async function issueMonthStatements(input: {
   ym: string;
@@ -131,17 +144,22 @@ export async function issueMonthStatements(input: {
   if (installerIds.length === 0) throw new StatementError("NOTHING_SELECTED");
   // 공개 전에 발행하면 기사에게 푸시가 나가므로 막는다.
   if (!(await isSettlementLaunched())) throw new StatementError("NOT_LAUNCHED");
-  const { endExclusive, firstDate, lastDate } = ymBounds(ym);
+  const { start, endExclusive, firstDate, lastDate } = ymBounds(ym);
   const periodName = `${formatYm(ym)} 정산서`;
 
   const created = await prisma.$transaction(async (tx) => {
-    const already = await tx.settlementStatement.findMany({
-      where: { ym, installerId: { in: installerIds } },
-      select: { installerId: true },
+    // 같은 달 발행이 동시에 두 번 돌면 seq·라인 배정이 꼬인다. 달 단위로 직렬화한다.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement-statements:${ym}`}))`;
+
+    const lines = await tx.settlementLine.findMany({
+      where: {
+        statementId: null,
+        installerId: { in: installerIds },
+        completedAt: { gte: start, lt: endExclusive },
+      },
+      select: { id: true, installerId: true, totalAmount: true },
     });
-    const alreadySet = new Set(already.map((a) => a.installerId));
-    const targets = installerIds.filter((id) => !alreadySet.has(id));
-    if (targets.length === 0) throw new StatementError("ALREADY_ISSUED");
+    if (lines.length === 0) throw new StatementError("NOTHING_TO_ISSUE");
 
     // 이 달 정산 주기는 하나만 둔다. 먼저 발행한 기사가 있으면 그 주기에 붙인다.
     const existing = await tx.settlementPeriod.findFirst({
@@ -164,35 +182,45 @@ export async function issueMonthStatements(input: {
         select: { id: true },
       }));
 
-    await tx.settlementLine.updateMany({
-      where: { periodId: null, installerId: { in: targets }, completedAt: { lt: endExclusive } },
-      data: { periodId: period.id },
-    });
+    const byInstaller = new Map<string, typeof lines>();
+    for (const l of lines) byInstaller.set(l.installerId, [...(byInstaller.get(l.installerId) ?? []), l]);
 
-    const groups = await tx.settlementLine.groupBy({
-      by: ["installerId"],
-      where: { periodId: period.id, installerId: { in: targets } },
-      _count: { _all: true },
-      _sum: { totalAmount: true },
-    });
-    if (groups.length === 0) throw new StatementError("NOTHING_TO_ISSUE");
-
-    await tx.settlementStatement.createMany({
-      data: groups.map((g) => ({
-        ym,
-        periodId: period.id,
-        installerId: g.installerId,
-        lineCount: g._count._all,
-        baseAmount: g._sum.totalAmount ?? 0,
-        issuedByAdminId: adminId,
-      })),
-    });
-    return groups.map((g) => g.installerId);
+    const result: Array<{ installerId: string; seq: number }> = [];
+    for (const [installerId, own] of byInstaller) {
+      const last = await tx.settlementStatement.findFirst({
+        where: { ym, installerId },
+        orderBy: { seq: "desc" },
+        select: { seq: true },
+      });
+      const seq = (last?.seq ?? 0) + 1;
+      const statement = await tx.settlementStatement.create({
+        data: {
+          ym,
+          seq,
+          periodId: period.id,
+          installerId,
+          lineCount: own.length,
+          baseAmount: own.reduce((a, l) => a + l.totalAmount, 0),
+          issuedByAdminId: adminId,
+        },
+        select: { id: true },
+      });
+      await tx.settlementLine.updateMany({
+        where: { id: { in: own.map((l) => l.id) }, statementId: null },
+        data: { statementId: statement.id, periodId: period.id },
+      });
+      result.push({ installerId, seq });
+    }
+    return result;
   });
 
   await Promise.all(
-    created.map((installerId) =>
-      notify(installerId, `${formatYm(ym)} 정산서가 도착했습니다`, "이력·정산 탭에서 금액을 확인하고 증빙을 진행해 주세요."),
+    created.map(({ installerId, seq }) =>
+      notify(
+        installerId,
+        `${formatYm(ym)} ${seq > 1 ? "추가 정산서" : "정산서"}가 도착했습니다`,
+        "이력·정산 탭에서 금액을 확인하고 증빙을 진행해 주세요.",
+      ),
     ),
   );
   return created.length;
@@ -210,11 +238,11 @@ export async function cancelStatement(statementId: string): Promise<void> {
     });
     if (!st) throw new StatementError("NOT_FOUND");
     if (st.paidAt || st.evidenceStatus !== "PENDING") throw new StatementError("ALREADY_IN_PROGRESS");
-    await tx.settlementStatement.delete({ where: { id: st.id } });
     await tx.settlementLine.updateMany({
-      where: { periodId: st.periodId, installerId: st.installerId },
-      data: { periodId: null },
+      where: { statementId: st.id },
+      data: { periodId: null, statementId: null },
     });
+    await tx.settlementStatement.delete({ where: { id: st.id } });
     if ((await tx.settlementStatement.count({ where: { periodId: st.periodId } })) === 0) {
       await tx.settlementPeriod.delete({ where: { id: st.periodId } });
     }
@@ -226,6 +254,8 @@ export async function cancelStatement(statementId: string): Promise<void> {
 export type StatementView = {
   id: string;
   ym: string;
+  /** 1 = 정산서, 2 이상 = 추가 정산서 */
+  seq: number;
   installerId: string;
   installerName: string;
   lineCount: number;
@@ -255,7 +285,7 @@ type StatementRow = Awaited<ReturnType<typeof loadStatements>>[number];
 async function loadStatements(where: Prisma.SettlementStatementWhereInput) {
   return prisma.settlementStatement.findMany({
     where,
-    orderBy: [{ ym: "desc" }, { baseAmount: "desc" }],
+    orderBy: [{ ym: "desc" }, { seq: "asc" }, { baseAmount: "desc" }],
     include: {
       installer: {
         select: {
@@ -292,6 +322,7 @@ async function toView(row: StatementRow, withPhotos: boolean): Promise<Statement
   return {
     id: row.id,
     ym: row.ym,
+    seq: row.seq,
     installerId: row.installerId,
     installerName: row.installer.name,
     lineCount: row.lineCount,
@@ -320,13 +351,43 @@ export async function listMonthStatements(ym: string): Promise<StatementView[]> 
   return Promise.all(rows.map((r) => toView(r, true)));
 }
 
-export async function getInstallerStatement(installerId: string, ym: string): Promise<StatementView | null> {
-  const [row] = await loadStatements({ installerId, ym });
+/** 기사의 그 달 정산서들(정산서 + 추가 정산서). 사진 URL 은 만들지 않는다(목록용). */
+export async function listInstallerMonthStatements(installerId: string, ym: string): Promise<StatementView[]> {
+  const rows = await loadStatements({ installerId, ym });
+  return Promise.all(rows.map((r) => toView(r, false)));
+}
+
+export async function getInstallerStatementById(installerId: string, id: string): Promise<StatementView | null> {
+  const [row] = await loadStatements({ installerId, id });
   return row ? toView(row, true) : null;
 }
 
+export type StatementLineItem = {
+  id: string;
+  sourceType: string;
+  completedDate: string;
+  totalAmount: number;
+};
+
+/** 정산서에 들어간 건 목록(완료일·금액) */
+export async function listStatementLines(statementId: string): Promise<StatementLineItem[]> {
+  const lines = await prisma.settlementLine.findMany({
+    where: { statementId },
+    orderBy: { completedAt: "asc" },
+    select: { id: true, sourceType: true, completedAt: true, totalAmount: true },
+  });
+  return lines.map((l) => ({
+    id: l.id,
+    sourceType: l.sourceType,
+    completedDate: new Date(l.completedAt.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10),
+    totalAmount: l.totalAmount,
+  }));
+}
+
 /** 현금영수증 건: 지급됐는데 영수증이 아직(또는 반려) → 앱을 막는다. 가장 오래된 달 하나 */
-export async function getBlockingStatement(installerId: string): Promise<{ id: string; ym: string } | null> {
+export async function getBlockingStatement(
+  installerId: string,
+): Promise<{ id: string; ym: string; seq: number } | null> {
   const row = await prisma.settlementStatement.findFirst({
     where: {
       installerId,
@@ -334,8 +395,8 @@ export async function getBlockingStatement(installerId: string): Promise<{ id: s
       paidAt: { not: null },
       evidenceStatus: { in: ["PENDING", "REJECTED"] },
     },
-    orderBy: { ym: "asc" },
-    select: { id: true, ym: true },
+    orderBy: [{ ym: "asc" }, { seq: "asc" }],
+    select: { id: true, ym: true, seq: true },
   });
   return row;
 }

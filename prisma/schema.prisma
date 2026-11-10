@@ -968,7 +968,8 @@ model InstallationIssue {
 }
 
 // ── P4 정산 (settlement) ────────────────────────────────────────────────
-// 월 정산서: 기사 1명 × 1개월 1장. 본사가 그 달 정산서를 발행할 때 만든다(라인은 같은 달 정산 주기에 묶여 잠긴다).
+// 월 정산서: 설치 완료 월(KST) 기준. 기사·월마다 보통 1장, 그 달 건이 발행 후에 늦게 승인되면 추가 정산서(seq 2…)가 생긴다.
+// 라인은 statement_id 로 정산서에 붙고, 같은 달 정산 주기(SETTLED)에 묶여 금액이 잠긴다.
 // 증빙 흐름은 증빙 종류로 갈린다.
 //   세금계산서(전자·종이): 증빙 제출 → 본사 확인 → 지급. 지급액 = 공급가액 + 부가세 10%.
 //   현금영수증: 지급 → 기사가 현금영수증 승인번호 제출 → 본사 확인. 지급액 = 정산 금액.
@@ -980,6 +981,9 @@ model SettlementStatement {
   period                 SettlementPeriod @relation(fields: [periodId], references: [id])
   installerId            String           @map("installer_id")
   installer              Installer        @relation(fields: [installerId], references: [id])
+  // 같은 달·같은 기사의 몇 번째 정산서인지. 1 = 정산서, 2 이상 = 그 달에 늦게 승인된 건의 추가 정산서.
+  seq                    Int              @default(1)
+  lines                  SettlementLine[]
   lineCount              Int              @map("line_count")
   baseAmount             Int              @map("base_amount")
   taxDocType             String?          @map("tax_doc_type")
@@ -1001,7 +1005,7 @@ model SettlementStatement {
   createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@unique([ym, installerId])
+  @@unique([ym, installerId, seq])
   @@index([installerId])
   @@index([periodId])
   @@map("settlement_statements")
@@ -1101,12 +1105,16 @@ model SettlementLine {
   breakdown         Json?
   periodId          String?           @map("period_id")
   period            SettlementPeriod? @relation(fields: [periodId], references: [id])
+  // 이 라인이 들어간 월 정산서. 발행 때 채우고 발행 취소 때 비운다.
+  statementId       String?              @map("statement_id")
+  statement         SettlementStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
   createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([sourceType, sourceOrderId])
   @@index([installerId])
   @@index([periodId])
   @@index([completedAt])
+  @@index([statementId])
   @@map("settlement_lines")
 }
 

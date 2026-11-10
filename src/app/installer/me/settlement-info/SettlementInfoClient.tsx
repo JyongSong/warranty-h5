@@ -44,7 +44,7 @@ const DOC_TYPES: Array<{ value: TaxDocType; title: string; desc: string; warning
     value: "CASH_RECEIPT",
     title: "현금영수증",
     desc: "간이과세자 등 세금계산서 발행이 어려운 경우. 정산 금액을 받은 뒤 본사 사업자번호로 지출증빙 현금영수증을 발급해 주세요.",
-    warning: "해당 거래 방식 추후 중단 예정",
+    warning: "해당 거래 방식은 2026년 12월 1일 설치 건부터 중단",
   },
 ];
 
@@ -318,6 +318,7 @@ export default function SettlementInfoClient({
                           fontSize: 13,
                           fontWeight: 800,
                           marginTop: 6,
+                          wordBreak: "keep-all",
                           color: selected ? "#fca5a5" : "#b42318",
                         }}
                       >
