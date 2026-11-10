@@ -145,7 +145,7 @@ function StatusBox({ s, ym }: { s: StatementView; ym: string }) {
     );
   }
   // 현금영수증
-  const ending = <p style={discontinue}>※ 현금영수증 거래 방식은 추후 중단될 예정입니다.</p>;
+  const ending = <p style={discontinue}>※ 현금영수증 거래 방식은 2026년 12월 1일 설치 건부터 중단됩니다.</p>;
   if (!s.paidAt) {
     return (
       <Notice tone="info" title="본사 지급 대기">
