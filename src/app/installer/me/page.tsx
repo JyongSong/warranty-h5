@@ -43,6 +43,10 @@ export default async function InstallerMePage() {
           <span style={ui.badge(settlementStatus.bg, settlementStatus.color)}>{settlementStatus.text}</span>
         </Link>
 
+        <Link href="/installer/faq" style={guideLink}>
+          자주 묻는 질문 · 설치비 기준
+        </Link>
+
         <Link href="/installer/guide" style={guideLink}>
           앱 사용 안내 다시 보기
         </Link>

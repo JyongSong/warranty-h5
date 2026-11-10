@@ -3,6 +3,7 @@ import { getCurrentInstaller } from "@/lib/installer/session";
 import { getInstallerTabCounts } from "@/lib/installer/tabCounts";
 import FirstVisitGuide from "./FirstVisitGuide";
 import InstallerNav from "./InstallerNav";
+import NoticePopup from "./NoticePopup";
 import PushRegister from "./PushRegister";
 
 // 기사 앱 공통 셸. 하단 탭과 푸시 등록을 모든 화면에 둔다.
@@ -20,6 +21,7 @@ export default async function InstallerLayout({ children }: { children: ReactNod
     <>
       <PushRegister />
       <FirstVisitGuide />
+      <NoticePopup loggedIn={Boolean(installer)} />
       {children}
       <InstallerNav counts={counts} />
     </>
