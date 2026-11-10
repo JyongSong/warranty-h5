@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallerOrderItem } from "@/lib/installer/orders";
+import type { OrderGuideLine } from "@/lib/installer/notice";
 import { formatInstallerInstallItem } from "@/lib/installation/partner/install-items";
 import { respondToAssignmentAction } from "../../actions";
 import PhoneRow from "../../PhoneRow";
@@ -23,7 +25,13 @@ const ERR: Record<string, string> = {
   DEFAULT: "처리에 실패했습니다. 새로고침 후 다시 확인해 주세요.",
 };
 
-export default function OrderDetailClient({ item }: { item: InstallerOrderItem }) {
+export default function OrderDetailClient({
+  item,
+  guideLines = [],
+}: {
+  item: InstallerOrderItem;
+  guideLines?: OrderGuideLine[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +124,8 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
           ) : null}
         </div>
 
+        {guideLines.length > 0 ? <OrderGuide lines={guideLines} /> : null}
+
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
         {item.status === "REVIEW" ? (
@@ -201,6 +211,28 @@ export default function OrderDetailClient({ item }: { item: InstallerOrderItem }
         </div>
       ) : null}
     </main>
+  );
+}
+
+function OrderGuide({ lines }: { lines: OrderGuideLine[] }) {
+  return (
+    <section style={guideCard} aria-labelledby="order-guide-title">
+      <div style={guideHeader}>
+        <h2 id="order-guide-title" style={guideTitle}>
+          이 건 안내
+        </h2>
+        <Link href="/installer/faq" style={guideMore}>
+          자주 묻는 질문 ›
+        </Link>
+      </div>
+      <ul style={guideList}>
+        {lines.map((line) => (
+          <li key={line.text} style={line.tone === "warn" ? guideWarnItem : guideItem}>
+            {line.text}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -296,3 +328,26 @@ const happycallNotice: CSSProperties = {
   lineHeight: 1.5,
   margin: "12px 0 10px",
 };
+
+const guideCard: CSSProperties = {
+  ...ui.card,
+  background: "#f8fafc",
+  borderColor: "#cbd5e1",
+};
+
+const guideHeader: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 8,
+};
+
+const guideTitle: CSSProperties = { fontSize: 15, fontWeight: 800, margin: 0 };
+
+const guideMore: CSSProperties = { fontSize: 13, fontWeight: 700, color: "#334155", textDecoration: "none" };
+
+const guideList: CSSProperties = { margin: 0, paddingLeft: 18 };
+
+const guideItem: CSSProperties = { fontSize: 13, lineHeight: 1.6, color: "#334155", marginBottom: 4 };
+
+const guideWarnItem: CSSProperties = { ...guideItem, color: "#92400e", fontWeight: 700 };
