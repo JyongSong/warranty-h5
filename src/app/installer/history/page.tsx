@@ -8,7 +8,7 @@ import {
   shiftYm,
 } from "@/lib/installer/monthlySettlement";
 import SettlementRow from "./SettlementRow";
-import { getInstallerStatement, isSettlementLaunched } from "@/lib/installation/settlement/statements";
+import { isSettlementLaunched, listInstallerMonthStatements } from "@/lib/installation/settlement/statements";
 import * as ui from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -25,12 +25,12 @@ export default async function InstallerHistoryPage({
   const thisMonth = currentYm();
   const ym = rawYm && isValidYm(rawYm) ? rawYm : thisMonth;
 
-  const [summary, statement] = await Promise.all([
+  const [summary, statements] = await Promise.all([
     getInstallerMonthlySettlement(installer.id, ym),
     // 정산 기능 공개 전에는 정산서 카드를 띄우지 않는다.
     isSettlementLaunched()
-      .then((launched) => (launched ? getInstallerStatement(installer.id, ym) : null))
-      .catch(() => null),
+      .then((launched) => (launched ? listInstallerMonthStatements(installer.id, ym) : []))
+      .catch(() => []),
   ]);
 
   const prevYm = shiftYm(ym, -1);
@@ -67,17 +67,20 @@ export default async function InstallerHistoryPage({
           </div>
         </div>
 
-        {statement ? (
-          <Link href={`/installer/statement/${ym}`} style={statementCard}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#71717a" }}>정산서</div>
-              <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>{won(statement.payAmount)}</div>
-            </div>
-            <span style={ui.badge(statementStage(statement).bg, statementStage(statement).color)}>
-              {statementStage(statement).text} ›
-            </span>
-          </Link>
-        ) : null}
+        {statements.map((statement) => {
+          const st = statementStage(statement);
+          return (
+            <Link key={statement.id} href={`/installer/statement/${statement.id}`} style={statementCard}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#71717a" }}>
+                  {statement.seq > 1 ? `추가 정산서 ${statement.seq - 1}` : "정산서"} · {statement.lineCount}건
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>{won(statement.payAmount)}</div>
+              </div>
+              <span style={ui.badge(st.bg, st.color)}>{st.text} ›</span>
+            </Link>
+          );
+        })}
 
         {summary.pendingReviewCount > 0 ? (
           <div style={pendingBox}>

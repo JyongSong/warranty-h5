@@ -61,8 +61,11 @@ export default function StatementsTab({
   statements,
   preview,
   launched,
+  earlier,
 }: {
   launched: boolean;
+  /** 이 달보다 이전 달에 남은 미발행 건 */
+  earlier: { ym: string; count: number } | null;
   ym: string;
   thisYm: string;
   statements: StatementView[];
@@ -154,6 +157,15 @@ export default function StatementsTab({
         </div>
       ) : null}
 
+      {earlier ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          이전 달에 아직 발행하지 않은 건이 {earlier.count}건 있습니다 (가장 이른 달: {fmtYm(earlier.ym)}).{" "}
+          <button className="font-semibold underline" onClick={() => go(earlier.ym)}>
+            {fmtYm(earlier.ym)}로 이동
+          </button>
+        </div>
+      ) : null}
+
       {error ? <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
       {preview.length > 0 || !issued ? (
@@ -164,9 +176,9 @@ export default function StatementsTab({
                 {issued ? `아직 발행하지 않은 기사 (${preview.length})` : "발행 전 미리보기"}
               </h2>
               <p className="mt-1 text-xs text-zinc-500">
-                {fmtYm(ym)} 말일까지 완료·승인됐고 아직 정산서에 들어가지 않은 건입니다(이전 달에 늦게 승인된 건 포함).
-                발행할 기사를 고르세요. 발행하면 그 기사의 금액이 잠기고 기사 앱에 정산서가 전달됩니다. 고르지 않은 기사는 나중에
-                발행할 수 있습니다.
+                {fmtYm(ym)}에 설치 완료·승인됐고 아직 정산서에 들어가지 않은 건입니다(기사 앱 「이력·정산」의 월과 같은 기준).
+                발행할 기사를 고르세요. 발행하면 그 기사의 금액이 잠기고 기사 앱에 정산서가 전달됩니다. 이미 이 달 정산서가 있는
+                기사는 「추가 정산서」로 발행됩니다.
               </p>
             </div>
             <button
@@ -354,6 +366,11 @@ function FragmentRow({
           <Link className="hover:underline" href={`/backoffice/installers/${s.installerId}`}>
             {s.installerName}
           </Link>
+          {s.seq > 1 ? (
+            <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-800">
+              추가 {s.seq - 1}
+            </span>
+          ) : null}
           {infoWarning ? <div className="text-xs font-semibold text-red-600">{infoWarning}</div> : null}
         </td>
         <td className="text-zinc-700">{s.taxDocType ? TAX_DOC_TYPE_LABEL[s.taxDocType] : "-"}</td>

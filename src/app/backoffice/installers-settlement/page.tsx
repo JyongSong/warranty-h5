@@ -9,6 +9,7 @@ import SettlementClient from "./SettlementClient";
 import StatementsTab from "./StatementsTab";
 import {
   currentYm,
+  earlierUnissued,
   isSettlementLaunched,
   isValidYm,
   listMonthStatements,
@@ -48,7 +49,11 @@ export default async function BackofficeInstallerSettlementPage({
     // 기본은 지난달: 이번 달은 아직 마감 전이라 발행할 수 없다.
     const ym = sp.ym && isValidYm(sp.ym) ? sp.ym : shiftYm(currentYm(), -1);
     // 같은 달을 나눠 발행할 수 있으므로 발행된 정산서와 아직 남은 미리보기를 함께 보여 준다.
-    const [statements, preview] = await Promise.all([listMonthStatements(ym), previewMonth(ym)]);
+    const [statements, preview, earlier] = await Promise.all([
+      listMonthStatements(ym),
+      previewMonth(ym),
+      earlierUnissued(ym),
+    ]);
     return (
       <div className="p-6">
         <StatementsTab
@@ -58,6 +63,7 @@ export default async function BackofficeInstallerSettlementPage({
           statements={statements}
           preview={preview}
           launched={launched}
+          earlier={earlier}
         />
       </div>
     );

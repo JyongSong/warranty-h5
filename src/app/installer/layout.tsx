@@ -30,7 +30,7 @@ export default async function InstallerLayout({ children }: { children: ReactNod
       <PushRegister />
       <FirstVisitGuide />
       <NoticePopup loggedIn={Boolean(installer)} />
-      <StatementGate blockedYm={blocking?.ym ?? null}>{children}</StatementGate>
+      <StatementGate blocked={blocking}>{children}</StatementGate>
       <InstallerNav counts={counts} />
     </>
   );

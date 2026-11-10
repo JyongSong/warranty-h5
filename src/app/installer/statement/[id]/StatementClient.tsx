@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { compressImage } from "@/lib/installer/image";
-import type { HqInvoiceInfo, StatementView } from "@/lib/installation/settlement/statements";
+import type { HqInvoiceInfo, StatementLineItem, StatementView } from "@/lib/installation/settlement/statements";
 import { TAX_DOC_TYPE_LABEL, formatBusinessNumber } from "@/lib/installer/settlement-info-shared";
 import PhotoPicker from "../../PhotoPicker";
 import * as ui from "../../ui";
@@ -52,11 +52,13 @@ function invoiceDeadline(ym: string): string {
 
 export default function StatementClient({
   statement: s,
+  lines,
   hq,
   ymLabel,
   writeDate,
 }: {
   statement: StatementView;
+  lines: StatementLineItem[];
   hq: HqInvoiceInfo;
   ymLabel: string;
   writeDate: string;
@@ -72,7 +74,12 @@ export default function StatementClient({
         <Link href={`/installer/history?ym=${s.ym}`} style={backLink}>
           ‹ 이력·정산
         </Link>
-        <h1 style={ui.h1}>{ymLabel} 정산서</h1>
+        <h1 style={ui.h1}>
+          {ymLabel} {s.seq > 1 ? `추가 정산서 ${s.seq - 1}` : "정산서"}
+        </h1>
+        {s.seq > 1 ? (
+          <p style={{ ...ui.sub, marginBottom: 12 }}>{ymLabel}에 완료됐지만 정산서 발행 뒤에 승인된 건입니다.</p>
+        ) : null}
 
         <div style={{ ...ui.card, textAlign: "center", padding: "18px 16px" }}>
           <div style={{ fontSize: 13, color: "#71717a", fontWeight: 700 }}>
@@ -86,6 +93,20 @@ export default function StatementClient({
         </div>
 
         <StatusBox s={s} ym={s.ym} />
+
+        <details style={{ ...ui.card, padding: "12px 16px" }}>
+          <summary style={{ fontSize: 14, fontWeight: 700, cursor: "pointer" }}>포함된 작업 {lines.length}건 보기</summary>
+          <div style={{ marginTop: 8 }}>
+            {lines.map((l) => (
+              <div key={l.id} style={lineRow}>
+                <span>
+                  {l.completedDate} · {l.sourceType === "AS" ? "A/S" : "설치"}
+                </span>
+                <span style={{ fontWeight: 700 }}>{won(l.totalAmount)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
 
         {canSubmitTax ? <TaxInvoiceForm s={s} hq={hq} writeDate={writeDate} ymLabel={ymLabel} /> : null}
         {canSubmitCash ? <CashReceiptForm s={s} hq={hq} /> : null}
@@ -260,7 +281,7 @@ function TaxInvoiceForm({
       <div style={ui.card}>
         <div style={ui.label}>세금계산서 작성 내용</div>
         <CopyRow label="작성일자" value={writeDate} />
-        <CopyRow label="품목" value={`설치 용역 (${ymLabel})`} />
+        <CopyRow label="품목" value={`설치 용역 (${ymLabel}${s.seq > 1 ? " 추가분" : ""})`} />
         <CopyRow label="공급가액" value={String(s.baseAmount)} />
         <CopyRow label="세액 (10%)" value={String(s.vatAmount)} />
         <CopyRow label="합계" value={String(s.payAmount)} />
@@ -384,6 +405,13 @@ function Notice({ tone, title, children }: { tone: "ok" | "info" | "warn" | "err
   );
 }
 
+const lineRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 14,
+  padding: "6px 0",
+  borderTop: "1px solid #f4f4f5",
+};
 const backLink: CSSProperties = { display: "inline-block", fontSize: 14, color: "#52525b", textDecoration: "none", marginBottom: 8 };
 const inlineLink: CSSProperties = { display: "block", marginTop: 6, fontWeight: 700, color: "inherit" };
 const hint: CSSProperties = { fontSize: 13, color: "#52525b", lineHeight: 1.6, marginTop: 8 };

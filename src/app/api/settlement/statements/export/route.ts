@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const rows = statements
       .filter((s) => payBlockReason(s) === null)
       .map((s) => ({
-        기사: s.installerName,
+        기사: s.seq > 1 ? `${s.installerName} (추가 ${s.seq - 1})` : s.installerName,
         은행: s.bankName ?? "",
         계좌번호: s.accountNumber ?? "(복호화 실패)",
         예금주: s.accountHolder ?? "",
