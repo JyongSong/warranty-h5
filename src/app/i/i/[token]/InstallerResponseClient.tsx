@@ -49,6 +49,8 @@ type Props = {
   initialInfo: ApiInfo | null;
   initialError: string | null;
   initialAccessBlocked: boolean;
+  /** 앱 기기가 등록되지 않은 기사면 true. 앱 설치 안내 배너를 띄운다. */
+  showAppInstallGuide?: boolean;
   responseConfig: ResponseConfig;
 };
 
@@ -258,6 +260,7 @@ export default function InstallerResponseClient({
   initialInfo,
   initialError,
   initialAccessBlocked,
+  showAppInstallGuide = false,
   responseConfig,
 }: Props) {
   const detail = useMemo(
@@ -330,6 +333,8 @@ export default function InstallerResponseClient({
       <PageShell>
         <Header statusHeader={statusHeader} responseDeadline={detail.responseDeadline} />
 
+        {!initialAccessBlocked && showAppInstallGuide ? <AppInstallGuideBanner /> : null}
+
         {!initialAccessBlocked && shouldShowDetailSections(status) ? (
           <DispatchDetailSections detail={detail} />
         ) : null}
@@ -363,6 +368,19 @@ export default function InstallerResponseClient({
         />
       ) : null}
     </>
+  );
+}
+
+function AppInstallGuideBanner() {
+  return (
+    <a href="/installer-start.html" style={appInstallGuideStyle}>
+      <span style={{ display: "block", fontWeight: 700, marginBottom: 2 }}>
+        기사 앱을 설치하시면 배정 알림을 바로 받을 수 있습니다
+      </span>
+      <span style={{ display: "block" }}>
+        설치 안내 보기 ›
+      </span>
+    </a>
   );
 }
 
@@ -863,6 +881,14 @@ const textareaStyle: CSSProperties = {
   boxSizing: "border-box",
   outline: "none",
   resize: "vertical",
+};
+
+const appInstallGuideStyle: CSSProperties = {
+  ...noticeStyle("green"),
+  display: "block",
+  marginTop: 12,
+  textDecoration: "none",
+  wordBreak: "keep-all",
 };
 
 function noticeStyle(tone: "blue" | "green" | "red" | "amber"): CSSProperties {

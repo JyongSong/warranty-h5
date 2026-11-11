@@ -14,6 +14,10 @@ vi.mock("@/lib/installation/installer/response", () => ({
   getInstallerAssignmentByToken: vi.fn(),
 }));
 
+vi.mock("@/lib/installer/devices", () => ({
+  listInstallerDeviceTokens: vi.fn().mockResolvedValue([]),
+}));
+
 const appDir = join(process.cwd(), "src", "app");
 
 describe("public installation routes", () => {

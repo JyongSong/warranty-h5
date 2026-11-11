@@ -13,9 +13,13 @@ import {
   getInstallerResponseExpiresAt,
 } from "@/lib/installation/installer/timing";
 import {
+  APP_INSTALL_GUIDE_PLACEHOLDER,
+  applyInstallerAppInstallGuide,
   applyInstallerResponseDeadline,
+  buildInstallerAppInstallGuide,
   getInstallationSmsSubject,
 } from "@/lib/installation/notifications/sms-content";
+import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import {
   ALIMTALK_TEMPLATES,
   type AlimtalkRequest,
@@ -163,7 +167,7 @@ export async function sendPendingInstallationNotifications({
       const deadlineText = await resolveResponseDeadlineText(notification, now);
       const sendResult = await sendSms(
         decryptNullablePii(notification.recipientPhoneEncrypted),
-        applyInstallerResponseDeadline(notification.smsBody, deadlineText),
+        await renderInstallerSmsBody(notification, deadlineText),
         {
           subject: getInstallationSmsSubject(notification.smsTemplateKey),
           alimtalk: toAlimtalkRequest(notification, deadlineText),
@@ -797,6 +801,45 @@ async function resolveResponseDeadlineText(
   return formatInstallerResponseDeadline(deadline);
 }
 
+/** 저장된 본문에 발송 시점에만 알 수 있는 값(마감 시각, 앱 설치 안내)을 채운다. */
+async function renderInstallerSmsBody(
+  notification: InstallationNotificationForSend,
+  deadlineText: string,
+) {
+  const withDeadline = applyInstallerResponseDeadline(notification.smsBody, deadlineText);
+  // 자리표시자가 없는 본문(예전 건, 다른 유형)은 기기 조회 없이 그대로 보낸다.
+  if (!withDeadline.includes(APP_INSTALL_GUIDE_PLACEHOLDER)) return withDeadline;
+  return applyInstallerAppInstallGuide(
+    withDeadline,
+    await resolveAppInstallGuideText(notification),
+  );
+}
+
+/**
+ * 앱 기기가 없는 기사에게만 앱 설치 안내를 붙인다. 앱 기사는 푸시를 먼저
+ * 받고 폴백 문자로 같은 본문을 받으므로 안내가 필요 없다. 조회에 실패하면
+ * 안내 없이 보낸다(배정 문자가 막히면 안 된다).
+ */
+async function resolveAppInstallGuideText(
+  notification: InstallationNotificationForSend,
+): Promise<string> {
+  if (notification.smsType !== "INSTALLER_ASSIGNMENT_REQUEST") return "";
+  if (!notification.assignmentAttemptId) return "";
+  try {
+    const attempt = await prisma.installationInstallerAssignmentAttempt.findUnique({
+      where: { id: notification.assignmentAttemptId },
+      select: { installerId: true },
+    });
+    if (!attempt) return "";
+    const tokens = await listInstallerDeviceTokens(attempt.installerId);
+    if (tokens.length > 0) return "";
+    return buildInstallerAppInstallGuide(getSmsLinkBaseUrl());
+  } catch (error) {
+    console.error("[installation/notification/app-install-guide]", error);
+    return "";
+  }
+}
+
 async function skipStaleNotification(notification: InstallationNotificationForSend) {
   const staleReason = await getStaleNotificationReason(notification);
   if (!staleReason) return false;
@@ -890,7 +933,7 @@ async function sendOneInstallationNotification(
     const deadlineText = await resolveResponseDeadlineText(notification, now);
     const sendResult = await sendSms(
       decryptNullablePii(notification.recipientPhoneEncrypted),
-      applyInstallerResponseDeadline(notification.smsBody, deadlineText),
+      await renderInstallerSmsBody(notification, deadlineText),
       {
         subject: getInstallationSmsSubject(notification.smsTemplateKey),
         alimtalk: toAlimtalkRequest(notification, deadlineText),

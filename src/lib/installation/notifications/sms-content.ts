@@ -92,6 +92,8 @@ export function buildInstallerAssignmentRequestSmsContent({
       // responseDeadline 은 여기서 채우지 않는다. 마감 시각은 알림이 실제로
       // 나가는 시점에 정해지고(발송 창 때문에 생성 시점과 몇 시간 차이날 수
       // 있다), outbox 가 applyInstallerResponseDeadline 으로 채운다.
+      // appInstallGuide 도 마찬가지로 발송 시점에 기사 앱 기기 등록 여부를 보고
+      // outbox 가 applyInstallerAppInstallGuide 로 채운다.
     }),
   };
 }
@@ -209,4 +211,23 @@ export const RESPONSE_DEADLINE_PLACEHOLDER = "{responseDeadline}";
 
 export function applyInstallerResponseDeadline(body: string, deadlineText: string) {
   return body.split(RESPONSE_DEADLINE_PLACEHOLDER).join(deadlineText);
+}
+
+/**
+ * 저장된 본문의 `{appInstallGuide}` 자리. 앱 기기가 없는 기사에게만 앱 설치
+ * 안내가 들어가고, 앱 기사(푸시 후 폴백 문자)에게는 빈 문자열로 지워진다.
+ * 자리표시자가 없는 예전 본문은 그대로 나간다.
+ */
+export const APP_INSTALL_GUIDE_PLACEHOLDER = "{appInstallGuide}";
+
+/** 앱 설치 안내 문구. 줄바꿈까지 포함해 자리표시자를 통째로 대신한다. */
+export function buildInstallerAppInstallGuide(baseUrl: string) {
+  return (
+    "\n\n※ 기사 앱을 설치하시면 다음부터 배정 알림을 앱으로 바로 받으실 수 있습니다." +
+    `\n설치 안내: ${baseUrl.replace(/\/+$/, "")}/installer-start.html`
+  );
+}
+
+export function applyInstallerAppInstallGuide(body: string, guideText: string) {
+  return body.split(APP_INSTALL_GUIDE_PLACEHOLDER).join(guideText);
 }

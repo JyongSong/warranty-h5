@@ -33,6 +33,7 @@ describe("installation SMS template preview", () => {
       installDate: "2026-06-20",
       responseUrl: "https://example.com/i/i/token-1",
       responseDeadline: "8월 21일(금) 14시",
+      appInstallGuide: "\n\n※ 앱 안내",
     });
 
     expect(rendered).toBe(
@@ -46,6 +47,8 @@ describe("installation SMS template preview", () => {
         "https://example.com/i/i/token-1\n" +
         "\n" +
         "※ 8월 21일(금) 14시까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
+        "\n" +
+        "※ 앱 안내\n" +
         "\n" +
         "※ 발신전용",
     );
