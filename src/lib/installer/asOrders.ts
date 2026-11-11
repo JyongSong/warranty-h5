@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
 import { getAsSymptomLabel } from "@/lib/installation/as/symptom-codes";
+import { getCompletionPhotoSignedUrls, type CompletionPhoto } from "@/lib/installer/storage";
 
 export type AsInstallerStatus = "PENDING" | "ACCEPTED" | "REVIEW" | "COMPLETED";
 
@@ -99,4 +100,41 @@ export async function getInstallerAsOrderView(
   })) as (AsRow & { currentInstallerId: string | null }) | null;
   if (!order || order.currentInstallerId !== installerId) return null;
   return shape(order);
+}
+
+export type AsInstallerSubmission = {
+  submittedAt: string;
+  resolutionDetail: string | null;
+  serviceFee: number | null;
+  reviewStatus: string | null;
+  photos: CompletionPhoto[];
+};
+
+/**
+ * 기사 앱 A/S 상세용: 이 기사가 등록한 처리 완료 내용 (읽기 전용).
+ * 아직 처리 완료를 등록하지 않았으면 null.
+ */
+export async function getInstallerAsSubmission(
+  installerId: string,
+  asOrderId: string,
+): Promise<AsInstallerSubmission | null> {
+  const o = await prisma.asOrder.findUnique({
+    where: { id: asOrderId },
+    select: {
+      currentInstallerId: true,
+      submittedAt: true,
+      resolutionDetail: true,
+      serviceFee: true,
+      reviewStatus: true,
+      completionPhotoPaths: true,
+    },
+  });
+  if (!o || o.currentInstallerId !== installerId || !o.submittedAt) return null;
+  return {
+    submittedAt: o.submittedAt.toISOString(),
+    resolutionDetail: o.resolutionDetail,
+    serviceFee: o.serviceFee,
+    reviewStatus: o.reviewStatus,
+    photos: await getCompletionPhotoSignedUrls(o.completionPhotoPaths),
+  };
 }
