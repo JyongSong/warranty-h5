@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireInstallerPage } from "@/lib/installer/session";
-import { getInstallerAsOrderView } from "@/lib/installer/asOrders";
+import { getInstallerAsOrderView, getInstallerAsSubmission } from "@/lib/installer/asOrders";
 import AsDetailClient from "./AsDetailClient";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +15,8 @@ export default async function InstallerAsDetailPage({
   const item = await getInstallerAsOrderView(installer.id, asId);
   if (!item) notFound();
 
-  return <AsDetailClient item={item} />;
+  // 처리 완료를 등록한 건은 등록한 내용을 함께 보여 준다.
+  const submission = item.status === "PENDING" ? null : await getInstallerAsSubmission(installer.id, asId);
+
+  return <AsDetailClient item={item} submission={submission} />;
 }

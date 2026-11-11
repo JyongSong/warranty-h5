@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { InstallerOrderItem } from "@/lib/installer/orders";
 import type { OrderGuideLine } from "@/lib/installer/notice";
+import type { InstallationCompletionView } from "@/lib/installation/completion/service";
 import { formatInstallerInstallItem } from "@/lib/installation/partner/install-items";
 import { respondToAssignmentAction } from "../../actions";
 import PhoneRow from "../../PhoneRow";
 import { AgentProxyBadge, AgentProxyNotice } from "../../cards";
+import SubmissionCard from "./SubmissionCard";
 import * as ui from "../../ui";
 
 const REJECT_REASONS = [
@@ -28,9 +30,12 @@ const ERR: Record<string, string> = {
 export default function OrderDetailClient({
   item,
   guideLines = [],
+  completion = null,
 }: {
   item: InstallerOrderItem;
   guideLines?: OrderGuideLine[];
+  /** 이 기사가 제출한 완료 등록 내용. 아직 제출 전이면 null */
+  completion?: InstallationCompletionView | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -125,6 +130,8 @@ export default function OrderDetailClient({
         </div>
 
         {guideLines.length > 0 ? <OrderGuide lines={guideLines} /> : null}
+
+        {completion ? <SubmissionCard completion={completion} /> : null}
 
         {error ? <div style={ui.errorText}>{error}</div> : null}
 

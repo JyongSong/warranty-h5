@@ -1,3 +1,4 @@
+import type { InstallationCompletion } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   INSTALLATION_ORDER_STATUSES,
@@ -554,7 +555,31 @@ export async function getInstallationCompletionForOrder(
     where: { installationOrderId: orderId },
   });
   if (!c) return null;
+  return toCompletionView(c);
+}
 
+/**
+ * 기사 앱 작업 상세용: 이 기사가 제출한 완료 등록만 돌려준다 (읽기 전용).
+ * 주문 자체의 소유 확인은 getInstallerOrderView 가 하고, 여기서는 제출자까지 한 번 더 본다.
+ */
+export async function getInstallerSubmittedCompletion(
+  installerId: string,
+  orderId: string,
+): Promise<InstallationCompletionView | null> {
+  const c = await prisma.installationCompletion.findUnique({
+    where: { installationOrderId: orderId },
+  });
+  if (!c || c.submittedInstallerId !== installerId) return null;
+  return toCompletionView(c);
+}
+
+async function toCompletionView(c: InstallationCompletion): Promise<InstallationCompletionView> {
+  const [extraClaimPhotos, linkagePhotos, wallpadPhotos, photos] = await Promise.all([
+    getCompletionPhotoSignedUrls(c.extraClaimPhotoPaths),
+    getCompletionPhotoSignedUrls(c.linkagePhotoPaths),
+    getCompletionPhotoSignedUrls(c.wallpadPhotoPaths),
+    getCompletionPhotoSignedUrls(c.photoPaths),
+  ]);
   return {
     submittedAt: c.submittedAt.toISOString(),
     firstSubmittedAt: c.createdAt.toISOString(),
@@ -572,12 +597,12 @@ export async function getInstallationCompletionForOrder(
     longDistanceAmount: c.longDistanceAmount,
     extraClaimAmount: c.extraClaimAmount,
     extraClaimReason: c.extraClaimReason,
-    extraClaimPhotos: await getCompletionPhotoSignedUrls(c.extraClaimPhotoPaths),
-    linkagePhotos: await getCompletionPhotoSignedUrls(c.linkagePhotoPaths),
-    wallpadPhotos: await getCompletionPhotoSignedUrls(c.wallpadPhotoPaths),
+    extraClaimPhotos,
+    linkagePhotos,
+    wallpadPhotos,
     installEndAt: c.installEndAt.toISOString(),
     reviewStatus: c.reviewStatus,
     rejectionReason: c.rejectionReason,
-    photos: await getCompletionPhotoSignedUrls(c.photoPaths),
+    photos,
   };
 }

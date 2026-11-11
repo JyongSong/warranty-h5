@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   approveInstallerCompletion,
+  getInstallerSubmittedCompletion,
   submitInstallerCompletion,
   type SubmitCompletionInput,
 } from "@/lib/installation/completion/service";
@@ -44,7 +45,9 @@ vi.mock("@/lib/installation/wallpad/service", () => ({
   recordCompletionWallpadCase: vi.fn().mockResolvedValue(null),
   fillCompletionCaseSiteName: vi.fn(),
 }));
-vi.mock("@/lib/installer/storage", () => ({ getCompletionPhotoSignedUrls: vi.fn() }));
+vi.mock("@/lib/installer/storage", () => ({
+  getCompletionPhotoSignedUrls: vi.fn(async (paths: string[]) => paths.map((path) => ({ path, url: `signed:${path}` }))),
+}));
 vi.mock("@/lib/installer/devices", () => ({ sendAssignmentPushToInstaller: vi.fn() }));
 vi.mock("@/lib/sms", () => ({ sendSms: vi.fn() }));
 
@@ -157,5 +160,57 @@ describe("approveInstallerCompletion — 대행 기본 출장비", () => {
       approveInstallerCompletion({ adminId: "admin-1", orderId: "order-1", agentProxyBaseFee: 50000 }),
     ).rejects.toThrow("NOT_AGENT_PROXY_COMPLETION");
     expect(mocks.updateCompletion).not.toHaveBeenCalled();
+  });
+});
+
+describe("getInstallerSubmittedCompletion", () => {
+  const row = {
+    submittedInstallerId: "inst-1",
+    submittedAt: new Date("2026-11-10T05:00:00Z"),
+    createdAt: new Date("2026-11-10T04:00:00Z"),
+    installEndAt: new Date("2026-11-10T03:30:00Z"),
+    achievedAqaraAppCapability: "DOORLOCK_AND_APP",
+    wallpadLinked: false,
+    wallpadAmount: null,
+    wallpadBilling: null,
+    agentProxyBaseFee: null,
+    actualInstaller: null,
+    wallpadResult: "NOT_ATTEMPTED",
+    wallpadBrand: null,
+    wallpadModel: null,
+    wallpadFailReason: null,
+    wallpadNote: null,
+    longDistanceAmount: 20000,
+    extraClaimAmount: null,
+    extraClaimReason: null,
+    extraClaimPhotoPaths: [],
+    linkagePhotoPaths: ["l1.jpg"],
+    wallpadPhotoPaths: [],
+    photoPaths: ["p1.jpg", "p2.jpg"],
+    reviewStatus: "PENDING",
+    rejectionReason: null,
+  };
+
+  beforeEach(() => mocks.findCompletion.mockReset());
+
+  it("returns the submission with signed photo URLs for the submitting installer", async () => {
+    mocks.findCompletion.mockResolvedValue(row);
+    const view = await getInstallerSubmittedCompletion("inst-1", "order-1");
+    expect(view?.longDistanceAmount).toBe(20000);
+    expect(view?.photos).toEqual([
+      { path: "p1.jpg", url: "signed:p1.jpg" },
+      { path: "p2.jpg", url: "signed:p2.jpg" },
+    ]);
+    expect(view?.linkagePhotos).toHaveLength(1);
+  });
+
+  it("hides a submission made by another installer", async () => {
+    mocks.findCompletion.mockResolvedValue(row);
+    expect(await getInstallerSubmittedCompletion("inst-2", "order-1")).toBeNull();
+  });
+
+  it("returns null when nothing was submitted", async () => {
+    mocks.findCompletion.mockResolvedValue(null);
+    expect(await getInstallerSubmittedCompletion("inst-1", "order-1")).toBeNull();
   });
 });

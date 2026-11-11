@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
-import type { AsInstallerOrderItem } from "@/lib/installer/asOrders";
+import type { AsInstallerOrderItem, AsInstallerSubmission } from "@/lib/installer/asOrders";
 import { respondToAsAction } from "../actions";
 import PhoneRow from "../../PhoneRow";
+import SubmittedPhotos from "../../SubmittedPhotos";
+import { formatKst } from "../../formatKst";
 import * as ui from "../../ui";
 
 const REJECT_REASONS = ["일정이 맞지 않음", "거리가 멀어 방문이 어려움", "해당 작업 역량 없음", "기타"] as const;
@@ -24,7 +26,14 @@ const STATUS: Record<AsInstallerOrderItem["status"], { text: string; bg: string;
   COMPLETED: { text: "완료", bg: "#dbeafe", color: "#1e40af" },
 };
 
-export default function AsDetailClient({ item }: { item: AsInstallerOrderItem }) {
+export default function AsDetailClient({
+  item,
+  submission = null,
+}: {
+  item: AsInstallerOrderItem;
+  /** 이 기사가 등록한 처리 완료 내용. 아직 등록 전이면 null */
+  submission?: AsInstallerSubmission | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +99,8 @@ export default function AsDetailClient({ item }: { item: AsInstallerOrderItem })
             </div>
           ) : null}
         </div>
+
+        {submission ? <AsSubmissionCard submission={submission} /> : null}
 
         {error ? <div style={ui.errorText}>{error}</div> : null}
 
@@ -160,7 +171,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 8, padding: "5px 0" }}>
       <div style={ui.rowLabel}>{label}</div>
-      <div style={ui.rowValue}>{value}</div>
+      <div style={{ ...ui.rowValue, whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{value}</div>
     </div>
   );
 }
@@ -188,3 +199,38 @@ const rejectAlert: CSSProperties = {
   lineHeight: 1.55,
   marginBottom: 14,
 };
+
+function AsSubmissionCard({ submission }: { submission: AsInstallerSubmission }) {
+  const review =
+    submission.reviewStatus === "APPROVED"
+      ? { text: "승인", bg: "#d1fae5", color: "#065f46" }
+      : submission.reviewStatus === "REJECTED"
+        ? { text: "반려", bg: "#fee2e2", color: "#991b1b" }
+        : { text: "검수 대기", bg: "#dbeafe", color: "#1e40af" };
+  return (
+    <section style={ui.card} aria-labelledby="as-submission-title">
+      <div style={submissionHeader}>
+        <h2 id="as-submission-title" style={submissionTitle}>
+          등록한 처리 내용
+        </h2>
+        <span style={ui.badge(review.bg, review.color)}>{review.text}</span>
+      </div>
+      <Row label="등록 시각" value={formatKst(submission.submittedAt)} />
+      <Row label="처리 내용" value={submission.resolutionDetail || "-"} />
+      <Row
+        label="용역비"
+        value={submission.serviceFee != null ? `${submission.serviceFee.toLocaleString()}원` : "-"}
+      />
+      <SubmittedPhotos title="처리 사진" photos={submission.photos} />
+    </section>
+  );
+}
+
+const submissionHeader: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 8,
+};
+
+const submissionTitle: CSSProperties = { fontSize: 15, fontWeight: 800, margin: 0 };

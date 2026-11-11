@@ -3,6 +3,7 @@ import { requireInstallerPage } from "@/lib/installer/session";
 import { getInstallerOrderView } from "@/lib/installer/orders";
 import { buildOrderGuideLines } from "@/lib/installer/notice";
 import { getInstallerDistances } from "@/lib/installation/distance/service";
+import { getInstallerSubmittedCompletion } from "@/lib/installation/completion/service";
 import OrderDetailClient from "./OrderDetailClient";
 
 export const dynamic = "force-dynamic";
@@ -46,5 +47,9 @@ export default async function InstallerOrderDetailPage({
       })
     : [];
 
-  return <OrderDetailClient item={item} guideLines={guideLines} />;
+  // 완료 등록을 한 건(검수 대기·완료·반려 후 재등록 전)은 제출한 내용을 함께 보여 준다.
+  const showSubmission = item.status === "REVIEW" || item.status === "COMPLETED" || !!item.rejectionReason;
+  const completion = showSubmission ? await getInstallerSubmittedCompletion(installer.id, orderId) : null;
+
+  return <OrderDetailClient item={item} guideLines={guideLines} completion={completion} />;
 }
