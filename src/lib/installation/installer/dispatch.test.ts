@@ -26,6 +26,7 @@ const {
   createCandidateRun,
   upsertNotification,
   createStatusEvent,
+  getInstallerDistances,
 } = vi.hoisted(() => ({
   transaction: vi.fn(),
   findManyOrders: vi.fn(),
@@ -46,7 +47,11 @@ const {
   createCandidateRun: vi.fn(),
   upsertNotification: vi.fn(),
   createStatusEvent: vi.fn(),
+  getInstallerDistances: vi.fn(),
 }));
+
+// 기본은 거리 조회 실패 → 기존 지역 규칙(REGION)으로 돈다. 거리 기준 테스트만 결과를 넣는다.
+vi.mock("@/lib/installation/distance/service", () => ({ getInstallerDistances }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -142,6 +147,8 @@ describe("dispatchReadyInstallationOrders", () => {
     createCandidateRun.mockReset();
     upsertNotification.mockReset();
     createStatusEvent.mockReset();
+    getInstallerDistances.mockReset();
+    getInstallerDistances.mockRejectedValue(new Error("DISTANCE_LOOKUP_DISABLED_IN_TEST"));
     findIssue.mockResolvedValue(null);
     countIssues.mockResolvedValue(0);
     findFirstAssignment.mockResolvedValue(null);
@@ -962,6 +969,66 @@ describe("dispatchReadyInstallationOrders", () => {
     expect(candidateRunArgs.data.reasonCode).toBe("ONLY_REGION_MATCH");
     // 관리자가 고를 수 있도록 광역 후보는 기록에 남겨 둔다.
     expect(candidateRunArgs.data.candidates.create).toHaveLength(1);
+  });
+
+  it("auto-selects a nearby region-wide installer when distance ranking puts it first", async () => {
+    const now = new Date("2026-06-11T01:00:00.000Z");
+    // 광역 담당(9.5km)이 같은 구 담당(11.7km)보다 가까운 10km 구간에 있다 —
+    // 거리 기준에서는 정식 후보이므로 관리자에게 넘기지 않고 그대로 배정 검토로 올린다.
+    getInstallerDistances.mockResolvedValueOnce({
+      status: "OK",
+      eligible: [
+        { installerId: "installer-wide", drivingMeters: 9_500, straightMeters: 8_000 },
+        { installerId: "installer-district", drivingMeters: 11_700, straightMeters: 10_000 },
+      ],
+    });
+    findManyOrders.mockResolvedValue([
+      {
+        id: "order-1",
+        source: { memo: "설치비 (K100) x1", addressEncrypted: null },
+        activeCustomerRequestId: "request-1",
+        customerRequests: [
+          {
+            id: "request-1",
+            installAddressEncrypted: "서울 강서구 화곡로63가길 71",
+            installDate: "2026-06-20",
+          },
+        ],
+      },
+    ]);
+    const baseInstaller = {
+      phone: "010-1111-2222",
+      branch: "서울지점",
+      region: "서울특별시",
+      coverage: null,
+      capabilities: ["DOORLOCK"],
+      aqaraAppCapability: "NONE",
+      monthlyDispatchCount: 0,
+      active: true,
+    };
+    findManyInstallers.mockResolvedValue([
+      { ...baseInstaller, id: "installer-wide", name: "광역기사", serviceAreas: [] },
+      { ...baseInstaller, id: "installer-district", name: "강서기사", serviceAreas: ["서울 강서구"] },
+    ]);
+    countAssignments.mockResolvedValue(0);
+    createCandidateRun.mockResolvedValue({ id: "candidate-run-1" });
+    createAssignment.mockResolvedValue({ id: "assignment-1" });
+    findUniqueOrder.mockResolvedValue({ id: "order-1", status: "READY_FOR_CANDIDATE_SELECTION" });
+    updateOrder.mockResolvedValue({ id: "order-1", status: "WAITING_ADMIN_REVIEW" });
+    createStatusEvent.mockResolvedValue({ id: "event-1" });
+
+    const result = await dispatchReadyInstallationOrders({ now, baseUrl: "https://example.com" });
+
+    expect(result).toEqual({ dispatchedCount: 1, skippedCount: 0, failedCount: 0 });
+    expect(createIssue).not.toHaveBeenCalled();
+    expect(createAssignment).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        installerId: "installer-wide",
+        matchTier: "REGION_ONLY",
+        candidateRank: 1,
+      }),
+    });
+    expect(createCandidateRun.mock.calls.at(-1)?.[0].data.reasonCode).toBeNull();
   });
 
   it("records an unparsable address candidate run when the install address is missing", async () => {
