@@ -96,7 +96,7 @@ describe("installation SMS content", () => {
         "https://example.com/i/i/token-2\n" +
         "\n" +
         // 마감 시각은 발송 시점에 채워지므로 빌더 단계에서는 자리표시자로 남는다.
-        "※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.\n" +
+        "※ {responseDeadline}까지 회신이 없으면 다른 기사님께 자동으로 배정됩니다.{appInstallGuide}\n" +
         "\n" +
         "※ 발신전용",
     );

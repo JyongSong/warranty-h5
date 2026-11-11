@@ -2,6 +2,7 @@ import customerAssignmentConfirmedTemplate from "@/lib/installation/notification
 import customerReservationLinkTemplate from "@/lib/installation/notifications/sms-template-customer-reservation-link.json";
 import installerAssignmentRequestTemplate from "@/lib/installation/notifications/sms-template-installer-assignment-request.json";
 import installerHappycallGuideTemplate from "@/lib/installation/notifications/sms-template-installer-happycall-guide.json";
+import { buildInstallerAppInstallGuide } from "@/lib/installation/notifications/sms-content";
 import { getSmsLinkBaseUrl } from "@/lib/installation/notifications/sms-link-base-url";
 import { FALLBACK_AFTER_HOURS } from "@/lib/installation/customer/timing";
 
@@ -88,6 +89,8 @@ function createTemplateDefinitions(baseUrl: string): InstallationSmsTemplatePrev
         addressMain: "서울 강남구",
         responseUrl: `${baseUrl}/i/i/installer-token`,
         responseDeadline: "8월 21일(금) 14시",
+        // 실제로는 앱 기기가 없는 기사에게만 들어가고, 앱 기사에게는 빈 줄 없이 지워진다.
+        appInstallGuide: buildInstallerAppInstallGuide(baseUrl),
       },
     },
     {

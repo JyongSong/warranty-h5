@@ -263,6 +263,39 @@ describe("sendPendingInstallationNotifications", () => {
     expect(sendSms.mock.calls[0][1]).not.toContain("{responseDeadline}");
   });
 
+  it("adds the app install guide only for installers without an app device", async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = "https://example.com/";
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    const smsBody = "※ 자동으로 배정됩니다.{appInstallGuide}\n\n※ 발신전용";
+    findMany.mockResolvedValue([assignmentRequestNotification({ smsBody })]);
+
+    await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(sendSms.mock.calls[0][1]).toBe(
+      "※ 자동으로 배정됩니다.\n\n" +
+        "※ 기사 앱을 설치하시면 다음부터 배정 알림을 앱으로 바로 받으실 수 있습니다.\n" +
+        "설치 안내: https://example.com/installer-start.html\n\n※ 발신전용",
+    );
+  });
+
+  it("drops the app install guide in the fallback SMS for app installers", async () => {
+    const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
+    const now = new Date("2026-06-11T05:00:00.000Z");
+    listInstallerDeviceTokens.mockResolvedValue(["token-1"]);
+    const smsBody = "※ 자동으로 배정됩니다.{appInstallGuide}\n\n※ 발신전용";
+    findMany.mockResolvedValue([
+      assignmentRequestNotification({
+        smsBody,
+        pushSentAt: new Date("2026-06-11T00:00:00.000Z"),
+      }),
+    ]);
+
+    await sendPendingInstallationNotifications({ limit: 10, now, sendSms });
+
+    expect(sendSms.mock.calls[0][1]).toBe("※ 자동으로 배정됩니다.\n\n※ 발신전용");
+  });
+
   it("restores the stored alimtalk template and the LMS subject at send time", async () => {
     const sendSms = vi.fn().mockResolvedValue({ providerMessageId: "message-1" });
     const now = new Date("2026-06-11T00:00:00.000Z");
