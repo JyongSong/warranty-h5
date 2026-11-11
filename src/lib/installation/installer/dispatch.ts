@@ -279,7 +279,8 @@ export async function dispatchReadyInstallationOrders({
     // 도 단위만 걸치는 광역 후보(REGION_ONLY)밖에 없다면 그 지역에 담당 기사가
     // 없다는 뜻이므로, 멀리 있는 사람에게 조용히 넘기지 않고 관리자에게 넘긴다.
     // 후보 목록 자체는 candidateRun 에 그대로 남겨서 관리자가 보고 고를 수 있게 한다.
-    if (!candidate || candidate.matchTier !== "EXACT_DISTRICT") {
+    // 거리 기준(DISTANCE)에서는 광역 담당이라도 20km 안이면 정식 후보이므로 이 규칙을 쓰지 않는다.
+    if (!candidate || (selection.mode !== "DISTANCE" && candidate.matchTier !== "EXACT_DISTRICT")) {
       const onlyRegionMatch = Boolean(candidate);
       await markNoCandidateFound(
         order.id,
