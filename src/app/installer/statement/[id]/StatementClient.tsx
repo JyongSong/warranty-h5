@@ -454,7 +454,7 @@ function TaxInvoiceForm({
         <CopyRow label="공급가액" value={String(s.baseAmount)} />
         <CopyRow label="세액 (10%)" value={String(s.vatAmount)} />
         <CopyRow label="합계" value={String(s.payAmount)} />
-        <p style={hint}>홈택스(전자) 또는 종이 세금계산서 모두 됩니다. 사진만 올려 주시면 되고 원본은 보내지 않아도 됩니다.</p>
+        <p style={hint}>홈택스(전자) 또는 종이 세금계산서 모두 됩니다. 발행한 세금계산서 사진을 올려 주세요.</p>
       </div>
 
       <div style={ui.card}>
