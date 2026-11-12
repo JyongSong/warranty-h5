@@ -8,6 +8,11 @@ import {
   submitCashReceipt,
   submitTaxInvoiceEvidence,
 } from "@/lib/installation/settlement/statements";
+import {
+  PopbillTaxInvoiceError,
+  getStatementInvoiceViewUrl,
+  issueStatementTaxInvoice,
+} from "@/lib/installer/popbill-tax-invoice";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type UploadTargetsResult =
@@ -67,5 +72,33 @@ export async function submitCashReceiptAction(input: {
     return { ok: true };
   } catch (error) {
     return fail(error);
+  }
+}
+
+export type IssueResult = { ok: true; ntsConfirmNum: string | null } | { ok: false; error: string; detail?: string };
+
+/** 팝빌 정발행. 성공하면 증빙 확인 완료로 바로 넘어간다. */
+export async function issueTaxInvoiceAction(statementId: string): Promise<IssueResult> {
+  const installer = await getCurrentInstaller();
+  if (!installer) return { ok: false, error: "UNAUTHORIZED" };
+  try {
+    const r = await issueStatementTaxInvoice({ installerId: installer.id, statementId });
+    return { ok: true, ntsConfirmNum: r.ntsConfirmNum };
+  } catch (error) {
+    if (error instanceof PopbillTaxInvoiceError) return { ok: false, error: error.message, detail: error.detail };
+    console.error("[installer/statement/popbill-issue]", error);
+    return { ok: false, error: "POPBILL_UNAVAILABLE" };
+  }
+}
+
+/** 발행한 전자세금계산서 보기(팝빌 팝업, 30초 유효) */
+export async function getInvoiceViewUrlAction(statementId: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const installer = await getCurrentInstaller();
+  if (!installer) return { ok: false, error: "UNAUTHORIZED" };
+  try {
+    return { ok: true, url: await getStatementInvoiceViewUrl(installer.id, statementId) };
+  } catch (error) {
+    if (!(error instanceof PopbillTaxInvoiceError)) console.error("[installer/statement/popbill-view]", error);
+    return { ok: false, error: error instanceof PopbillTaxInvoiceError ? error.message : "POPBILL_UNAVAILABLE" };
   }
 }

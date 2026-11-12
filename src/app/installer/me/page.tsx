@@ -7,6 +7,7 @@ import { Row } from "../cards";
 import { formatKrPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { isSettlementLaunched } from "@/lib/installation/settlement/statements";
+import { isPopbillTaxInvoiceEnabled } from "@/lib/installer/popbill-tax-invoice";
 import * as ui from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,14 @@ export default async function InstallerMePage() {
     .findUnique({ where: { installerId: installer.id }, select: { status: true } })
     .catch(() => null);
   const settlementStatus = settlementInfo ? SETTLEMENT_STATUS[settlementInfo.status] : SETTLEMENT_STATUS.NONE;
+  // 팝빌 전자세금계산서 공개 전에는 「전자세금계산서 연동」 입구를 숨긴다.
+  const popbillEnabled = await isPopbillTaxInvoiceEnabled().catch(() => false);
+  const popbillLink = popbillEnabled
+    ? await prisma.installerPopbillLink
+        .findUnique({ where: { installerId: installer.id }, select: { status: true } })
+        .catch(() => null)
+    : null;
+  const popbillStatus = popbillLink?.status === "READY" ? POPBILL_STATUS.READY : POPBILL_STATUS.NONE;
 
   return (
     <main style={ui.page}>
@@ -45,6 +54,13 @@ export default async function InstallerMePage() {
           <Link href="/installer/me/settlement-info" style={settlementLink}>
             <span>정산 정보 등록</span>
             <span style={ui.badge(settlementStatus.bg, settlementStatus.color)}>{settlementStatus.text}</span>
+          </Link>
+        ) : null}
+
+        {popbillEnabled ? (
+          <Link href="/installer/me/tax-invoice" style={settlementLink}>
+            <span>전자세금계산서 연동</span>
+            <span style={ui.badge(popbillStatus.bg, popbillStatus.color)}>{popbillStatus.text}</span>
           </Link>
         ) : null}
 
@@ -90,6 +106,11 @@ const SETTLEMENT_STATUS: Record<string, { text: string; bg: string; color: strin
   SUBMITTED: { text: "확인 중", bg: "#fef3c7", color: "#92400e" },
   APPROVED: { text: "승인", bg: "#d1fae5", color: "#065f46" },
   REJECTED: { text: "반려", bg: "#fee2e2", color: "#991b1b" },
+};
+
+const POPBILL_STATUS = {
+  NONE: { text: "미연동", bg: "#f4f4f5", color: "#52525b" },
+  READY: { text: "연동 완료", bg: "#d1fae5", color: "#065f46" },
 };
 
 const settlementLink: CSSProperties = {

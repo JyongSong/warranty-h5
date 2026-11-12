@@ -234,10 +234,12 @@ export async function cancelStatement(statementId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const st = await tx.settlementStatement.findUnique({
       where: { id: statementId },
-      select: { id: true, periodId: true, installerId: true, evidenceStatus: true, paidAt: true },
+      select: { id: true, periodId: true, installerId: true, evidenceStatus: true, paidAt: true, popbillMgtKey: true },
     });
     if (!st) throw new StatementError("NOT_FOUND");
     if (st.paidAt || st.evidenceStatus !== "PENDING") throw new StatementError("ALREADY_IN_PROGRESS");
+    // 팝빌 발행 결과를 아직 모르는 정산서(문서번호만 잡힘)는 지우지 않는다. 기사가 다시 눌러 확인하면 정리된다.
+    if (st.popbillMgtKey) throw new StatementError("ALREADY_IN_PROGRESS");
     await tx.settlementLine.updateMany({
       where: { statementId: st.id },
       data: { periodId: null, statementId: null },
@@ -272,6 +274,10 @@ export type StatementView = {
   cashReceiptDate: string | null;
   evidenceSubmittedAt: string | null;
   evidenceRejectReason: string | null;
+  /** 팝빌 정발행 국세청 승인번호. 있으면 앱에서 발행한 전자세금계산서 */
+  ntsConfirmNum: string | null;
+  /** 팝빌 발행 마지막 실패 메시지 */
+  popbillError: string | null;
   paidAt: string | null;
   /** 기사 정산 정보 상태: 없음이면 null */
   infoStatus: string | null;
@@ -338,6 +344,8 @@ async function toView(row: StatementRow, withPhotos: boolean): Promise<Statement
     cashReceiptDate: row.cashReceiptDate,
     evidenceSubmittedAt: row.evidenceSubmittedAt?.toISOString() ?? null,
     evidenceRejectReason: row.evidenceRejectReason,
+    ntsConfirmNum: row.ntsConfirmNum,
+    popbillError: row.popbillError,
     paidAt: row.paidAt?.toISOString() ?? null,
     infoStatus: info?.status ?? null,
     bankName: info?.bankName ?? null,

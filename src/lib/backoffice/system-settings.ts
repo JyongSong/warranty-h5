@@ -45,6 +45,9 @@ export const SYSTEM_SETTING_KEYS = {
   // 기사 정산 기능 공개 스위치. 끄면 기사 앱에서 정산 정보 등록 입구·월 정산서·현금영수증 앱 제한이 모두 숨고,
   // 백오피스 월 정산서 탭도 숨으며 발행이 막힌다. 앱 업데이트를 한 번에 공개하려고 둔다.
   installerSettlementLaunched: "installer.settlement.launched",
+  // 팝빌 전자세금계산서(정발행) 공개 스위치. 켜면 기사 앱에 「전자세금계산서 연동」과 정산서 「전자세금계산서 발행」 버튼이 보인다.
+  // 정산 기능(installer.settlement.launched)이 켜져 있어야 의미가 있다.
+  installerPopbillEnabled: "installer.popbill.enabled",
   // 본사(공급받는자) 정보. 기사가 세금계산서·현금영수증을 발행할 때 앱에 그대로 보여 준다.
   hqBusinessNumber: "hq.invoice.businessNumber",
   hqBusinessName: "hq.invoice.businessName",
@@ -276,6 +279,14 @@ const SYSTEM_SETTING_SPECS = ([
     key: SYSTEM_SETTING_KEYS.installerSettlementLaunched,
     description:
       "기사 정산 기능 공개 여부 (기사 앱 정산 정보 등록·월 정산서·현금영수증 앱 제한, 백오피스 월 정산서 탭). false 면 모두 숨김",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.installerPopbillEnabled,
+    description:
+      "팝빌 전자세금계산서 자동 발행 공개 여부 (기사 앱 전자세금계산서 연동·정산서 발행 버튼). false 면 기존 사진 제출만",
     type: "boolean" as const,
     defaultValue: "false",
     validationHint: "true 또는 false",

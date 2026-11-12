@@ -93,6 +93,7 @@ model Installer {
   drivingDistances        InstallerDrivingDistance[]
   settlementInfo          InstallerSettlementInfo?
   settlementStatements    SettlementStatement[]
+  popbillLink             InstallerPopbillLink?
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
   assignmentAttempts   InstallationInstallerAssignmentAttempt[]  @relation("InstallerAssignmentAttempts")
   candidateRunResults  InstallationInstallerCandidateRunResult[]
@@ -1002,6 +1003,13 @@ model SettlementStatement {
   paidAt                 DateTime?        @map("paid_at") @db.Timestamptz(6)
   paidByAdminId          String?          @map("paid_by_admin_id")
   issuedByAdminId        String?          @map("issued_by_admin_id")
+  // 팝빌 정발행: 문서번호(공급자 사업자번호 안에서 유일)·국세청 승인번호·발행 시각.
+  // 문서번호는 발행 시도 전에 먼저 저장한다. 응답을 못 받아도 같은 번호로 팝빌에 상태를 물어 이어 갈 수 있게.
+  popbillMgtKey          String?          @unique @map("popbill_mgt_key")
+  popbillCorpNum         String?          @map("popbill_corp_num")
+  ntsConfirmNum          String?          @map("nts_confirm_num")
+  popbillIssuedAt        DateTime?        @map("popbill_issued_at") @db.Timestamptz(6)
+  popbillError           String?          @map("popbill_error")
   createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1041,6 +1049,27 @@ model InstallerSettlementInfo {
 
   @@index([status])
   @@map("installer_settlement_infos")
+}
+
+// 기사 팝빌 연동: 기사가 팝빌에 우리 LinkID 로 연동회원 가입 + 공동인증서 등록을 마쳤는지 앱의 「연동 확인」으로 기록한다.
+// corp_num 은 확인할 때 쓴 사업자번호(정산 정보의 사업자번호). 정산 정보의 사업자번호가 바뀌면 다시 확인해야 한다.
+// 발행 직전에도 팝빌에 다시 확인하므로 여기 값은 화면 표시·만료 알림용이다.
+model InstallerPopbillLink {
+  id              String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId     String    @unique @map("installer_id")
+  installer       Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+  corpNum         String    @map("corp_num")
+  // 팝빌 담당자 ID(관리자). 발행 API 의 UserID 로 쓴다.
+  userId          String?   @map("user_id")
+  // NOT_MEMBER | NO_CERT | CERT_INVALID | READY
+  status          String
+  certExpiresAt   DateTime? @map("cert_expires_at") @db.Timestamptz(6)
+  checkedAt       DateTime  @map("checked_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("installer_popbill_links")
 }
 
 // Per-installer rate overrides. Null column = fall back to global default

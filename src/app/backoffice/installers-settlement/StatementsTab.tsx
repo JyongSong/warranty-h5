@@ -37,7 +37,9 @@ function stage(s: StatementView): { text: string; cls: string } {
   if (!s.flow) return { text: "증빙 종류 미선택", cls: "bg-zinc-100 text-zinc-600" };
   if (s.flow === "TAX") {
     if (s.paidAt) return { text: "지급 완료", cls: "bg-emerald-100 text-emerald-800" };
-    if (s.evidenceStatus === "CONFIRMED") return { text: "지급 대기", cls: "bg-blue-100 text-blue-800" };
+    if (s.evidenceStatus === "CONFIRMED") {
+      return { text: s.ntsConfirmNum ? "지급 대기 · 앱 발행" : "지급 대기", cls: "bg-blue-100 text-blue-800" };
+    }
     if (s.evidenceStatus === "SUBMITTED") return { text: "계산서 확인 필요", cls: "bg-amber-100 text-amber-800" };
     if (s.evidenceStatus === "REJECTED") return { text: "계산서 반려", cls: "bg-red-100 text-red-700" };
     return { text: "계산서 대기", cls: "bg-zinc-100 text-zinc-600" };
@@ -396,7 +398,13 @@ function FragmentRow({
               </div>
               {s.flow === "TAX" ? (
                 <div>
-                  <span className="text-zinc-500">계산서 작성일</span> {s.invoiceIssueDate ?? "-"}
+                  <span className="text-zinc-500">{s.ntsConfirmNum ? "앱 발행일" : "계산서 작성일"}</span>{" "}
+                  {s.invoiceIssueDate ?? "-"}
+                  {s.ntsConfirmNum ? (
+                    <span className="ml-2">
+                      <span className="text-zinc-500">국세청 승인번호</span> {s.ntsConfirmNum}
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <div>
@@ -409,6 +417,9 @@ function FragmentRow({
               </div>
             </div>
             {s.evidenceRejectReason ? <p className="text-red-600">반려 사유: {s.evidenceRejectReason}</p> : null}
+            {s.popbillError && !s.ntsConfirmNum ? (
+              <p className="text-amber-700">팝빌 발행 마지막 실패: {s.popbillError}</p>
+            ) : null}
             {s.evidencePhotoUrls.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {s.evidencePhotoUrls.map((url, i) =>
