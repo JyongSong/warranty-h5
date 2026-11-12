@@ -1,8 +1,9 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { SYSTEM_SETTING_KEYS, isSystemSettingEnabled } from "@/lib/backoffice/system-settings";
+import { SYSTEM_SETTING_KEYS, isPreviewSettlementOverride, isSystemSettingEnabled } from "@/lib/backoffice/system-settings";
 import {
+  POPBILL_CODE,
   PopbillError,
   checkMember,
   getCertRegisterUrl,
@@ -46,6 +47,7 @@ export class PopbillTaxInvoiceError extends Error {
 /** 기사 앱에 팝빌 연동·발행을 보여 줄지: 정산 공개 + 팝빌 스위치 + 키 설정 */
 export async function isPopbillTaxInvoiceEnabled(): Promise<boolean> {
   if (!isPopbillConfigured()) return false;
+  if (isPreviewSettlementOverride()) return true;
   const [launched, enabled] = await Promise.all([
     isSettlementLaunched(),
     isSystemSettingEnabled(SYSTEM_SETTING_KEYS.installerPopbillEnabled),
@@ -235,7 +237,12 @@ export function isIssuedState(stateCode: number): boolean {
  * 정산서 1장을 팝빌 정발행한다. 성공하면 국세청 승인번호와 함께 증빙 확인 완료로 바뀐다.
  * 실패하면 PopbillTaxInvoiceError(메시지 = 코드, detail = 팝빌 메시지)를 던지고 정산서에 마지막 오류를 남긴다.
  */
-export async function issueStatementTaxInvoice(input: { installerId: string; statementId: string }): Promise<{ ntsConfirmNum: string | null }> {
+export async function issueStatementTaxInvoice(input: {
+  installerId: string;
+  statementId: string;
+  /** 기사가 지연발행 안내를 보고 확인한 경우 */
+  allowLate?: boolean;
+}): Promise<{ ntsConfirmNum: string | null }> {
   if (!(await isPopbillTaxInvoiceEnabled())) throw new PopbillTaxInvoiceError("DISABLED");
   const s = await loadIssuable(input.installerId, input.statementId);
   const corpNum = s.info.businessNumber.replace(/\D/g, "");
@@ -300,6 +307,7 @@ export async function issueStatementTaxInvoice(input: { installerId: string; sta
       supplyCost: s.row.baseAmount,
       tax: vatAmount,
       userId: check.member ? check.userId : null,
+      allowLate: input.allowLate === true,
     });
     await markIssued(s, r.ntsConfirmNum);
     return { ntsConfirmNum: r.ntsConfirmNum };
@@ -313,6 +321,8 @@ export async function issueStatementTaxInvoice(input: { installerId: string; sta
       data: { popbillError: message.slice(0, 500), ...(uncertain ? {} : { popbillMgtKey: null, popbillCorpNum: null }) },
     });
     console.error("[popbill/issue]", s.row.id, message);
+    if (pe?.code === POPBILL_CODE.LATE_ISSUE) throw new PopbillTaxInvoiceError("LATE_ISSUE", pe.message);
+    if (pe?.code === POPBILL_CODE.FUTURE_WRITE_DATE) throw new PopbillTaxInvoiceError("TOO_EARLY", pe.message);
     throw new PopbillTaxInvoiceError(uncertain ? "UNCERTAIN" : "POPBILL_FAILED", pe?.message);
   }
 }

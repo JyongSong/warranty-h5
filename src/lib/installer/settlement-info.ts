@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { SYSTEM_SETTING_KEYS, isSystemSettingEnabled } from "@/lib/backoffice/system-settings";
+import { SYSTEM_SETTING_KEYS, isPreviewSettlementOverride, isSystemSettingEnabled } from "@/lib/backoffice/system-settings";
 import { decryptNullablePii, encryptPii } from "@/lib/piiCrypto";
 import {
   TAX_DOC_TYPES,
@@ -153,6 +153,7 @@ export async function getSettlementInfo(installerId: string): Promise<Settlement
 
 /** 기사 제출. 처음이면 만들고, 이미 있으면 덮어쓰고 심사 대기로 되돌린다. */
 export async function isTaxDocTypeEnabled(): Promise<boolean> {
+  if (isPreviewSettlementOverride()) return true;
   return isSystemSettingEnabled(SYSTEM_SETTING_KEYS.installerTaxDocTypeEnabled);
 }
 

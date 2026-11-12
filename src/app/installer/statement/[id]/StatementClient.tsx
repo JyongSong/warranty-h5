@@ -54,6 +54,7 @@ const ISSUE_ERR: Record<string, string> = {
   HQ_INFO_MISSING: "본사 정보가 준비되지 않았습니다. 본사에 문의해 주세요.",
   ALREADY_ISSUED: "이미 발행된 정산서입니다. 새로고침해 주세요.",
   IN_PROGRESS: "발행이 진행 중입니다. 잠시 후 새로고침해 주세요.",
+  TOO_EARLY: "작성일자(정산 월 말일)가 지나야 발행할 수 있습니다. 다음 달 1일부터 발행해 주세요.",
   UNCERTAIN: "발행 결과를 확인하지 못했습니다. 잠시 후 다시 눌러 주세요(중복 발행되지 않습니다).",
   NOT_SUBMITTABLE: ERR.NOT_SUBMITTABLE,
   ALREADY_PAID: ERR.ALREADY_PAID,
@@ -220,6 +221,7 @@ function PopbillIssueCard({ s, ready }: { s: StatementView; ready: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [late, setLate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!ready) {
@@ -240,10 +242,15 @@ function PopbillIssueCard({ s, ready }: { s: StatementView; ready: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await issueTaxInvoiceAction(s.id);
+      const r = await issueTaxInvoiceAction(s.id, late);
       if (r.ok) {
         setConfirming(false);
+        setLate(false);
         router.refresh();
+      } else if (r.error === "LATE_ISSUE") {
+        // 기한이 지난 건: 지연발행 안내를 보여 주고 한 번 더 확인받는다.
+        setLate(true);
+        setConfirming(true);
       } else {
         const base = ISSUE_ERR[r.error] ?? ISSUE_ERR.POPBILL_UNAVAILABLE;
         setError(r.error === "POPBILL_FAILED" ? `발행 실패: ${r.detail ?? ""}` : base);
@@ -263,14 +270,28 @@ function PopbillIssueCard({ s, ready }: { s: StatementView; ready: boolean }) {
         본사 앞으로 공급가액 {won(s.baseAmount)} + 세액 {won(s.vatAmount)} = {won(s.payAmount)} 전자세금계산서가
         발행됩니다. 발행하면 본사 확인 없이 바로 지급 대상이 됩니다.
       </p>
-      {s.popbillError && !error ? <p style={ui.errorText}>지난 발행 시도 실패: {s.popbillError}</p> : null}
+      {s.popbillError && !error && !late ? <p style={ui.errorText}>지난 발행 시도 실패: {s.popbillError}</p> : null}
+      {late ? (
+        <p style={lateBox}>
+          발행 기한({invoiceDeadline(s.ym)})이 지나 <b>지연발행</b>됩니다. 공급자(기사님)에게 지연발급 가산세가 부과될 수
+          있습니다. 그래도 발행하시겠습니까?
+        </p>
+      ) : null}
       {confirming ? (
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" style={{ ...ui.secondaryButton, flex: 1 }} disabled={busy} onClick={() => setConfirming(false)}>
+          <button
+            type="button"
+            style={{ ...ui.secondaryButton, flex: 1 }}
+            disabled={busy}
+            onClick={() => {
+              setConfirming(false);
+              setLate(false);
+            }}
+          >
             취소
           </button>
           <button type="button" style={{ ...ui.primaryButton(busy), flex: 2 }} disabled={busy} onClick={issue}>
-            {busy ? "발행 중…" : "발행 확정"}
+            {busy ? "발행 중…" : late ? "지연발행 확정" : "발행 확정"}
           </button>
         </div>
       ) : (
@@ -560,6 +581,17 @@ const lineRow: CSSProperties = {
 };
 const backLink: CSSProperties = { display: "inline-block", fontSize: 14, color: "#52525b", textDecoration: "none", marginBottom: 8 };
 const inlineLink: CSSProperties = { display: "block", marginTop: 6, fontWeight: 700, color: "inherit" };
+const lateBox: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: "#92400e",
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  borderRadius: 10,
+  padding: 12,
+  margin: "0 0 10px",
+  wordBreak: "keep-all",
+};
 const linkBtn: CSSProperties = {
   ...ui.secondaryButton,
   display: "flex",

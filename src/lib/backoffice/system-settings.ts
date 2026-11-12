@@ -354,6 +354,14 @@ export async function isSystemSettingEnabled(key: string) {
   return setting?.value === "true";
 }
 
+/**
+ * Vercel 미리보기(preview) 배포에서만: 환경 변수 PREVIEW_ENABLE_SETTLEMENT=true 면 정산·팝빌 공개 스위치를 켠 것으로 본다.
+ * 미리보기도 운영 DB 를 같이 쓰므로, DB 스위치를 켜면 운영 앱에도 공개된다. 그걸 피하려고 둔다. 운영(production)에서는 무시한다.
+ */
+export function isPreviewSettlementOverride(): boolean {
+  return process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_ENABLE_SETTLEMENT === "true";
+}
+
 export async function getSystemSettingValue(key: string): Promise<string | null> {
   const setting = await prisma.backofficeSetting.findUnique({
     where: { key },

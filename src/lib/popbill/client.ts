@@ -163,7 +163,15 @@ export type IssueInput = {
   tax: number;
   remark?: string;
   userId?: string | null;
+  /** 지연발행 허용(작성일자 다음 달 10일이 지난 경우). false 면 팝빌이 -11002014 로 거절한다. */
+  allowLate?: boolean;
 };
+
+/** 팝빌 오류 코드 */
+export const POPBILL_CODE = {
+  LATE_ISSUE: -11002014,
+  FUTURE_WRITE_DATE: -11002009,
+} as const;
 
 export type IssueResult = { ntsConfirmNum: string | null; issueDT: string | null };
 
@@ -213,7 +221,7 @@ export async function registIssue(input: IssueInput): Promise<IssueResult> {
     digits(s.corpNum),
     taxinvoice,
     false, // writeSpecification
-    false, // forceIssue (지연발행 강제 X — 지연발행이면 오류로 알려 준다)
+    input.allowLate === true, // forceIssue: 지연발행 허용 여부
     "",
     "",
     "",

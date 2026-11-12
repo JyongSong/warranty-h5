@@ -78,11 +78,11 @@ export async function submitCashReceiptAction(input: {
 export type IssueResult = { ok: true; ntsConfirmNum: string | null } | { ok: false; error: string; detail?: string };
 
 /** 팝빌 정발행. 성공하면 증빙 확인 완료로 바로 넘어간다. */
-export async function issueTaxInvoiceAction(statementId: string): Promise<IssueResult> {
+export async function issueTaxInvoiceAction(statementId: string, allowLate = false): Promise<IssueResult> {
   const installer = await getCurrentInstaller();
   if (!installer) return { ok: false, error: "UNAUTHORIZED" };
   try {
-    const r = await issueStatementTaxInvoice({ installerId: installer.id, statementId });
+    const r = await issueStatementTaxInvoice({ installerId: installer.id, statementId, allowLate });
     return { ok: true, ntsConfirmNum: r.ntsConfirmNum };
   } catch (error) {
     if (error instanceof PopbillTaxInvoiceError) return { ok: false, error: error.message, detail: error.detail };

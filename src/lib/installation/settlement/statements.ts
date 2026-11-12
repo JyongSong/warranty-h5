@@ -1,7 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptNullablePii } from "@/lib/piiCrypto";
-import { SYSTEM_SETTING_KEYS, getSystemSettingValue, isSystemSettingEnabled } from "@/lib/backoffice/system-settings";
+import {
+  SYSTEM_SETTING_KEYS,
+  getSystemSettingValue,
+  isPreviewSettlementOverride,
+  isSystemSettingEnabled,
+} from "@/lib/backoffice/system-settings";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import {
   findMissingPhotos,
@@ -602,5 +607,6 @@ async function notify(installerId: string, title: string, body: string) {
 
 /** 기사 정산 기능 공개 여부(시스템 설정). 꺼져 있으면 기사 앱·백오피스에서 숨기고 발행을 막는다. */
 export async function isSettlementLaunched(): Promise<boolean> {
+  if (isPreviewSettlementOverride()) return true;
   return isSystemSettingEnabled(SYSTEM_SETTING_KEYS.installerSettlementLaunched);
 }
