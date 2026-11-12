@@ -8,7 +8,7 @@ import { getCertRegisterUrlAction, verifyPopbillLinkAction } from "./actions";
 import * as ui from "../../ui";
 
 const STATUS: Record<PopbillLinkStatus, { text: string; bg: string; color: string }> = {
-  NOT_MEMBER: { text: "팝빌 미가입", bg: "#fee2e2", color: "#991b1b" },
+  NOT_MEMBER: { text: "연동회원 미가입", bg: "#fee2e2", color: "#991b1b" },
   NO_CERT: { text: "인증서 미등록", bg: "#fef3c7", color: "#92400e" },
   CERT_INVALID: { text: "인증서 확인 필요", bg: "#fee2e2", color: "#991b1b" },
   READY: { text: "연동 완료", bg: "#d1fae5", color: "#065f46" },
@@ -16,7 +16,7 @@ const STATUS: Record<PopbillLinkStatus, { text: string; bg: string; color: strin
 
 const ERRORS: Record<string, string> = {
   NO_SETTLEMENT_INFO: "먼저 「정산 정보 등록」에서 사업자번호를 등록해 주세요.",
-  NOT_MEMBER: "팝빌 가입이 확인되지 않습니다. 1단계를 먼저 해 주세요.",
+  NOT_MEMBER: "팝빌 연동회원 가입이 확인되지 않습니다. 1단계를 먼저 해 주세요.",
   DISABLED: "아직 사용할 수 없는 기능입니다.",
   POPBILL_UNAVAILABLE: "팝빌에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
   UNAUTHORIZED: "다시 로그인해 주세요.",
@@ -24,7 +24,7 @@ const ERRORS: Record<string, string> = {
 
 const RESULT_TEXT: Record<PopbillLinkStatus, string> = {
   NOT_MEMBER:
-    "이 사업자번호로 팝빌 가입이 확인되지 않습니다. 가입할 때 연동 아이디(LinkID)를 입력했는지, 사업자번호가 같은지 확인해 주세요.",
+    "이 사업자번호로 팝빌 연동회원 가입이 확인되지 않습니다. 가입할 때 연동 아이디(LinkID)를 입력해 연동회원으로 가입했는지, 사업자번호가 같은지 확인해 주세요.",
   NO_CERT: "팝빌 가입은 확인됐습니다. 2단계에서 공동인증서를 등록해 주세요.",
   CERT_INVALID: "등록된 인증서를 사용할 수 없습니다(만료·폐기 등). 인증서를 다시 등록해 주세요.",
   READY: "연동이 완료됐습니다. 이제 정산서 화면에서 전자세금계산서를 바로 발행할 수 있습니다.",
@@ -138,10 +138,13 @@ export default function TaxInvoiceLinkClient({
           ) : null}
         </div>
 
-        <Step n={1} title="팝빌 회원가입" done={status !== null && status !== "NOT_MEMBER"}>
+        <Step n={1} title="팝빌 연동회원 가입" done={status !== null && status !== "NOT_MEMBER"}>
+          <div style={mustBox}>
+            일반 회원이 아니라 <b>연동회원</b>으로 가입해야 합니다. 일반 회원으로 가입하면 앱에서 발행할 수 없습니다.
+          </div>
           <p style={stepText}>
-            팝빌 사이트에서 <b>위 사업자번호</b>로 가입해 주세요. 가입 화면의 <b>연동 아이디(LinkID)</b> 칸에 아래 값을 꼭
-            입력해야 합니다.
+            팝빌 사이트에서 <b>위 사업자번호</b>로 가입하면서, 가입 화면의 <b>연동 아이디(LinkID)</b> 칸에 아래 값을
+            입력해 주세요. 이 값을 넣어야 저희 앱과 연결된 연동회원이 됩니다.
           </p>
           <div style={copyRow}>
             <code style={codeBox}>{linkId}</code>
@@ -150,8 +153,11 @@ export default function TaxInvoiceLinkClient({
             </button>
           </div>
           <a href={signupUrl} target="_blank" rel="noreferrer" style={{ ...linkButton, marginTop: 10 }}>
-            팝빌 가입하러 가기
+            팝빌 연동회원 가입하러 가기
           </a>
+          <p style={{ ...stepText, fontSize: 13, color: "#71717a", margin: "10px 0 0" }}>
+            이미 팝빌에 일반 회원으로 가입하셨다면 본사에 문의해 주세요.
+          </p>
         </Step>
 
         <Step n={2} title="공동인증서 등록" done={status === "READY"}>
@@ -195,6 +201,17 @@ function Step({ n, title, done, children }: { n: number; title: string; done: bo
 
 const rowBetween: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between" };
 const stepText: CSSProperties = { fontSize: 14, lineHeight: 1.6, color: "#3f3f46", margin: "0 0 10px", wordBreak: "keep-all" };
+const mustBox: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: "#92400e",
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  borderRadius: 10,
+  padding: "10px 12px",
+  margin: "0 0 10px",
+  wordBreak: "keep-all",
+};
 const stepNum = (done: boolean): CSSProperties => ({
   width: 24,
   height: 24,
