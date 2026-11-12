@@ -567,7 +567,7 @@ function Notice({ tone, title, children }: { tone: "ok" | "info" | "warn" | "err
   return (
     <div style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.color, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
       <div style={{ fontWeight: 800, fontSize: 15 }}>{title}</div>
-      <div style={{ fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>{children}</div>
+      <div style={{ fontSize: 13, marginTop: 4, lineHeight: 1.6, wordBreak: "keep-all" }}>{children}</div>
     </div>
   );
 }
