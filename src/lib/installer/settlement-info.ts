@@ -77,8 +77,8 @@ export function parseSettlementInfoInput(
 
   const email = input.invoiceEmail.trim();
   if (email && !EMAIL_RE.test(email)) throw new SettlementInfoError("EMAIL_INVALID");
-  // 전자세금계산서는 메일로 주고받으므로 받는 주소가 있어야 한다.
-  if (taxDocType === "E_TAX_INVOICE" && !email) throw new SettlementInfoError("EMAIL_REQUIRED");
+  // 이메일은 선택이다. 세금계산서(전자·종이)를 한 가지로 합치면서 종이로 발행하는 기사도 고르게 돼 필수에서 뺐다.
+  // 앱 발행(팝빌)은 이메일 없이도 된다. 있으면 공급자 이메일로 세금계산서에 들어간다.
 
   const prefix = installerDocPrefix(installerId);
   for (const path of [input.businessLicensePhotoPath, input.bankbookPhotoPath]) {

@@ -83,7 +83,6 @@ const ERR: Record<string, string> = {
   BUSINESS_NAME_REQUIRED: "상호를 입력해 주세요.",
   REPRESENTATIVE_REQUIRED: "대표자 이름을 입력해 주세요.",
   EMAIL_INVALID: "이메일 주소 형식이 올바르지 않습니다.",
-  EMAIL_REQUIRED: "전자세금계산서를 받을 이메일을 입력해 주세요.",
   BANK_NAME_REQUIRED: "은행을 선택해 주세요.",
   ACCOUNT_NUMBER_INVALID: "계좌번호를 정확히 입력해 주세요.",
   ACCOUNT_HOLDER_REQUIRED: "예금주를 입력해 주세요.",
@@ -155,7 +154,6 @@ export default function SettlementInfoClient({
 
   const hasLicense = licenseFile.length > 0 || Boolean(licenseExisting);
   const hasBankbook = bankbookFile.length > 0 || Boolean(bankbookExisting);
-  const needsEmail = showTaxDocType && taxDocType === "E_TAX_INVOICE";
   const canSubmit =
     (!showTaxDocType || Boolean(taxDocType)) &&
     businessNumber.replace(/\D/g, "").length === 10 &&
@@ -164,7 +162,6 @@ export default function SettlementInfoClient({
     bankName.trim() !== "" &&
     accountNumber.replace(/\D/g, "").length >= 8 &&
     accountHolder.trim() !== "" &&
-    (!needsEmail || invoiceEmail.trim() !== "") &&
     hasLicense &&
     hasBankbook &&
     !busy &&
@@ -372,7 +369,7 @@ export default function SettlementInfoClient({
             />
           </Field>
           <Field
-            label={needsEmail ? "세금계산서 받을 이메일" : "이메일 (선택)"}
+            label="이메일 (선택)"
           >
             <input
               style={ui.input}
