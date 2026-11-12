@@ -48,6 +48,8 @@ export async function submitTaxInvoiceAction(input: {
   statementId: string;
   photoPaths: string[];
   issueDate: string;
+  /** 종이 세금계산서로 발행했으면 true */
+  paper?: boolean;
 }): Promise<ActionResult> {
   const installer = await getCurrentInstaller();
   if (!installer) return { ok: false, error: "UNAUTHORIZED" };

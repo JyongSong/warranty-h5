@@ -29,24 +29,30 @@ function getSupabaseBrowser() {
   return supabaseBrowser;
 }
 
-const DOC_TYPES: Array<{ value: TaxDocType; title: string; desc: string; warning?: string }> = [
+// 세금계산서는 한 가지로 고른다. 전자(앱 발행·홈택스)인지 종이인지는 매달 정산서에서 발행할 때 정해진다.
+// 예전에 「종이 세금계산서」를 고른 기사도 화면에서는 「세금계산서」로 보인다(저장된 값은 다시 제출할 때 바뀐다).
+const DOC_TYPES: Array<{ value: TaxDocType; title: string; who: string; desc: string[]; warning?: string }> = [
   {
     value: "E_TAX_INVOICE",
-    title: "전자세금계산서",
-    desc: "홈택스·팝빌 등으로 전자세금계산서를 발행할 수 있어요.",
-  },
-  {
-    value: "PAPER_TAX_INVOICE",
-    title: "종이 세금계산서",
-    desc: "종이 세금계산서를 발행해 원본을 보내 주세요.",
+    title: "세금계산서",
+    who: "일반과세자",
+    desc: [
+      "매달 정산서가 나오면 다음 달 10일까지 본사 앞으로 세금계산서를 발행해 주세요.",
+      "· 「전자세금계산서 연동」을 해 두면 앱에서 버튼 하나로 발행됩니다. (추천)",
+      "· 연동하지 않으면 홈택스 전자세금계산서나 종이 세금계산서를 직접 발행하고 사진으로 제출해 주세요. 종이는 원본을 본사로 보내 주세요.",
+    ],
   },
   {
     value: "CASH_RECEIPT",
     title: "현금영수증",
-    desc: "간이과세자 등 세금계산서 발행이 어려운 경우. 정산 금액을 받은 뒤 본사 사업자번호로 지출증빙 현금영수증을 발급해 주세요.",
+    who: "세금계산서를 발행할 수 없는 간이과세자",
+    desc: ["정산금을 먼저 받은 뒤 본사 사업자번호로 지출증빙 현금영수증을 발급하고, 앱에 승인번호를 등록해 주세요."],
     warning: "해당 거래 방식은 2026년 12월 1일 설치 건부터 중단",
   },
 ];
+
+const toChoice = (t: TaxDocType | null | undefined): TaxDocType | "" =>
+  t === "PAPER_TAX_INVOICE" ? "E_TAX_INVOICE" : (t ?? "");
 
 const BANKS = [
   "KB국민은행",
@@ -113,7 +119,7 @@ export default function SettlementInfoClient({
 }) {
   const router = useRouter();
   const [taxDocType, setTaxDocType] = useState<TaxDocType | "">(
-    info?.taxDocType ?? "",
+    toChoice(info?.taxDocType),
   );
   const [businessNumber, setBusinessNumber] = useState(
     formatBizNo(info?.businessNumber ?? ""),
@@ -253,7 +259,7 @@ export default function SettlementInfoClient({
     <main style={ui.page}>
       <div style={ui.panel}>
         <h1 style={ui.h1}>정산 정보 등록</h1>
-        <p style={ui.sub}>
+        <p style={{ ...ui.sub, wordBreak: "keep-all" }}>
           {showTaxDocType
             ? "정산금 지급과 증빙(세금계산서·현금영수증)에 쓰는 정보입니다."
             : "정산금 지급에 쓰는 정보입니다."}
@@ -284,7 +290,8 @@ export default function SettlementInfoClient({
 
         {showTaxDocType ? (
           <div style={ui.card}>
-            <div style={ui.label}>정산 증빙 종류</div>
+            <div style={{ ...ui.label, marginBottom: 2 }}>정산 증빙 종류</div>
+            <p style={{ ...hint, margin: "0 0 10px" }}>매달 정산금을 받을 때 본사에 어떤 증빙을 낼지 골라 주세요.</p>
             <div style={{ display: "grid", gap: 8 }}>
               {DOC_TYPES.map((t) => {
                 const selected = taxDocType === t.value;
@@ -301,17 +308,24 @@ export default function SettlementInfoClient({
                     <div style={{ fontSize: 15, fontWeight: 700 }}>
                       {selected ? "● " : "○ "}
                       {t.title}
+                      <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 6, color: selected ? "#a1a1aa" : "#71717a" }}>
+                        {t.who}
+                      </span>
                     </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: selected ? "#d4d4d8" : "#71717a",
-                        marginTop: 4,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {t.desc}
-                    </div>
+                    {t.desc.map((line) => (
+                      <div
+                        key={line}
+                        style={{
+                          fontSize: 13,
+                          color: selected ? "#d4d4d8" : "#71717a",
+                          marginTop: 4,
+                          lineHeight: 1.5,
+                          wordBreak: "keep-all",
+                        }}
+                      >
+                        {line}
+                      </div>
+                    ))}
                     {t.warning ? (
                       <div
                         style={{

@@ -461,8 +461,10 @@ export async function submitTaxInvoiceEvidence(input: {
   statementId: string;
   photoPaths: string[];
   issueDate: string;
+  /** 종이 세금계산서로 발행했으면 true. 정산 정보 대신 이 값으로 정산서의 증빙 종류를 정한다. */
+  paper?: boolean;
 }): Promise<void> {
-  const { row, taxDocType, flow } = await loadOwnStatement(input.installerId, input.statementId);
+  const { row, flow } = await loadOwnStatement(input.installerId, input.statementId);
   if (flow !== "TAX") throw new StatementError("FLOW_MISMATCH");
   if (row.paidAt) throw new StatementError("ALREADY_PAID");
   if (row.evidenceStatus !== "PENDING" && row.evidenceStatus !== "REJECTED") throw new StatementError("NOT_SUBMITTABLE");
@@ -471,6 +473,7 @@ export async function submitTaxInvoiceEvidence(input: {
   if ((await findMissingPhotos(input.photoPaths)).length > 0) throw new StatementError("PHOTO_MISSING");
 
   const { vatAmount, payAmount } = computeAmounts(row.baseAmount, flow);
+  const taxDocType: TaxDocType = input.paper ? "PAPER_TAX_INVOICE" : "E_TAX_INVOICE";
   await prisma.settlementStatement.update({
     where: { id: row.id },
     data: {

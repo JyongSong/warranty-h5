@@ -422,6 +422,8 @@ function TaxInvoiceForm({
 }) {
   const router = useRouter();
   const [issueDate, setIssueDate] = useState(writeDate);
+  // 종이로 발행했는지: 본사가 원본을 기다려야 하는지 알 수 있게 정산서에 남긴다.
+  const [paper, setPaper] = useState(s.taxDocType === "PAPER_TAX_INVOICE");
   const { photos, compressing, add, remove } = usePhotos(3);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -431,7 +433,7 @@ function TaxInvoiceForm({
     setError(null);
     try {
       const photoPaths = await uploadPhotos(s.id, photos);
-      const res = await submitTaxInvoiceAction({ statementId: s.id, photoPaths, issueDate });
+      const res = await submitTaxInvoiceAction({ statementId: s.id, photoPaths, issueDate, paper });
       if (!res.ok) setError(ERR[res.error] ?? ERR.DEFAULT);
       else router.refresh();
     } catch (e) {
@@ -459,6 +461,10 @@ function TaxInvoiceForm({
         <label style={{ display: "block" }}>
           <span style={ui.label}>발행한 세금계산서의 작성일자</span>
           <input type="date" style={ui.input} value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+        </label>
+        <label style={checkRow}>
+          <input type="checkbox" checked={paper} onChange={(e) => setPaper(e.target.checked)} style={{ width: 20, height: 20 }} />
+          <span>종이 세금계산서로 발행했어요 (원본을 본사로 보내 주세요)</span>
         </label>
       </div>
       <PhotoPicker
@@ -581,6 +587,17 @@ const lineRow: CSSProperties = {
 };
 const backLink: CSSProperties = { display: "inline-block", fontSize: 14, color: "#52525b", textDecoration: "none", marginBottom: 8 };
 const inlineLink: CSSProperties = { display: "block", marginTop: 6, fontWeight: 700, color: "inherit" };
+const checkRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  marginTop: 12,
+  fontSize: 14,
+  fontWeight: 600,
+  lineHeight: 1.5,
+  wordBreak: "keep-all",
+  cursor: "pointer",
+};
 const lateBox: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.6,

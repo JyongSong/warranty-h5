@@ -25,9 +25,9 @@ export default async function InstallerStatementPage({ params }: { params: Promi
     listStatementLines(statement.id),
     isPopbillTaxInvoiceEnabled().catch(() => false),
   ]);
-  // 전자세금계산서 기사만 앱 발행을 쓴다. 연동 상태는 화면 안내용이고 발행 때 팝빌에 다시 확인한다.
+  // 세금계산서 기사(전자·종이)면 앱 발행을 보여 준다. 연동 상태는 화면 안내용이고 발행 때 팝빌에 다시 확인한다.
   const popbill =
-    popbillEnabled && statement.taxDocType === "E_TAX_INVOICE"
+    popbillEnabled && statement.flow === "TAX"
       ? {
           ready:
             (

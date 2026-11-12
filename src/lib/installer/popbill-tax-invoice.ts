@@ -191,7 +191,8 @@ async function loadIssuable(installerId: string, statementId: string) {
   const info = row.installer.settlementInfo;
   if (!info || info.status !== "APPROVED") throw new PopbillTaxInvoiceError("SETTLEMENT_INFO_NOT_APPROVED");
   const taxDocType = row.taxDocType ?? info.taxDocType ?? null;
-  if (taxDocType !== "E_TAX_INVOICE") throw new PopbillTaxInvoiceError("FLOW_MISMATCH");
+  // 세금계산서 기사면 정산 정보가 전자·종이 어느 쪽이든 앱에서 전자로 발행할 수 있다.
+  if (flowOf(taxDocType) !== "TAX") throw new PopbillTaxInvoiceError("FLOW_MISMATCH");
   if (row.paidAt) throw new PopbillTaxInvoiceError("ALREADY_PAID");
   if (row.ntsConfirmNum) throw new PopbillTaxInvoiceError("ALREADY_ISSUED");
   if (row.evidenceStatus !== "PENDING" && row.evidenceStatus !== "REJECTED") {
@@ -203,12 +204,13 @@ async function loadIssuable(installerId: string, statementId: string) {
 type Issuable = Awaited<ReturnType<typeof loadIssuable>>;
 
 async function markIssued(s: Issuable, ntsConfirmNum: string | null) {
-  const { vatAmount, payAmount } = computeAmounts(s.row.baseAmount, flowOf(s.taxDocType));
+  const { vatAmount, payAmount } = computeAmounts(s.row.baseAmount, "TAX");
   const now = new Date();
   await prisma.settlementStatement.update({
     where: { id: s.row.id },
     data: {
-      taxDocType: s.taxDocType,
+      // 앱 발행은 항상 전자세금계산서
+      taxDocType: "E_TAX_INVOICE",
       vatAmount,
       payAmount,
       evidenceStatus: "CONFIRMED",
