@@ -49,7 +49,7 @@ export const CJ_ORDER_PUSH_JOB: CronJobDefinition = {
 // 별도 켜고 끄는 스위치 없이 정산 공개(installer.settlement.launched)를 따른다.
 export const SETTLEMENT_REMINDERS_CRON_JOB: CronJobDefinition = {
   key: "settlement.reminders",
-  label: "기사 정산 알림",
+  label: "기사 정산 알림·국세청 전송 확인",
   path: "/api/internal/cron/settlement/reminders",
   schedule: "0 0 * * *",
   enabledSettingKey: "installer.settlement.launched",

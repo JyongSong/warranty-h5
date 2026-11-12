@@ -55,6 +55,7 @@ const ISSUE_ERR: Record<string, string> = {
   ALREADY_ISSUED: "이미 발행된 정산서입니다. 새로고침해 주세요.",
   IN_PROGRESS: "발행이 진행 중입니다. 잠시 후 새로고침해 주세요.",
   TOO_EARLY: "작성일자(정산 월 말일)가 지나야 발행할 수 있습니다. 다음 달 1일부터 발행해 주세요.",
+  POINTS_SHORT: "본사 사정으로 지금 발행할 수 없습니다. 본사에 문의해 주세요.",
   UNCERTAIN: "발행 결과를 확인하지 못했습니다. 잠시 후 다시 눌러 주세요(중복 발행되지 않습니다).",
   NOT_SUBMITTABLE: ERR.NOT_SUBMITTABLE,
   ALREADY_PAID: ERR.ALREADY_PAID,
@@ -323,6 +324,14 @@ function IssuedInvoiceCard({ s }: { s: StatementView }) {
       <div style={ui.label}>발행한 전자세금계산서</div>
       <CopyRow label="국세청 승인번호" value={s.ntsConfirmNum} />
       {s.invoiceIssueDate ? <CopyRow label="발행일" value={s.invoiceIssueDate} /> : null}
+      <p style={{ ...hint, marginTop: 4 }}>
+        국세청 전송:{" "}
+        {s.ntsSendState === "SUCCESS"
+          ? "완료"
+          : s.ntsSendState === "FAILED"
+            ? "실패 · 본사에서 확인하고 있습니다"
+            : "대기 (발행 다음 날 오후 3시에 자동 전송)"}
+      </p>
       <button type="button" style={{ ...ui.secondaryButton, marginTop: 8 }} onClick={view}>
         세금계산서 보기
       </button>

@@ -7,6 +7,7 @@ import { getAgentProxyBaseFeeDefault, getGlobalDefaults } from "@/lib/installati
 import { listInstallerRateOverrides } from "@/lib/installation/settlement/installer-rates";
 import SettlementClient from "./SettlementClient";
 import StatementsTab from "./StatementsTab";
+import { getPopbillPointsSummary } from "@/lib/installation/settlement/popbill-admin";
 import {
   currentYm,
   earlierUnissued,
@@ -49,10 +50,11 @@ export default async function BackofficeInstallerSettlementPage({
     // 기본은 지난달: 이번 달은 아직 마감 전이라 발행할 수 없다.
     const ym = sp.ym && isValidYm(sp.ym) ? sp.ym : shiftYm(currentYm(), -1);
     // 같은 달을 나눠 발행할 수 있으므로 발행된 정산서와 아직 남은 미리보기를 함께 보여 준다.
-    const [statements, preview, earlier] = await Promise.all([
+    const [statements, preview, earlier, points] = await Promise.all([
       listMonthStatements(ym),
       previewMonth(ym),
       earlierUnissued(ym),
+      getPopbillPointsSummary(),
     ]);
     return (
       <div className="p-6">
@@ -64,6 +66,7 @@ export default async function BackofficeInstallerSettlementPage({
           preview={preview}
           launched={launched}
           earlier={earlier}
+          points={points}
         />
       </div>
     );

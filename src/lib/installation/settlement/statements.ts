@@ -283,6 +283,11 @@ export type StatementView = {
   ntsConfirmNum: string | null;
   /** 팝빌 발행 마지막 실패 메시지 */
   popbillError: string | null;
+  /** 국세청 전송 결과(앱 발행 건): SENDING | SUCCESS | FAILED */
+  ntsSendState: string | null;
+  ntsSendError: string | null;
+  /** 본사가 취소한 앱 발행 세금계산서 이력(최근이 끝) */
+  popbillHistory: Array<{ type: string; ntsConfirmNum: string; modifyNtsConfirmNum?: string | null; reason: string; at: string }>;
   paidAt: string | null;
   /** 기사 정산 정보 상태: 없음이면 null */
   infoStatus: string | null;
@@ -351,6 +356,9 @@ async function toView(row: StatementRow, withPhotos: boolean): Promise<Statement
     evidenceRejectReason: row.evidenceRejectReason,
     ntsConfirmNum: row.ntsConfirmNum,
     popbillError: row.popbillError,
+    ntsSendState: row.ntsSendState,
+    ntsSendError: row.ntsSendError,
+    popbillHistory: Array.isArray(row.popbillHistory) ? (row.popbillHistory as StatementView["popbillHistory"]) : [],
     paidAt: row.paidAt?.toISOString() ?? null,
     infoStatus: info?.status ?? null,
     bankName: info?.bankName ?? null,

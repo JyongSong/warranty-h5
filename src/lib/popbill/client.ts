@@ -165,12 +165,16 @@ export type IssueInput = {
   userId?: string | null;
   /** 지연발행 허용(작성일자 다음 달 10일이 지난 경우). false 면 팝빌이 -11002014 로 거절한다. */
   allowLate?: boolean;
+  /** 수정세금계산서: 사유 코드(1 = 기재사항 착오·정정)와 당초 국세청 승인번호. 금액은 음수로 넘긴다. */
+  modify?: { code: number; orgNtsConfirmNum: string };
 };
 
 /** 팝빌 오류 코드 */
 export const POPBILL_CODE = {
   LATE_ISSUE: -11002014,
   FUTURE_WRITE_DATE: -11002009,
+  /** 당초 세금계산서가 아직 국세청 전송 전이라 수정세금계산서를 낼 수 없음(→ 발행취소를 써야 함) */
+  NOT_TRANSMITTED: -11001056,
 } as const;
 
 export type IssueResult = { ntsConfirmNum: string | null; issueDT: string | null };
@@ -190,6 +194,7 @@ export async function registIssue(input: IssueInput): Promise<IssueResult> {
     taxTotal: String(input.tax),
     totalAmount: String(total),
     remark1: input.remark ?? "",
+    ...(input.modify ? { modifyCode: input.modify.code, orgNTSConfirmNum: input.modify.orgNtsConfirmNum } : {}),
     invoicerMgtKey: input.mgtKey,
     invoicerCorpNum: digits(s.corpNum),
     invoicerCorpName: s.corpName,
@@ -230,22 +235,77 @@ export async function registIssue(input: IssueInput): Promise<IssueResult> {
   return { ntsConfirmNum: r.ntsConfirmNum ?? null, issueDT: r.issueDT ?? null };
 }
 
-export type InvoiceInfo = { stateCode: number; ntsConfirmNum: string | null; issueDT: string | null };
+/**
+ * 팝빌 문서 상태 코드: 1xx 임시저장 · 2xx 승인대기 · 3xx 발행완료(304 국세청 전송완료, 305 전송실패) · 4xx 거부 · 5xx 취소 · 6xx 발행취소.
+ * 304/305 는 팝빌 문서 기준이다. 국세청 전송이 실제로 일어난 건으로 아직 확인하지 못했다.
+ */
+export const NTS_STATE = { SENT: 304, SEND_FAILED: 305 } as const;
+
+export type InvoiceInfo = {
+  mgtKey: string | null;
+  stateCode: number;
+  ntsConfirmNum: string | null;
+  issueDT: string | null;
+  writeDate: string | null;
+  supplyCostTotal: number;
+  taxTotal: number;
+  /** 국세청 전송 일시(yyyyMMddHHmmss) */
+  ntsSendDT: string | null;
+  /** 국세청 전송 결과 일시 */
+  ntsResultDT: string | null;
+  /** 국세청 전송 실패 코드 */
+  ntsSendErrCode: string | null;
+};
+
+type RawInfo = {
+  invoicerMgtKey?: string;
+  stateCode: number;
+  ntsconfirmNum?: string;
+  issueDT?: string;
+  writeDate?: string;
+  supplyCostTotal?: string;
+  taxTotal?: string;
+  ntssendDT?: string;
+  ntsresultDT?: string;
+  ntssendErrCode?: string;
+};
+
+function toInfo(r: RawInfo): InvoiceInfo {
+  return {
+    mgtKey: r.invoicerMgtKey ?? null,
+    stateCode: r.stateCode,
+    ntsConfirmNum: r.ntsconfirmNum ?? null,
+    issueDT: r.issueDT ?? null,
+    writeDate: r.writeDate ?? null,
+    supplyCostTotal: Number(r.supplyCostTotal ?? 0),
+    taxTotal: Number(r.taxTotal ?? 0),
+    ntsSendDT: r.ntssendDT ?? null,
+    ntsResultDT: r.ntsresultDT ?? null,
+    ntsSendErrCode: r.ntssendErrCode ?? null,
+  };
+}
 
 /** 문서번호로 상태 조회. 없는 문서면 null */
 export async function getInvoiceInfo(corpNum: string, mgtKey: string): Promise<InvoiceInfo | null> {
   try {
-    const r = await call<{ stateCode: number; ntsconfirmNum?: string; issueDT?: string }>(
-      "getInfo",
-      digits(corpNum),
-      popbill.MgtKeyType.SELL,
-      mgtKey,
-    );
-    return { stateCode: r.stateCode, ntsConfirmNum: r.ntsconfirmNum ?? null, issueDT: r.issueDT ?? null };
+    const r = await call<RawInfo>("getInfo", digits(corpNum), popbill.MgtKeyType.SELL, mgtKey, "");
+    return toInfo(r);
   } catch (error) {
     if (error instanceof PopbillError && error.code !== -2 && error.code !== -3 && error.code !== -1) return null;
     throw error;
   }
+}
+
+/** 여러 문서 상태 한 번에(최대 1000건). 없는 문서는 결과에서 빠진다. */
+export async function getInvoiceInfos(corpNum: string, mgtKeys: string[]): Promise<InvoiceInfo[]> {
+  if (mgtKeys.length === 0) return [];
+  const r = await call<RawInfo[]>("getInfos", digits(corpNum), popbill.MgtKeyType.SELL, mgtKeys.slice(0, 1000), "");
+  return r.map(toInfo);
+}
+
+/** 발행취소. 국세청 전송 전에만 된다. 수수료가 다시 나가지 않는다. */
+export async function cancelIssue(corpNum: string, mgtKey: string, memo: string): Promise<void> {
+  await call("cancelIssue", digits(corpNum), popbill.MgtKeyType.SELL, mgtKey, memo.slice(0, 200), "");
 }
 
 /** 세금계산서 보기 팝업 URL(공급자 기준). 30초 안에 열어야 한다. */
@@ -253,9 +313,19 @@ export async function getInvoiceViewUrl(corpNum: string, mgtKey: string): Promis
   return call<string>("getPopUpURL", digits(corpNum), popbill.MgtKeyType.SELL, mgtKey);
 }
 
-/** 파트너 포인트 잔액 */
+/** 파트너 포인트 잔액(우리 LinkID 아래 아무 회원 사업자번호로 조회) */
 export async function getPartnerBalance(anyMemberCorpNum: string): Promise<number> {
-  return call<number>("getPartnerBalance", digits(anyMemberCorpNum));
+  return Number(await call<number | string>("getPartnerBalance", digits(anyMemberCorpNum)));
+}
+
+/** 파트너 포인트 충전 팝업 URL(30초 유효) */
+export async function getPartnerChargeUrl(anyMemberCorpNum: string): Promise<string> {
+  return call<string>("getPartnerURL", digits(anyMemberCorpNum), "CHRG");
+}
+
+/** 정발행 1건 단가(원) */
+export async function getUnitCost(corpNum: string): Promise<number> {
+  return Number(await call<number | string>("getUnitCost", digits(corpNum)));
 }
 
 /** "20270706145209"(KST) → Date */

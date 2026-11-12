@@ -17,6 +17,7 @@ import {
   markPaid,
   reviewEvidence,
 } from "@/lib/installation/settlement/statements";
+import { getPopbillChargeUrl, voidStatementInvoice } from "@/lib/installation/settlement/popbill-admin";
 
 export type SettlementActionResult = { ok: true } | { ok: false; error: string };
 
@@ -160,5 +161,35 @@ export async function markPaidAction(statementIds: string[]): Promise<Settlement
     return { ok: true, count };
   } catch (error) {
     return failStatement(error);
+  }
+}
+
+// ── 팝빌 ─────────────────────────────────────────────────────────────────
+
+/** 앱에서 발행한 세금계산서 취소(국세청 전송 전 발행취소 / 후 수정세금계산서) → 정산서 반려 */
+export async function voidStatementInvoiceAction(input: {
+  statementId: string;
+  reason: string;
+}): Promise<SettlementActionResult & { method?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    const r = await voidStatementInvoice({ ...input, adminId: auth.adminId });
+    return { ok: true, method: r.method };
+  } catch (error) {
+    return failStatement(error);
+  }
+}
+
+/** 팝빌 파트너 포인트 충전 팝업 URL(30초 유효) */
+export async function getPopbillChargeUrlAction(): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    return { ok: true, url: await getPopbillChargeUrl() };
+  } catch (error) {
+    if (error instanceof StatementError) return { ok: false, error: error.message };
+    console.error("[action/settlement/popbill-charge]", error);
+    return { ok: false, error: "POPBILL_UNAVAILABLE" };
   }
 }

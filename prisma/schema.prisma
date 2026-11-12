@@ -1010,12 +1010,21 @@ model SettlementStatement {
   ntsConfirmNum          String?          @map("nts_confirm_num")
   popbillIssuedAt        DateTime?        @map("popbill_issued_at") @db.Timestamptz(6)
   popbillError           String?          @map("popbill_error")
+  // 국세청 전송 결과(팝빌이 발행 다음 날 15시에 전송). 매일 cron 이 팝빌에 물어 채운다.
+  // SENDING(전송 전·중) | SUCCESS(전송 완료) | FAILED(전송 실패) | CANCELED(팝빌에서 발행취소됨). 앱 발행 건만 해당.
+  ntsSendState           String?          @map("nts_send_state")
+  ntsSendError           String?          @map("nts_send_error")
+  ntsSentAt              DateTime?        @map("nts_sent_at") @db.Timestamptz(6)
+  ntsCheckedAt           DateTime?        @map("nts_checked_at") @db.Timestamptz(6)
+  // 본사가 취소한 앱 발행 세금계산서 이력: [{ type: CANCEL|MODIFY, mgtKey, ntsConfirmNum, modifyMgtKey?, modifyNtsConfirmNum?, reason, adminId, at }]
+  popbillHistory         Json             @default("[]") @map("popbill_history")
   createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([ym, installerId, seq])
   @@index([installerId])
   @@index([periodId])
+  @@index([ntsSendState])
   @@map("settlement_statements")
 }
 

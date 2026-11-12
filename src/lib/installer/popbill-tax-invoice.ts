@@ -324,6 +324,8 @@ export async function issueStatementTaxInvoice(input: {
     });
     console.error("[popbill/issue]", s.row.id, message);
     if (pe?.code === POPBILL_CODE.LATE_ISSUE) throw new PopbillTaxInvoiceError("LATE_ISSUE", pe.message);
+    // 파트너 포인트 부족(본사 사정). 코드 대신 메시지로 알아본다.
+    if (pe && /포인트|잔액/.test(pe.message)) throw new PopbillTaxInvoiceError("POINTS_SHORT", pe.message);
     if (pe?.code === POPBILL_CODE.FUTURE_WRITE_DATE) throw new PopbillTaxInvoiceError("TOO_EARLY", pe.message);
     throw new PopbillTaxInvoiceError(uncertain ? "UNCERTAIN" : "POPBILL_FAILED", pe?.message);
   }
