@@ -448,7 +448,7 @@ function FragmentRow({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-zinc-500">
                   {s.flow === "TAX"
-                    ? "홈택스 매입 내역 또는 원본으로 금액(공급가액·세액)을 확인하세요."
+                    ? "홈택스 매입 내역 또는 사진으로 금액(공급가액·세액)을 확인하세요."
                     : "홈택스에서 승인번호·금액을 확인하세요."}
                 </span>
                 <button className={primaryBtn} disabled={pending} onClick={() => onReview(true)}>

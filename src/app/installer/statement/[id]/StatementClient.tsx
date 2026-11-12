@@ -422,7 +422,7 @@ function TaxInvoiceForm({
 }) {
   const router = useRouter();
   const [issueDate, setIssueDate] = useState(writeDate);
-  // 종이로 발행했는지: 본사가 원본을 기다려야 하는지 알 수 있게 정산서에 남긴다.
+  // 종이로 발행했는지: 홈택스 매입 내역에 안 잡히는 건이라 본사가 구분할 수 있게 정산서에 남긴다(원본은 받지 않는다).
   const [paper, setPaper] = useState(s.taxDocType === "PAPER_TAX_INVOICE");
   const { photos, compressing, add, remove } = usePhotos(3);
   const [busy, setBusy] = useState(false);
@@ -454,7 +454,7 @@ function TaxInvoiceForm({
         <CopyRow label="공급가액" value={String(s.baseAmount)} />
         <CopyRow label="세액 (10%)" value={String(s.vatAmount)} />
         <CopyRow label="합계" value={String(s.payAmount)} />
-        <p style={hint}>홈택스(전자) 또는 종이 세금계산서 모두 됩니다. 종이 세금계산서는 원본을 본사로 보내 주세요.</p>
+        <p style={hint}>홈택스(전자) 또는 종이 세금계산서 모두 됩니다. 사진만 올려 주시면 되고 원본은 보내지 않아도 됩니다.</p>
       </div>
 
       <div style={ui.card}>
@@ -464,7 +464,7 @@ function TaxInvoiceForm({
         </label>
         <label style={checkRow}>
           <input type="checkbox" checked={paper} onChange={(e) => setPaper(e.target.checked)} style={{ width: 20, height: 20 }} />
-          <span>종이 세금계산서로 발행했어요 (원본을 본사로 보내 주세요)</span>
+          <span>종이 세금계산서로 발행했어요</span>
         </label>
       </div>
       <PhotoPicker

@@ -14,6 +14,10 @@
     {
       "path": "/api/internal/cron/send-surveys",
       "schedule": "0 6 * * 1-5"
+    },
+    {
+      "path": "/api/internal/cron/settlement/reminders",
+      "schedule": "0 0 * * *"
     }
   ]
 }
