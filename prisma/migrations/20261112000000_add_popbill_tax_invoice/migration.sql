@@ -18,6 +18,8 @@ DO $$ BEGIN
   ALTER TABLE "installer_popbill_links" ADD CONSTRAINT "installer_popbill_links_installer_id_fkey"
     FOREIGN KEY ("installer_id") REFERENCES "installers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- 앱은 Prisma(서버)로만 접근한다. anon 키로 직접 읽히지 않게 막는다.
+ALTER TABLE IF EXISTS "installer_popbill_links" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "settlement_statements" ADD COLUMN IF NOT EXISTS "popbill_mgt_key" TEXT;
 ALTER TABLE "settlement_statements" ADD COLUMN IF NOT EXISTS "popbill_corp_num" TEXT;
