@@ -1,9 +1,7 @@
 import { buildBackofficeNextPath, type BackofficeSearchParams } from "@/lib/backoffice/route";
 import { redirect } from "next/navigation";
-import type {
-  InstallationOrderSearchCondition,
-  InstallationOrderSearchField,
-} from "@/lib/installation/orders/views/orders";
+import type { InstallationOrderSearchCondition } from "@/lib/installation/orders/views/orders";
+import { parseInstallationOrderSearchCondition } from "@/lib/installation/orders/views/search-params";
 import { InstallationOrderListView } from "../installations/views";
 
 interface PageProps {
@@ -84,78 +82,15 @@ function normalizeInstallationOrderTableSearchParams(
 function normalizeInstallationOrderSearchCondition(
   searchParams: BackofficeSearchParams,
 ): InstallationOrderSearchCondition | undefined {
-  const field = normalizeInstallationOrderSearchField(searchParams.searchField);
-  if (!field) {
-    return getSingleSearchParam(searchParams.searchField)
-      ? undefined
-      : { field: "orderDate", ...getDefaultOrderDateRange() };
+  if (!getSingleSearchParam(searchParams.searchField)) {
+    return { field: "orderDate", ...getDefaultOrderDateRange() };
   }
-
-  if (field === "desiredInstallDate" || field === "orderDate") {
-    const from = getDateOnlySearchParam(searchParams.searchFrom);
-    const to = getDateOnlySearchParam(searchParams.searchTo);
-    if (!from || !to) return undefined;
-    if (from > to) return undefined;
-    return { field, ...(from ? { from } : {}), ...(to ? { to } : {}) };
-  }
-
-  if (field === "installerDateRange") {
-    const keyword = getSingleSearchParam(searchParams.searchKeyword);
-    const from = getDateOnlySearchParam(searchParams.searchFrom);
-    const to = getDateOnlySearchParam(searchParams.searchTo);
-    if (!keyword || !from || !to) return undefined;
-    if (from > to) return undefined;
-    return { field, keyword, from, to };
-  }
-
-  const keyword = getSingleSearchParam(searchParams.searchKeyword);
-  if (!keyword) return undefined;
-  return { field, keyword };
-}
-
-function normalizeInstallationOrderSearchField(value: string | string[] | undefined): InstallationOrderSearchField | null {
-  const field = getSingleSearchParam(value);
-  if (
-    field === "desiredInstallDate" ||
-    field === "customerName" ||
-    field === "customerPhone" ||
-    field === "orderNumber" ||
-    field === "installerName" ||
-    field === "installerPhone" ||
-    field === "orderDate" ||
-    field === "installerDateRange"
-  ) {
-    return field;
-  }
-
-  return null;
+  return parseInstallationOrderSearchCondition(searchParams);
 }
 
 function getSingleSearchParam(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0]?.trim() ?? "";
   return value?.trim() ?? "";
-}
-
-function getDateOnlySearchParam(value: string | string[] | undefined) {
-  const singleValue = getSingleSearchParam(value);
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(singleValue);
-  if (!match) return null;
-
-  const [, yearText, monthText, dayText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (Number.isNaN(date.getTime())) return null;
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return singleValue;
 }
 
 function getDefaultOrderDateRange(now = new Date()) {
