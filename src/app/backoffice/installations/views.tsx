@@ -18,6 +18,7 @@ import {
   countInstallationOrderStatuses,
   listInstallationOrderStatuses,
   type InstallationOrderSearchCondition,
+  type InstallationOrderSearchField,
   type InstallationOrderStatusView,
 } from "@/lib/installation/orders/views/orders";
 import AssignmentReviewList, {
@@ -37,6 +38,7 @@ type InstallationOrderListViewProps = {
   title?: string;
   showSearchControls?: boolean;
   searchVariant?: "fields" | "unified";
+  searchFieldOptions?: InstallationOrderSearchField[];
   showStatusFilters?: boolean;
   requireSearchCondition?: boolean;
   emptyMessage?: string;
@@ -54,6 +56,7 @@ export async function InstallationOrderListView({
   title,
   showSearchControls,
   searchVariant,
+  searchFieldOptions,
   showStatusFilters,
   requireSearchCondition = false,
   emptyMessage,
@@ -71,9 +74,10 @@ export async function InstallationOrderListView({
       ? Promise.all(
           statusFilterItems.map(async (item) => ({
             statusView: item.statusView,
+            // 검색 조건은 지금 보고 있는 탭에만 건다. 다른 탭 숫자는 검색과 상관없이 그대로 보여준다.
             count: await countInstallationOrderStatuses({
               query,
-              searchCondition,
+              searchCondition: item.statusView === statusView ? searchCondition : undefined,
               statusView: item.statusView,
               ...statusChangedAtRange,
             }),
@@ -201,6 +205,7 @@ export async function InstallationOrderListView({
       title={title}
       showSearchControls={showSearchControls}
       searchVariant={searchVariant}
+      searchFieldOptions={searchFieldOptions}
       showStatusFilters={showStatusFilters}
       emptyMessage={emptyMessage}
       pagination={buildPaginationModel(basePath, searchParams, tableParams, totalItems, totalPages)}

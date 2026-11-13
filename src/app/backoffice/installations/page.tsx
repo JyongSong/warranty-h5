@@ -1,5 +1,10 @@
 import { buildBackofficeNextPath, type BackofficeSearchParams } from "@/lib/backoffice/route";
-import type { InstallationOrderStatusView } from "@/lib/installation/orders/views/orders";
+import type {
+  InstallationOrderSearchCondition,
+  InstallationOrderSearchField,
+  InstallationOrderStatusView,
+} from "@/lib/installation/orders/views/orders";
+import { parseInstallationOrderSearchCondition } from "@/lib/installation/orders/views/search-params";
 import { redirect } from "next/navigation";
 import { InstallationOrderListView } from "./views";
 
@@ -28,10 +33,19 @@ export default async function InstallationOrdersPage({ searchParams }: PageProps
     );
   }
 
-  const tableSearchParams = normalizeInstallationOrderTableSearchParams(resolvedSearchParams, statusView);
+  // 조건 검색은 설치 완료 탭에서만 쓴다(완료 건이 계속 쌓이므로). 다른 탭은 지금처럼 전체를 보여준다.
+  const searchEnabled = statusView === "completed";
+  const searchCondition = searchEnabled ? parseInstallationOrderSearchCondition(resolvedSearchParams) : undefined;
+  const tableSearchParams = withSearchConditionParams(
+    normalizeInstallationOrderTableSearchParams(resolvedSearchParams, statusView),
+    searchCondition,
+  );
   const nextPath = buildBackofficeNextPath(
     "/backoffice/installations",
-    normalizeInstallationOrderReturnSearchParams(resolvedSearchParams, statusView),
+    withSearchConditionParams(
+      normalizeInstallationOrderReturnSearchParams(resolvedSearchParams, statusView),
+      searchCondition,
+    ),
   );
 
   const statusFilterItems: Array<{ statusView: InstallationOrderStatusView; label: string }> = [
@@ -47,6 +61,7 @@ export default async function InstallationOrdersPage({ searchParams }: PageProps
     { statusView: "waitingInstallerResponse", label: "기사 응답 대기" },
     { statusView: "assigned", label: "기사 배정 완료" },
     { statusView: "waitingHqReview", label: "완료 검수 대기" },
+    { statusView: "completionRejected", label: "검수 반려" },
     { statusView: "completed", label: "설치 완료" },
   ];
 
@@ -54,15 +69,42 @@ export default async function InstallationOrdersPage({ searchParams }: PageProps
     <InstallationOrderListView
       basePath="/backoffice/installations"
       query=""
-      searchCondition={undefined}
+      searchCondition={searchCondition}
       nextPath={nextPath}
       searchParams={tableSearchParams}
-      showSearchControls={false}
+      showSearchControls={searchEnabled}
+      searchFieldOptions={searchEnabled ? COMPLETED_SEARCH_FIELDS : undefined}
+      emptyMessage={searchCondition ? "검색 결과가 없습니다." : undefined}
       statusFilterItems={statusFilterItems}
       statusView={statusView}
       title="설치 업무 큐"
     />
   );
+}
+
+const COMPLETED_SEARCH_FIELDS: InstallationOrderSearchField[] = [
+  "completedDate",
+  "orderNumber",
+  "customerName",
+  "customerPhone",
+  "installerName",
+  "installerPhone",
+  "orderDate",
+  "desiredInstallDate",
+];
+
+function withSearchConditionParams(
+  searchParams: BackofficeSearchParams,
+  condition: InstallationOrderSearchCondition | undefined,
+) {
+  if (!condition) return searchParams;
+  return {
+    ...searchParams,
+    searchField: condition.field,
+    ...(condition.keyword ? { searchKeyword: condition.keyword } : {}),
+    ...(condition.from ? { searchFrom: condition.from } : {}),
+    ...(condition.to ? { searchTo: condition.to } : {}),
+  };
 }
 
 function sleep(ms: number) {
@@ -123,6 +165,7 @@ function normalizeInstallationOrderStatusView(value: string | string[] | undefin
     statusView === "waitingAdminReview" ||
     statusView === "waitingInstallerResponse" ||
     statusView === "assigned" ||
+    statusView === "completionRejected" ||
     statusView === "waitingHqReview" ||
     statusView === "completed"
   ) {

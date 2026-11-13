@@ -121,6 +121,7 @@ const SEARCH_FIELD_OPTIONS: Array<{ field: InstallationOrderSearchField; label: 
   { field: "installerName", label: "기사이름" },
   { field: "installerPhone", label: "기사전화번호" },
   { field: "installerDateRange", label: "기사+기간" },
+  { field: "completedDate", label: "완료일 범위" },
 ];
 
 type InlineSearchDateRange = {
@@ -141,6 +142,7 @@ export default function InstallationOrderList({
   pagination,
   showSearchControls = true,
   searchVariant = "fields",
+  searchFieldOptions,
   showStatusFilters = true,
   emptyMessage = "표시할 설치 주문이 없습니다.",
 }: {
@@ -157,6 +159,8 @@ export default function InstallationOrderList({
   showSearchControls?: boolean;
   /** "fields" = 검색 조건 선택형, "unified" = 입력칸 하나로 주문번호/출고번호/고객명/전화번호 통합 검색 */
   searchVariant?: "fields" | "unified";
+  /** 검색 조건 선택지를 이 순서로 제한한다. 없으면 기본 목록(완료일 범위 제외). */
+  searchFieldOptions?: InstallationOrderSearchField[];
   showStatusFilters?: boolean;
   emptyMessage?: string;
 }) {
@@ -754,33 +758,9 @@ export default function InstallationOrderList({
           }
           cellClassName="align-top px-4 py-3 text-zinc-600"
           renderBeforeTable={(columnControls) => (
-            <div className="mb-5">
-              {showSearchControls ? (
-                <div className="@container">
-                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
-                    <div className="w-full min-w-0 flex-1">
-                      {searchVariant === "unified" ? (
-                        <InstallationOrderUnifiedSearchForm
-                          basePath={basePath}
-                          pageSize={pagination?.pageSize}
-                          searchQuery={searchQuery}
-                        />
-                      ) : (
-                        <InstallationOrderInlineSearchForm
-                          basePath={basePath}
-                          historyDateRange={historyDateRange}
-                          pageSize={pagination?.pageSize}
-                          searchCondition={searchCondition}
-                          statusView={statusView}
-                        />
-                      )}
-                    </div>
-                    <div className="self-end">{columnControls}</div>
-                  </div>
-                </div>
-              ) : null}
+            <div className="mb-5 flex flex-col gap-4">
               {shouldRenderSecondaryControls ? (
-                <div className={`${showSearchControls ? "mt-4 " : ""}@container`}>
+                <div className="@container">
                   <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
                     <div className="w-full min-w-0 flex-1">
                       {showStatusFilters && statusFilterItems?.length ? (
@@ -801,6 +781,31 @@ export default function InstallationOrderList({
                       ) : null}
                     </div>
                     {!showSearchControls ? <div className="self-end">{columnControls}</div> : null}
+                  </div>
+                </div>
+              ) : null}
+              {showSearchControls ? (
+                <div className="@container">
+                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
+                    <div className="w-full min-w-0 flex-1">
+                      {searchVariant === "unified" ? (
+                        <InstallationOrderUnifiedSearchForm
+                          basePath={basePath}
+                          pageSize={pagination?.pageSize}
+                          searchQuery={searchQuery}
+                        />
+                      ) : (
+                        <InstallationOrderInlineSearchForm
+                          basePath={basePath}
+                          fieldOptions={searchFieldOptions}
+                          historyDateRange={historyDateRange}
+                          pageSize={pagination?.pageSize}
+                          searchCondition={searchCondition}
+                          statusView={statusView}
+                        />
+                      )}
+                    </div>
+                    <div className="self-end">{columnControls}</div>
                   </div>
                 </div>
               ) : null}
@@ -858,35 +863,43 @@ function InstallationOrderUnifiedSearchForm({
 
 function InstallationOrderInlineSearchForm({
   basePath,
+  fieldOptions,
   historyDateRange,
   pageSize,
   searchCondition,
   statusView,
 }: {
   basePath: string;
+  fieldOptions?: InstallationOrderSearchField[];
   historyDateRange?: HistoryDateRange;
   pageSize?: number;
   searchCondition?: InstallationOrderSearchCondition;
   statusView: InstallationOrderStatusView;
 }) {
-  const initialSelectedField = searchCondition?.field ?? "orderDate";
+  const options = fieldOptions
+    ? fieldOptions.flatMap((field) => SEARCH_FIELD_OPTIONS.filter((option) => option.field === field))
+    : SEARCH_FIELD_OPTIONS.filter((option) => option.field !== "completedDate");
+  const initialSelectedField = searchCondition?.field ?? options[0]?.field ?? "orderDate";
   const [selectedField, setSelectedField] = useState<InstallationOrderSearchField>(
     initialSelectedField,
   );
   const [dateRange, setDateRange] = useState<InlineSearchDateRange>(() =>
     getInitialInlineSearchDateRange(searchCondition, initialSelectedField),
   );
-  const isDateField = selectedField === "desiredInstallDate" || selectedField === "orderDate";
+  const isDateField =
+    selectedField === "desiredInstallDate" || selectedField === "orderDate" || selectedField === "completedDate";
   const isInstallerDateRange = selectedField === "installerDateRange";
-  const handleSearchFieldChange = useCallback(
-    (field: InstallationOrderSearchField) => {
-      setSelectedField(field);
-      if (field === "desiredInstallDate" || field === "orderDate" || field === "installerDateRange") {
-        setDateRange(getInitialInlineSearchDateRange(searchCondition, field));
-      }
-    },
-    [searchCondition],
-  );
+  const handleSearchFieldChange = (field: InstallationOrderSearchField) => {
+    setSelectedField(field);
+    if (
+      field === "desiredInstallDate" ||
+      field === "orderDate" ||
+      field === "installerDateRange" ||
+      field === "completedDate"
+    ) {
+      setDateRange(getInitialInlineSearchDateRange(searchCondition, field));
+    }
+  };
 
   return (
     <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3">
@@ -911,7 +924,7 @@ function InstallationOrderInlineSearchForm({
             onChange={(event) => handleSearchFieldChange(event.target.value as InstallationOrderSearchField)}
             className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-950"
           >
-            {SEARCH_FIELD_OPTIONS.map((option) => (
+            {options.map((option) => (
               <option key={option.field} value={option.field}>
                 {option.label}
               </option>
@@ -1016,49 +1029,76 @@ function InstallationOrderStatusViewTabs({
         ...activeStageTabs,
       ];
   const showStageTabs = stageTabs.length > 1;
+  const stageGroups = groupStageTabs(stageTabs);
+  const renderTab = (tab: (typeof stageTabs)[number], variant: "overview" | "stage") => (
+    <InstallationOrderStatusViewTab
+      key={tab.statusView}
+      activeStatusView={variant === "overview" ? overviewActiveStatusView : activeStatusView}
+      basePath={basePath}
+      pageSize={pageSize}
+      searchCondition={searchCondition}
+      searchQuery={searchQuery}
+      tab={tab}
+      variant={variant}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-2" aria-label="설치 주문 필터">
+    <div className="flex flex-col gap-3" aria-label="설치 주문 필터">
       {overviewTabs.length > 0 ? (
         <div
           className="inline-flex w-fit max-w-full overflow-x-auto rounded-lg bg-zinc-100 p-1"
           role="tablist"
           aria-label="보기"
         >
-          {overviewTabs.map((tab) => (
-            <InstallationOrderStatusViewTab
-              key={tab.statusView}
-              activeStatusView={overviewActiveStatusView}
-              basePath={basePath}
-              pageSize={pageSize}
-              searchCondition={searchCondition}
-              searchQuery={searchQuery}
-              tab={tab}
-            />
-          ))}
+          {overviewTabs.map((tab) => renderTab(tab, "overview"))}
         </div>
       ) : null}
       {showStageTabs ? (
-        <div
-          className="inline-flex w-fit max-w-full overflow-x-auto rounded-lg bg-zinc-100 p-1"
-          role="tablist"
-          aria-label="진행 단계"
-        >
-          {stageTabs.map((tab) => (
-            <InstallationOrderStatusViewTab
-              key={tab.statusView}
-              activeStatusView={activeStatusView}
-              basePath={basePath}
-              pageSize={pageSize}
-              searchCondition={searchCondition}
-              searchQuery={searchQuery}
-              tab={tab}
-            />
+        <div className="flex flex-wrap items-stretch gap-2" role="tablist" aria-label="진행 단계">
+          {stageGroups.map((group) => (
+            <div
+              key={group.key}
+              className="flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-2 pb-2 pt-1.5"
+            >
+              <span className="px-1 text-[11px] font-semibold tracking-wide text-zinc-400">{group.label || "\u00a0"}</span>
+              <div className="flex flex-wrap gap-1.5">{group.tabs.map((tab) => renderTab(tab, "stage"))}</div>
+            </div>
           ))}
         </div>
       ) : null}
     </div>
   );
+}
+
+// 진행 단계 탭을 흐름(고객 → 배정 → 시공 → 완료) 단위로 묶어 블록으로 보여준다.
+const STAGE_TAB_GROUPS: Array<{ key: string; label: string; statusViews: InstallationOrderStatusView[] }> = [
+  { key: "all", label: "", statusViews: ["active", "attention"] },
+  {
+    key: "customer",
+    label: "고객",
+    statusViews: ["customerInputSmsRequired", "waitingCustomerInput", "attentionCustomerInputSmsRequired"],
+  },
+  {
+    key: "dispatch",
+    label: "배정",
+    statusViews: ["preAssignment", "waitingAdminReview", "waitingInstallerResponse", "attentionAdminReview"],
+  },
+  { key: "work", label: "시공·검수", statusViews: ["assigned", "waitingHqReview", "completionRejected"] },
+  { key: "issue", label: "예외", statusViews: ["attentionIssueOnly"] },
+  { key: "done", label: "완료", statusViews: ["completed"] },
+];
+
+function groupStageTabs<T extends { statusView: InstallationOrderStatusView }>(tabs: T[]) {
+  const groups = STAGE_TAB_GROUPS.map((group) => ({
+    key: group.key,
+    label: group.label,
+    tabs: group.statusViews.flatMap((statusView) => tabs.filter((tab) => tab.statusView === statusView)),
+  }));
+  const grouped = new Set(STAGE_TAB_GROUPS.flatMap((group) => group.statusViews));
+  const rest = tabs.filter((tab) => !grouped.has(tab.statusView));
+  if (rest.length > 0) groups.push({ key: "other", label: "기타", tabs: rest });
+  return groups.filter((group) => group.tabs.length > 0);
 }
 
 function isAttentionStatusView(statusView: InstallationOrderStatusView) {
@@ -1093,6 +1133,7 @@ function InstallationOrderStatusViewTab({
   searchCondition,
   searchQuery,
   tab,
+  variant = "overview",
 }: {
   activeStatusView: InstallationOrderStatusView;
   basePath: string;
@@ -1100,6 +1141,7 @@ function InstallationOrderStatusViewTab({
   searchCondition?: InstallationOrderSearchCondition;
   searchQuery: string;
   tab: { statusView: InstallationOrderStatusView; label: string; count?: number; href?: string };
+  variant?: "overview" | "stage";
 }) {
   const isActive = activeStatusView === tab.statusView;
 
@@ -1109,11 +1151,19 @@ function InstallationOrderStatusViewTab({
       aria-current={isActive ? "page" : undefined}
       role="tab"
       aria-selected={isActive}
-      className={getStatusViewTabClassName(isActive)}
+      className={variant === "stage" ? getStageTabClassName(isActive) : getStatusViewTabClassName(isActive)}
     >
       <span>{tab.label}</span>
       {typeof tab.count === "number" ? (
-        <span className={getStatusViewTabCountClassName(isActive)}>{tab.count}</span>
+        <span
+          className={
+            variant === "stage"
+              ? getStageTabCountClassName(isActive, tab.count)
+              : getStatusViewTabCountClassName(isActive)
+          }
+        >
+          {tab.count}
+        </span>
       ) : null}
     </Link>
   );
@@ -1125,6 +1175,21 @@ function getStatusViewTabClassName(isActive: boolean) {
   }
 
   return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-zinc-600 transition hover:text-zinc-950";
+}
+
+function getStageTabClassName(isActive: boolean) {
+  if (isActive) {
+    return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-zinc-900 bg-zinc-900 px-3 text-sm font-semibold text-white shadow-sm";
+  }
+
+  return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-950";
+}
+
+function getStageTabCountClassName(isActive: boolean, count: number) {
+  const base = "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs tabular-nums";
+  if (isActive) return `${base} bg-white/20 text-white`;
+  if (count === 0) return `${base} bg-zinc-100 text-zinc-400`;
+  return `${base} bg-zinc-200 text-zinc-800`;
 }
 
 function getStatusViewTabCountClassName(isActive: boolean) {
@@ -1209,9 +1274,12 @@ export function getDefaultInlineSearchDateRange(
   field: InstallationOrderSearchField,
   now = new Date(),
 ): InlineSearchDateRange | undefined {
+  const today = new Date(`${getKstTodayDateString(now)}T00:00:00.000Z`);
+  if (field === "completedDate") {
+    return { from: formatUtcDateOnly(addUtcDays(today, -30)), to: formatUtcDateOnly(today) };
+  }
   if (field !== "desiredInstallDate") return undefined;
 
-  const today = new Date(`${getKstTodayDateString(now)}T00:00:00.000Z`);
   return {
     from: formatUtcDateOnly(today),
     to: formatUtcDateOnly(addUtcDays(today, 14)),

@@ -410,7 +410,7 @@ describe("InstallationOrderList", () => {
     expect(html).toContain('class="self-end"');
   });
 
-  it("places column controls beside search and before status filters and bulk actions", () => {
+  it("places status filters and bulk actions before search and column controls", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, {
         initialItems: [createItem()],
@@ -423,9 +423,10 @@ describe("InstallationOrderList", () => {
     );
 
     expect(html).not.toContain("조회 조건");
-    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 보기"));
-    expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("고객 문자 발송 필요"));
+    // 상태 탭이 먼저, 그 아래 검색(설치 완료 탭에서만 쓰는 조건 검색)과 컬럼 보기.
     expect(html.indexOf("고객 문자 발송 필요")).toBeLessThan(html.indexOf("선택 문자 발송"));
+    expect(html.indexOf("선택 문자 발송")).toBeLessThan(html.indexOf("검색 조건"));
+    expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 보기"));
     expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("컬럼 순서"));
     expect(html).toContain('class="@container"');
     expect(html).toContain("flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between");
@@ -477,7 +478,7 @@ describe("InstallationOrderList", () => {
     expect(html).toMatch(/<input(?=[^>]*name="searchKeyword")(?=[^>]*required="")[^>]*>/);
   });
 
-  it("places column controls beside search and before filters and the table", () => {
+  it("places status filters before search, column controls, and the table", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, {
         initialItems: [createItem()],
@@ -489,8 +490,8 @@ describe("InstallationOrderList", () => {
     );
 
     expect(html).not.toContain("조회 조건");
+    expect(html.indexOf("처리 필요/예외")).toBeLessThan(html.indexOf("검색 조건"));
     expect(html.indexOf("검색 조건")).toBeLessThan(html.indexOf("컬럼 보기"));
-    expect(html.indexOf("컬럼 보기")).toBeLessThan(html.indexOf("처리 필요/예외"));
     expect(html.indexOf("컬럼 순서")).toBeLessThan(html.indexOf("주문-주문번호"));
     expect(html).toContain('class="@container"');
     expect(html).toContain("flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between");
