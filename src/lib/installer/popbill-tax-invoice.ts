@@ -55,8 +55,10 @@ export async function isPopbillTaxInvoiceEnabled(): Promise<boolean> {
   return launched && enabled;
 }
 
+/** 팝빌 회원가입 화면. 첫 단계에서 회원유형(일반/연동)을 고르고 연동회원이면 링크아이디를 넣는다.
+ *  팝빌은 LinkID 를 미리 채운 전용 가입 링크를 제공하지 않는다(2026-11-13 1:1 문의 답변). */
 export function popbillSignupUrl(): string {
-  return isPopbillTest() ? "https://test.popbill.com" : "https://www.popbill.com";
+  return `${isPopbillTest() ? "https://test.popbill.com" : "https://www.popbill.com"}/App/SignUp`;
 }
 
 export function popbillLinkId(): string {
