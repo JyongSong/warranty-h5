@@ -30,8 +30,8 @@ import {
 import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
 import type { PartnerInstallItem } from "@/lib/installation/partner/install-items";
 
-// v4: 기본 열 순서 변경(희망일/시간·기사/브랜치 합침, 설치 품목 추가). 옛 저장 순서를 버린다.
-const TABLE_PREFS_KEY = "backoffice.installations.table.v4";
+// v5: 정산 금액 열을 주문번호 바로 오른쪽으로 옮김. 옛 저장 순서를 버린다.
+const TABLE_PREFS_KEY = "backoffice.installations.table.v5";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
 
 export type InstallationOrderListItem = {
@@ -506,6 +506,11 @@ export default function InstallationOrderList({
                   <span title="기사 앱 미설치 (문자로만 안내)">{label}</span>
                 )}
                 {branch ? <div className="truncate text-xs text-zinc-500" title={branch}>{branch}</div> : null}
+                {row.original.assignment.installerPhone ? (
+                  <div className="whitespace-nowrap text-xs tabular-nums text-zinc-500">
+                    {formatBackofficePhone(row.original.assignment.installerPhone)}
+                  </div>
+                ) : null}
               </div>
             );
           },
@@ -606,7 +611,7 @@ export default function InstallationOrderList({
         },
       ];
 
-      // 정산 금액은 설치 완료 탭에서만 보인다.
+      // 정산 금액은 완료 검수 대기(예상)·설치 완료(확정) 탭에서 보인다.
       const settlementAmountColumn: ColumnDef<InstallationOrderListItem> = {
           id: "settlementAmount",
           // 정렬은 숫자로, 표시는 확정/예상 구분해서.
@@ -670,14 +675,16 @@ export default function InstallationOrderList({
         },
       ];
 
-      // 기본 순서: 주문번호, 희망일/시간, 설치 주소, 설치 연락처, 기사/브랜치, 설치 품목,
-      // (설치 완료 탭만) 정산 금액, 그다음은 예전 순서 그대로.
+      // 기본 순서: 주문번호, (검수 대기·설치 완료 탭만) 정산 금액, 희망일/시간, 설치 주소, 설치 연락처,
+      // 기사/브랜치, 설치 품목, 그다음은 예전 순서 그대로.
+      // 반려 건은 정산 대상이 아니라 금액이 없으므로 뺀다.
+      const showSettlementAmount = statusView === "waitingHqReview" || statusView === "completed";
       const leadingColumns = [
         ...orderNumberColumns,
+        ...(showSettlementAmount ? [settlementAmountColumn] : []),
         ...installationColumns,
         assignedInstallerColumn,
         installItemsColumn,
-        ...(statusView === "completed" ? [settlementAmountColumn] : []),
         ...assignmentColumns,
         ...orderContextColumns,
         ...operationColumns,
