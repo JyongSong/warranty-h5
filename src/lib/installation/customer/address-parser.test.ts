@@ -43,6 +43,18 @@ describe("parseInstallationAddress", () => {
     expect(parseInstallationAddress("전남광주통합특별시")).toBeNull();
   });
 
+  it("세종특별자치시는 시군구 없이도 해석한다", () => {
+    expect(parseInstallationAddress("세종특별자치시 한누리대로 2130")).toEqual({
+      sido: "세종",
+      sigungu: "세종특별자치시",
+    });
+    expect(parseInstallationAddress("세종 조치원읍 군청로 93")).toEqual({
+      sido: "세종",
+      sigungu: "세종특별자치시",
+    });
+    expect(parseInstallationAddress("세종특별자치시")).toBeNull();
+  });
+
   it("returns null for unparseable addresses", () => {
     expect(parseInstallationAddress("주소 모름")).toBeNull();
     expect(parseInstallationAddress("서울 테헤란로 1")).toBeNull();
@@ -54,6 +66,15 @@ describe("splitInstallationSourceAddress", () => {
     expect(splitInstallationSourceAddress("전남광주통합특별시 북구 첨단과기로 123 101동")).toMatchObject({
       address1: "전남광주통합특별시 북구",
       address2: "첨단과기로 123 101동",
+    });
+  });
+
+  it("세종 주소는 시/도까지만 address1 로 나눈다", () => {
+    expect(splitInstallationSourceAddress("세종특별자치시 보람동 한누리대로 2130 101동 202호")).toMatchObject({
+      address1: "세종특별자치시",
+      address2: "보람동 한누리대로 2130 101동 202호",
+      addressMain: "세종특별자치시 보람동 한누리대로 2130",
+      addressDetail: "101동 202호",
     });
   });
 
