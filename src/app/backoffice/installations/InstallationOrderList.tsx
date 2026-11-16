@@ -31,8 +31,8 @@ import {
 import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
 import type { PartnerInstallItem } from "@/lib/installation/partner/install-items";
 
-// v5: 정산 금액 열을 주문번호 바로 오른쪽으로 옮김. 옛 저장 순서를 버린다.
-const TABLE_PREFS_KEY = "backoffice.installations.table.v5";
+// v6: v5 에서 탭을 오가며 정산 금액 열이 맨 끝으로 저장된 순서를 버린다.
+const TABLE_PREFS_KEY = "backoffice.installations.table.v6";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
 
 export type InstallationOrderListItem = {
