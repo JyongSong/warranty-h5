@@ -25,6 +25,7 @@ import type {
 } from "@/lib/installation/orders/views/orders";
 import {
   approveInstallationAssignmentsAction,
+  approveInstallationCompletionsAction,
   sendCustomerInputSmsForInstallationOrdersAction,
 } from "./actions";
 import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
@@ -170,7 +171,13 @@ export default function InstallationOrderList({
   const isTerminalView = statusView === "completed" || statusView === "cancelled";
   const showBulkCustomerInputSmsControls = statusView === "customerInputSmsRequired";
   const showBulkAssignmentApprovalControls = statusView === "waitingAdminReview";
-  const showBulkSelectionControls = showBulkCustomerInputSmsControls || showBulkAssignmentApprovalControls;
+  const showBulkCompletionApprovalControls = statusView === "waitingHqReview";
+  const showBulkSelectionControls =
+    showBulkCustomerInputSmsControls || showBulkAssignmentApprovalControls || showBulkCompletionApprovalControls;
+  // 주문 단위 선택은 문자 발송(고객 문자 발송 필요)과 완료 일괄 승인(완료 검수 대기)이 같이 쓴다.
+  const isOrderSelectable = showBulkCompletionApprovalControls
+    ? isCompletionApprovalSelectable
+    : isCustomerInputSmsSelectable;
   const lockedLeadingColumnIds = showBulkSelectionControls ? BULK_ACTION_LOCKED_LEADING_COLUMN_IDS : undefined;
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(() => new Set());
@@ -178,9 +185,11 @@ export default function InstallationOrderList({
   const [bulkAssignmentMessage, setBulkAssignmentMessage] = useState<string | null>(null);
   const [isBulkSmsPending, startBulkSmsTransition] = useTransition();
   const [isBulkAssignmentPending, startBulkAssignmentTransition] = useTransition();
+  const [bulkCompletionMessage, setBulkCompletionMessage] = useState<string | null>(null);
+  const [isBulkCompletionPending, startBulkCompletionTransition] = useTransition();
   const selectableOrderIds = useMemo(
-    () => initialItems.filter(isCustomerInputSmsSelectable).map((item) => item.id),
-    [initialItems],
+    () => initialItems.filter(isOrderSelectable).map((item) => item.id),
+    [initialItems, isOrderSelectable],
   );
   const selectableAssignmentIds = useMemo(
     () =>
@@ -279,6 +288,31 @@ export default function InstallationOrderList({
     });
   };
 
+  const approveBulkCompletions = () => {
+    if (selectedSelectableOrderIds.length === 0) return;
+    const confirmed = window.confirm(
+      `선택한 ${selectedSelectableOrderIds.length}건의 완료를 승인할까요?\n` +
+        "장거리·기타 청구·대행 출장비는 기사가 제출한 금액 그대로 승인됩니다. 금액을 고쳐야 하는 건은 상세에서 따로 승인하세요.",
+    );
+    if (!confirmed) return;
+
+    setBulkCompletionMessage(null);
+    startBulkCompletionTransition(async () => {
+      const result = await approveInstallationCompletionsAction({ orderIds: selectedSelectableOrderIds });
+      if (!result.ok) {
+        setBulkCompletionMessage(`일괄 승인 실패: ${result.error}`);
+        return;
+      }
+
+      setSelectedOrderIds(new Set());
+      setBulkCompletionMessage(
+        `일괄 승인 완료: 성공 ${result.approvedCount}건, 실패 ${result.failedCount}건` +
+          (result.failures.length > 0 ? ` (${result.failures.map((failure) => failure.error).join(", ")})` : ""),
+      );
+      router.refresh();
+    });
+  };
+
   const defaultSorting = useMemo<SortingState>(() => [{ id: "statusChangedAt", desc: true }], []);
   const columns = useMemo<ColumnDef<InstallationOrderListItem>[]>(
     () => {
@@ -299,10 +333,10 @@ export default function InstallationOrderList({
               <input
                 type="checkbox"
                 checked={allSelectableOrdersSelected}
-                disabled={selectableOrderIds.length === 0}
+                disabled={selectableOrderIds.length === 0 || isBulkCompletionPending}
                 onChange={(event) => toggleAllSelectableOrders(event.currentTarget.checked)}
                 className="h-4 w-4 rounded border-zinc-300"
-                aria-label="발송 가능한 주문 전체 선택"
+                aria-label={showBulkCompletionApprovalControls ? "승인 가능한 완료 전체 선택" : "발송 가능한 주문 전체 선택"}
               />
             )}
           </label>
@@ -333,13 +367,14 @@ export default function InstallationOrderList({
             );
           }
 
-          if (!isCustomerInputSmsSelectable(item)) return <span className="text-xs text-zinc-300">-</span>;
+          if (!isOrderSelectable(item)) return <span className="text-xs text-zinc-300">-</span>;
 
           return (
             <label className="inline-flex items-center justify-center">
               <input
                 type="checkbox"
                 checked={selectedOrderIds.has(item.id)}
+                disabled={isBulkCompletionPending}
                 onChange={(event) => toggleOrderSelection(item.id, event.currentTarget.checked)}
                 className="h-4 w-4 rounded border-zinc-300"
                 aria-label={`${item.erpOrderNo} 주문 선택`}
@@ -699,6 +734,8 @@ export default function InstallationOrderList({
        basePath,
        detailSearchQuery,
        isBulkAssignmentPending,
+       isBulkCompletionPending,
+       isOrderSelectable,
        isTerminalView,
        statusView,
        selectableAssignmentIds.length,
@@ -707,6 +744,7 @@ export default function InstallationOrderList({
        selectedInstallationId,
       selectedOrderIds,
       showBulkAssignmentApprovalControls,
+      showBulkCompletionApprovalControls,
       showBulkSelectionControls,
       toggleAllSelectableAssignments,
       toggleAllSelectableOrders,
@@ -741,10 +779,25 @@ export default function InstallationOrderList({
       {bulkAssignmentMessage ? <span className="text-xs font-semibold text-zinc-600">{bulkAssignmentMessage}</span> : null}
     </>
   ) : null;
+  const bulkCompletionAction = showBulkCompletionApprovalControls ? (
+    <>
+      <button
+        type="button"
+        onClick={approveBulkCompletions}
+        disabled={selectedSelectableOrderIds.length === 0 || isBulkCompletionPending}
+        className={getBackofficeButtonClass("primary")}
+      >
+        {isBulkCompletionPending ? "일괄 승인 중..." : `선택 완료 일괄 승인 (${selectedSelectableOrderIds.length})`}
+      </button>
+      {bulkCompletionMessage ? (
+        <span className="text-xs font-semibold text-zinc-600">{bulkCompletionMessage}</span>
+      ) : null}
+    </>
+  ) : null;
   const shouldRenderSecondaryControls =
     !showSearchControls ||
     Boolean(showStatusFilters && statusFilterItems?.length) ||
-    Boolean(bulkSmsAction || bulkAssignmentAction);
+    Boolean(bulkSmsAction || bulkAssignmentAction || bulkCompletionAction);
 
   return (
     <section>
@@ -780,10 +833,11 @@ export default function InstallationOrderList({
                           pageSize={pagination?.pageSize}
                         />
                       ) : null}
-                      {bulkSmsAction || bulkAssignmentAction ? (
+                      {bulkSmsAction || bulkAssignmentAction || bulkCompletionAction ? (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           {bulkSmsAction}
                           {bulkAssignmentAction}
+                          {bulkCompletionAction}
                         </div>
                       ) : null}
                     </div>
@@ -998,6 +1052,10 @@ function InstallationOrderInlineSearchForm({
 
 function isCustomerInputSmsSelectable(item: InstallationOrderListItem) {
   return item.status === "CUSTOMER_INPUT_SMS_REQUIRED" && !item.customerRequest;
+}
+
+function isCompletionApprovalSelectable(item: InstallationOrderListItem) {
+  return item.status === "WAITING_HQ_REVIEW";
 }
 
 function isAssignmentApprovalSelectable(item: InstallationOrderListItem) {

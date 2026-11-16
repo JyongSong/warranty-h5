@@ -267,6 +267,24 @@ describe("InstallationOrderList", () => {
     expect(html).toContain('aria-label="ISU20260700554 배정 선택"');
   });
 
+  it("shows bulk completion approval controls on the HQ review queue", () => {
+    const html = renderToStaticMarkup(
+      createElement(InstallationOrderList, {
+        statusView: "waitingHqReview",
+        initialItems: [
+          createItem({ id: "order-1", erpOrderNo: "ISU20261100001", status: "WAITING_HQ_REVIEW" }),
+          createItem({ id: "order-2", erpOrderNo: "ISU20261100002", status: "INSTALLER_ASSIGNED" }),
+        ],
+      }),
+    );
+
+    expect(html).toContain("선택 완료 일괄 승인 (0)");
+    expect(html).toContain('aria-label="승인 가능한 완료 전체 선택"');
+    expect(html).toContain('aria-label="ISU20261100001 주문 선택"');
+    expect(html).not.toContain('aria-label="ISU20261100002 주문 선택"');
+    expect(html).not.toContain("선택 문자 발송");
+  });
+
   it("does not show the source address as the install address while waiting for customer input", () => {
     const html = renderToStaticMarkup(
       createElement(InstallationOrderList, { initialItems: [createItem()] }),
