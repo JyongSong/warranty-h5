@@ -28,8 +28,13 @@ const PHONES = ["01011112222", "01033334444"];
 function lastReceived(hoursAgo: number) {
   statusFind.mockResolvedValue({ lastCalledAt: new Date(NOW.getTime() - hoursAgo * 3600_000) } as never);
 }
-function alerted(value: string | null) {
-  settingFind.mockResolvedValue((value === null ? null : { value }) as never);
+// backoffice_settings: 받는 번호(cj.orderPush.alertPhones)와 알림 상태 키
+function settings({ phones = PHONES.join(","), alertedAt = null }: { phones?: string | null; alertedAt?: string | null }) {
+  settingFind.mockImplementation((async ({ where }: { where: { key: string } }) => {
+    if (where.key === "cj.orderPush.alertPhones") return phones === null ? null : { value: phones };
+    if (where.key === CJ_PUSH_ALERT_STATE_KEY) return alertedAt === null ? null : { value: alertedAt };
+    return null;
+  }) as never);
 }
 
 describe("checkCjOrderPush", () => {
@@ -37,14 +42,14 @@ describe("checkCjOrderPush", () => {
 
   it("한 번도 안 들어왔으면 알리지 않는다", async () => {
     statusFind.mockResolvedValue(null);
-    expect(await checkCjOrderPush({ now: NOW, phones: PHONES })).toEqual({ state: "NEVER_RECEIVED" });
+    expect(await checkCjOrderPush({ now: NOW })).toEqual({ state: "NEVER_RECEIVED" });
     expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
   it("10시간 미만이면 아무것도 안 한다", async () => {
     lastReceived(9.9);
-    alerted(null);
-    const result = await checkCjOrderPush({ now: NOW, phones: PHONES });
+    settings({});
+    const result = await checkCjOrderPush({ now: NOW });
     expect(result).toMatchObject({ state: "OK", hoursSince: 9, sent: null });
     expect(sendSmsMock).not.toHaveBeenCalled();
     expect(settingUpsert).not.toHaveBeenCalled();
@@ -52,8 +57,8 @@ describe("checkCjOrderPush", () => {
 
   it("10시간째 끊기면 모든 번호로 한 번 알리고 상태를 남긴다", async () => {
     lastReceived(10.2);
-    alerted(null);
-    const result = await checkCjOrderPush({ now: NOW, phones: PHONES });
+    settings({});
+    const result = await checkCjOrderPush({ now: NOW });
     expect(result).toMatchObject({ state: "STALE", hoursSince: 10, sent: "ALERT", recipients: 2 });
     expect(sendSmsMock).toHaveBeenCalledTimes(2);
     expect(sendSmsMock.mock.calls[0][0]).toBe("01011112222");
@@ -67,16 +72,16 @@ describe("checkCjOrderPush", () => {
 
   it("이미 알렸으면 같은 장애 동안 다시 보내지 않는다", async () => {
     lastReceived(15);
-    alerted("2026-11-17T00:45:00.000Z");
-    const result = await checkCjOrderPush({ now: NOW, phones: PHONES });
+    settings({ alertedAt: "2026-11-17T00:45:00.000Z" });
+    const result = await checkCjOrderPush({ now: NOW });
     expect(result).toMatchObject({ state: "STALE", sent: null });
     expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
   it("알린 뒤 다시 들어오면 복구 문자를 보내고 상태를 지운다", async () => {
     lastReceived(0.5);
-    alerted("2026-11-17T00:45:00.000Z");
-    const result = await checkCjOrderPush({ now: NOW, phones: PHONES });
+    settings({ alertedAt: "2026-11-17T00:45:00.000Z" });
+    const result = await checkCjOrderPush({ now: NOW });
     expect(result).toMatchObject({ state: "OK", sent: "RECOVERY" });
     expect(sendSmsMock).toHaveBeenCalledTimes(2);
     expect(sendSmsMock.mock.calls[0][1]).toContain("복구");
@@ -85,8 +90,8 @@ describe("checkCjOrderPush", () => {
 
   it("받는 번호가 없으면 보내지도, 상태를 바꾸지도 않는다", async () => {
     lastReceived(20);
-    alerted(null);
-    const result = await checkCjOrderPush({ now: NOW, phones: [] });
+    settings({ phones: null });
+    const result = await checkCjOrderPush({ now: NOW });
     expect(result).toMatchObject({ state: "STALE", sent: null, recipients: 0 });
     expect(sendSmsMock).not.toHaveBeenCalled();
     expect(settingUpsert).not.toHaveBeenCalled();
@@ -94,8 +99,8 @@ describe("checkCjOrderPush", () => {
 });
 
 describe("parseAlertPhones", () => {
-  it("쉼표로 나누고 숫자만 남기며 중복을 없앤다", () => {
-    expect(parseAlertPhones(" 010-1111-2222, 01011112222 ,,abc, 010 3333 4444")).toEqual([
+  it("쉼표·세미콜론·줄바꿈으로 나누고 숫자만 남기며 중복을 없앤다", () => {
+    expect(parseAlertPhones(" 010-1111-2222; 01011112222 ,,abc\n010 3333 4444")).toEqual([
       "01011112222",
       "01033334444",
     ]);

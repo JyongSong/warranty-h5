@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { SYSTEM_SETTING_KEYS, getSystemSettingValue } from "@/lib/backoffice/system-settings";
 import { CJ_ORDER_PUSH_JOB } from "@/lib/cron/status";
 import { sendSms } from "@/lib/sms";
 
@@ -8,7 +9,7 @@ import { sendSms } from "@/lib/sms";
 //
 // - 끊긴 지 CJ_PUSH_STALE_HOURS 시간이 되면 한 번 알린다(같은 장애 동안 반복하지 않음).
 // - 알린 뒤 다시 들어오기 시작하면 복구 문자를 한 번 보낸다.
-// - 받는 번호는 env CJ_PUSH_ALERT_PHONES(쉼표 구분). 비어 있으면 보내지 않는다.
+// - 받는 번호는 백오피스 설정 cj.orderPush.alertPhones. 비어 있으면 보내지 않는다.
 // 알림 여부는 backoffice_settings 의 숨은 키에 남긴다(설정 화면에는 안 보임).
 
 export const CJ_PUSH_STALE_HOURS = 10;
@@ -26,7 +27,7 @@ export type CjPushWatchdogResult =
 
 export function parseAlertPhones(raw: string | undefined) {
   const phones = (raw ?? "")
-    .split(",")
+    .split(/[,\n;]/)
     .map((phone) => phone.replace(/\D/g, ""))
     .filter((phone) => phone.length >= 9);
   return Array.from(new Set(phones));
@@ -37,10 +38,7 @@ function formatKst(date: Date) {
   return `${kst.slice(5, 10).replace("-", "/")} ${kst.slice(11, 16)}`;
 }
 
-export async function checkCjOrderPush({
-  now = new Date(),
-  phones = parseAlertPhones(process.env.CJ_PUSH_ALERT_PHONES),
-}: { now?: Date; phones?: string[] } = {}): Promise<CjPushWatchdogResult> {
+export async function checkCjOrderPush({ now = new Date() }: { now?: Date } = {}): Promise<CjPushWatchdogResult> {
   const status = await prisma.cronJobStatus.findUnique({
     where: { key: CJ_ORDER_PUSH_JOB.key },
     select: { lastCalledAt: true },
@@ -52,6 +50,9 @@ export async function checkCjOrderPush({
   const hoursSince = Math.floor((now.getTime() - lastReceivedAt.getTime()) / (60 * 60 * 1000));
   const stale = hoursSince >= CJ_PUSH_STALE_HOURS;
 
+  const phones = parseAlertPhones(
+    (await getSystemSettingValue(SYSTEM_SETTING_KEYS.cjPushAlertPhones)) ?? undefined,
+  );
   const alertRow = await prisma.backofficeSetting.findUnique({
     where: { key: CJ_PUSH_ALERT_STATE_KEY },
     select: { value: true },
