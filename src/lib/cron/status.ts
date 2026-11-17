@@ -45,6 +45,15 @@ export const CJ_ORDER_PUSH_JOB: CronJobDefinition = {
   enabledSettingKey: "cj.orderPush.enabled",
 };
 
+// 위 수신이 CJ_PUSH_STALE_HOURS 시간 넘게 끊기면 문자로 알린다.
+export const CJ_ORDER_PUSH_WATCHDOG_JOB: CronJobDefinition = {
+  key: "cj.orderPushWatchdog",
+  label: "CJ 주문번호 수신 끊김 알림",
+  path: "/api/internal/cron/cj-push-watchdog",
+  schedule: "45 * * * *",
+  enabledSettingKey: "cj.orderPushWatchdog.enabled",
+};
+
 export const INSTALLATION_CRON_JOBS = [
   INSTALLATION_SYNC_ORDERS_CRON_JOB,
   INSTALLATION_DISPATCHER_CRON_JOB,
