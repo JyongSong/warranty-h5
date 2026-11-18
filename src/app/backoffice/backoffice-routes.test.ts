@@ -132,7 +132,6 @@ vi.mock("./installations/[installationId]/partner-actions", () => ({
 
 vi.mock("./installation-order-source/actions", () => ({
   addErpOrderToQueueAction: vi.fn(),
-  createManualOrderAction: vi.fn(),
   lookupErpOrderByNumberAction: vi.fn(),
 }));
 

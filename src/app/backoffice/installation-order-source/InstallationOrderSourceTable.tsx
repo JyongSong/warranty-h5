@@ -5,7 +5,6 @@ import BackofficeDataTable from "../BackofficeDataTable";
 import BackofficePageHeader from "../BackofficePageHeader";
 import { getBackofficeButtonClass } from "../backoffice-button-styles";
 import ErpOrderLookupPanel from "./ErpOrderLookupPanel";
-import ManualOrderPanel from "./ManualOrderPanel";
 import { installationOrderSourceColumns } from "./InstallationOrderSourceTable.columns";
 
 const TABLE_PREFS_KEY = "backoffice.installation-order-source.table.v3";
@@ -31,7 +30,6 @@ export default function InstallationOrderSourceTable({
           </div>
         ) : null}
 
-        <ManualOrderPanel />
         <ErpOrderLookupPanel />
 
         <BackofficeDataTable
