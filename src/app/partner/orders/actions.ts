@@ -5,8 +5,10 @@ import { getAuthPartner } from "@/lib/partnerAuth";
 import { COMPLETION_PHOTO_BUCKET, createPartnerCompletionUploadTargets } from "@/lib/installer/storage";
 import {
   addPartnerNote,
+  editPartnerCompletion,
   getInstallationPartnerByCode,
   InstallationPartnerError,
+  isPartnerEditableStatus,
   PARTNER_COMPLETION_PHOTO_MAX,
   reportPartnerUnable,
   setPartnerClaimAmount,
@@ -97,7 +99,8 @@ export async function getPartnerUploadTargetsAction(
   }
 
   const order = await getPartnerOrderDetail(orderId, { partnerId: user.partnerId });
-  if (!order || order.status !== "INSTALLER_ASSIGNED") return { ok: false, error: "ORDER_NOT_WORKABLE" };
+  // 완료 등록 뒤 본사 검수 전(완료 내용 수정)에도 사진을 올릴 수 있다.
+  if (!order || !isPartnerEditableStatus(order.status)) return { ok: false, error: "ORDER_NOT_WORKABLE" };
 
   try {
     const targets = await createPartnerCompletionUploadTargets(orderId, count);
@@ -118,6 +121,25 @@ export async function submitPartnerCompletionAction(input: {
 
   return run(input.orderId, () =>
     submitPartnerCompletion(input.orderId, {
+      partnerId: user.partnerId,
+      userId: user.id,
+      body: input.body,
+      photoPaths: input.photoPaths,
+    }),
+  );
+}
+
+/** 완료 등록 뒤 본사 검수 전에 진행 내용·사진을 고친다. photoPaths 는 남길 기존 사진 + 새 사진 전체. */
+export async function editPartnerCompletionAction(input: {
+  orderId: string;
+  body?: string | null;
+  photoPaths: string[];
+}): Promise<PartnerActionResult> {
+  const user = await requirePartnerUser();
+  if (!user) return { ok: false, error: "UNAUTHORIZED" };
+
+  return run(input.orderId, () =>
+    editPartnerCompletion(input.orderId, {
       partnerId: user.partnerId,
       userId: user.id,
       body: input.body,

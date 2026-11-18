@@ -33,7 +33,9 @@ vi.mock("@/lib/installer/storage", () => ({ findMissingPhotos }));
 
 import {
   assignReadyOrdersToPartner,
+  editPartnerCompletion,
   reviewPartnerCompletion,
+  revertPartnerCompletion,
   setPartnerClaimAmount,
   setPartnerInstaller,
   setPartnerInstallItems,
@@ -251,7 +253,51 @@ describe("installation partner service", () => {
     });
   });
 
-  it("does not let the amount change after completion was submitted", async () => {
+  it("lets the amount change during HQ review but not after approval", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "WAITING_HQ_REVIEW",
+      partnerId: "partner-pl",
+      partnerStatus: "COMPLETION_SUBMITTED",
+      partnerClaimAmount: 150000,
+    });
+    await setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 200000, reason: "추가" });
+    expect(db.installationOrder.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: { partnerClaimAmount: 200000 },
+    });
+
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "COMPLETED",
+      partnerId: "partner-pl",
+      partnerStatus: "COMPLETED",
+      partnerClaimAmount: 200000,
+    });
+    await expect(
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 210000, reason: "추가" }),
+    ).rejects.toThrow("ORDER_NOT_WORKABLE");
+    await expect(
+      setPartnerInstaller("order-1", { partnerId: "partner-pl", userId: "acc-1", installer: "김철수" }),
+    ).rejects.toThrow("ORDER_NOT_WORKABLE");
+    await expect(
+      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: -1 }),
+    ).rejects.toThrow("CLAIM_AMOUNT_INVALID");
+  });
+
+  it("does not offer 설치 불가 once completion was submitted", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "WAITING_HQ_REVIEW",
+      partnerId: "partner-pl",
+      partnerStatus: "COMPLETION_SUBMITTED",
+    });
+    await expect(
+      reportPartnerUnable("order-1", { partnerId: "partner-pl", userId: "acc-1", reason: "고객 연락 안 됨" }),
+    ).rejects.toThrow("ORDER_NOT_WORKABLE");
+  });
+
+  it("edits completion text and photos during HQ review without changing status", async () => {
     db.installationOrder.findUnique.mockResolvedValue({
       id: "order-1",
       status: "WAITING_HQ_REVIEW",
@@ -260,12 +306,68 @@ describe("installation partner service", () => {
       partnerClaimAmount: 150000,
     });
 
+    await editPartnerCompletion("order-1", {
+      partnerId: "partner-pl",
+      userId: "acc-1",
+      body: " 배선 정리 사진 추가 ",
+      photoPaths: ["partner/order-1/a.jpg", "partner/order-1/b.jpg", "partner/order-1/a.jpg"],
+    });
+
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      kind: "COMPLETION_EDIT",
+      body: "배선 정리 사진 추가",
+      photoPaths: ["partner/order-1/a.jpg", "partner/order-1/b.jpg"],
+    });
+    expect(transition).not.toHaveBeenCalled();
+    expect(db.installationOrder.update).not.toHaveBeenCalled();
+
     await expect(
-      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: 200000, reason: "추가" }),
-    ).rejects.toThrow("ORDER_NOT_WORKABLE");
+      editPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: ["orders/x/a.jpg"] }),
+    ).rejects.toThrow("PHOTO_PATH_INVALID");
+
+    db.installationOrder.findUnique.mockResolvedValue({
+      id: "order-1",
+      status: "COMPLETED",
+      partnerId: "partner-pl",
+      partnerStatus: "COMPLETED",
+    });
     await expect(
-      setPartnerClaimAmount("order-1", { partnerId: "partner-pl", userId: "acc-1", amount: -1 }),
-    ).rejects.toThrow("CLAIM_AMOUNT_INVALID");
+      editPartnerCompletion("order-1", { partnerId: "partner-pl", userId: "acc-1", photoPaths: [] }),
+    ).rejects.toThrow("ORDER_NOT_IN_REVIEW");
+  });
+
+  it("lets HQ revert an approved PL completion back to review, with a reason", async () => {
+    db.installationOrder.findUnique.mockResolvedValue({ id: "order-1", status: "COMPLETED", partnerId: "partner-pl" });
+
+    await expect(revertPartnerCompletion("order-1", { adminId: "admin-1", reason: " " })).rejects.toThrow(
+      "REASON_REQUIRED",
+    );
+
+    await revertPartnerCompletion("order-1", { adminId: "admin-1", reason: "금액 재확인" });
+    expect(db.installationPartnerNote.create.mock.calls[0][0].data).toMatchObject({
+      authorType: "HQ",
+      kind: "REVIEW",
+      partnerStatus: "COMPLETION_SUBMITTED",
+      body: "본사 검수 승인 취소 (검수 전으로): 금액 재확인",
+    });
+    expect(transition).toHaveBeenCalledWith(
+      "order-1",
+      "WAITING_HQ_REVIEW",
+      expect.objectContaining({
+        orderData: expect.objectContaining({ partnerStatus: "COMPLETION_SUBMITTED" }),
+        event: expect.objectContaining({ eventType: "PARTNER_COMPLETION_REVERTED", reason: "금액 재확인" }),
+      }),
+      db,
+    );
+
+    db.installationOrder.findUnique.mockResolvedValue({ id: "order-1", status: "WAITING_HQ_REVIEW", partnerId: "partner-pl" });
+    await expect(revertPartnerCompletion("order-1", { adminId: "admin-1", reason: "x" })).rejects.toThrow(
+      "ORDER_NOT_COMPLETED",
+    );
+    db.installationOrder.findUnique.mockResolvedValue({ id: "order-1", status: "COMPLETED", partnerId: null });
+    await expect(revertPartnerCompletion("order-1", { adminId: "admin-1", reason: "x" })).rejects.toThrow(
+      "ORDER_NOT_FOUND",
+    );
   });
 
   it("returns a rejected completion to PL as 접수 완료 and requires a reason", async () => {

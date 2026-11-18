@@ -266,6 +266,8 @@ export type PartnerOrderDetail = PartnerOrderSummary & {
   acceptedAt: Date | null;
   /** 마지막 설치 완료 등록 시각 */
   completionSubmittedAt: Date | null;
+  /** 지금 유효한 완료 내용 (마지막 완료 등록 또는 그 뒤 수정). 완료 등록 전이면 null. */
+  completion: { body: string | null; photos: CompletionPhoto[] } | null;
   notes: PartnerNoteItem[];
 };
 
@@ -303,11 +305,14 @@ export async function getPartnerOrderDetail(
   );
 
   const completionNotes = order.partnerNotes.filter((note) => note.kind === "COMPLETION");
+  // 완료 등록 뒤 검수 전 수정(COMPLETION_EDIT)이 있으면 그것이 현재 완료 내용이다.
+  const currentCompletion = notes.filter((note) => note.kind === "COMPLETION" || note.kind === "COMPLETION_EDIT").at(-1);
   return {
     ...shapeOrder(order),
     partnerName: order.partner?.name ?? null,
     acceptedAt: order.partnerNotes.find((note) => note.kind === "AMOUNT")?.createdAt ?? null,
     completionSubmittedAt: order.partnerCompletedAt ?? completionNotes.at(-1)?.createdAt ?? null,
+    completion: currentCompletion ? { body: currentCompletion.body, photos: currentCompletion.photos } : null,
     notes,
   };
 }

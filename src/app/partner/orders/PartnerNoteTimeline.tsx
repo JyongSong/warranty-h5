@@ -14,6 +14,7 @@ const KIND_LABELS: Record<string, string> = {
   NOTE: "메모",
   STATUS: "상태 변경",
   COMPLETION: "설치 완료 등록",
+  COMPLETION_EDIT: "완료 내용 수정",
   REVIEW: "본사 검수",
   AMOUNT: "청구 금액",
   INSTALLER: "담당 기사",

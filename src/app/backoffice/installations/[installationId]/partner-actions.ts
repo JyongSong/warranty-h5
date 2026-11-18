@@ -7,6 +7,7 @@ import {
   addPartnerNote,
   InstallationPartnerError,
   reviewPartnerCompletion,
+  revertPartnerCompletion,
   setPartnerInstallItems,
   switchOrderToInhouse,
   switchOrderToPartner,
@@ -39,6 +40,16 @@ export async function reviewPartnerCompletionAction(input: {
 }): Promise<BackofficePartnerActionResult> {
   return runAsAdmin(input.installationId, (adminId) =>
     reviewPartnerCompletion(input.installationId, { adminId, approve: input.approve, reason: input.reason }),
+  );
+}
+
+/** 승인한 협력사 완료 건을 검수 전으로 되돌린다(협력사가 다시 고칠 수 있게). 사유 필수. */
+export async function revertPartnerCompletionAction(input: {
+  installationId: string;
+  reason: string;
+}): Promise<BackofficePartnerActionResult> {
+  return runAsAdmin(input.installationId, (adminId) =>
+    revertPartnerCompletion(input.installationId, { adminId, reason: input.reason }),
   );
 }
 
