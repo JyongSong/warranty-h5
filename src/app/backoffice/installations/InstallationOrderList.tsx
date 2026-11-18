@@ -398,6 +398,10 @@ export default function InstallationOrderList({
                 <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
                   CJ
                 </span>
+              ) : row.original.channel === "MANUAL" ? (
+                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                  직접
+                </span>
               ) : null}
               <Link
                 href={`${basePath}/${row.original.id}${detailSearchQuery ? `?${detailSearchQuery}` : ""}`}
