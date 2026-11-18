@@ -25,6 +25,7 @@ import {
 //   협력사 배정       → INSTALLER_ASSIGNED (currentInstaller 없음, partnerId 있음)
 //   협력사 완료 등록  → WAITING_HQ_REVIEW
 //   본사 승인 / 반려  → COMPLETED / INSTALLER_ASSIGNED
+//   본사 승인 취소    → WAITING_HQ_REVIEW (검수 전으로 되돌려 협력사가 다시 고칠 수 있게)
 // partnerStatus 는 본사가 알아야 할 것만: 신규 → 접수(청구 금액 입력) → 완료 등록 → 완료 / 설치 불가.
 // 협력사 안의 기사 배정·일정은 협력사가 알아서 하고 남기지 않는다.
 
@@ -344,6 +345,18 @@ function assertPartnerWorkable(order: { status: string; partnerStatus: string | 
   }
 }
 
+/** 완료 등록 뒤에도 본사 검수(승인) 전까지는 청구 금액·담당 기사·완료 내용을 고칠 수 있다. */
+export function isPartnerEditableStatus(status: string) {
+  return (
+    status === INSTALLATION_ORDER_STATUSES.INSTALLER_ASSIGNED ||
+    status === INSTALLATION_ORDER_STATUSES.WAITING_HQ_REVIEW
+  );
+}
+
+function assertPartnerEditable(order: { status: string }) {
+  if (!isPartnerEditableStatus(order.status)) throw new InstallationPartnerError("ORDER_NOT_WORKABLE");
+}
+
 /** 협력사가 이 건을 맡을 수 없다고 알린다. 본사 예외로 올라가고, 본사가 취소하거나 자사로 돌린다. */
 export async function reportPartnerUnable(
   orderId: string,
@@ -419,7 +432,7 @@ export async function addPartnerNote(
 }
 
 /**
- * 협력사가 본사에 청구할 시공비를 입력/수정한다. 접수 때 넣고, 완료 등록 전까지 고칠 수 있다.
+ * 협력사가 본사에 청구할 시공비를 입력/수정한다. 접수 때 넣고, 본사 검수(승인) 전까지 고칠 수 있다.
  * 본사 승인은 없고 기록만 남긴다. 처음 입력이 아니면 사유를 받는다.
  */
 export async function setPartnerClaimAmount(
@@ -439,7 +452,7 @@ export async function setPartnerClaimAmount(
 
   return prisma.$transaction(async (tx) => {
     const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
-    assertPartnerWorkable(order);
+    assertPartnerEditable(order);
 
     const previous = order.partnerClaimAmount;
     if (previous === amount) return;
@@ -495,7 +508,7 @@ export async function setPartnerInstaller(
 
   return prisma.$transaction(async (tx) => {
     const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
-    assertPartnerWorkable(order);
+    assertPartnerEditable(order);
 
     const previous = order.partnerInstaller;
     if (previous === normalized) return;
@@ -577,6 +590,16 @@ export function isPartnerPhotoPathForOrder(orderId: string, path: string) {
   return path.startsWith(`partner/${orderId}/`) && !path.includes("..");
 }
 
+async function validateCompletionPhotoPaths(orderId: string, photoPaths: string[]) {
+  const paths = Array.from(new Set(photoPaths.map((path) => path.trim()).filter(Boolean)));
+  if (paths.length > PARTNER_COMPLETION_PHOTO_MAX) throw new InstallationPartnerError("PHOTO_COUNT_INVALID");
+  if (!paths.every((path) => isPartnerPhotoPathForOrder(orderId, path))) {
+    throw new InstallationPartnerError("PHOTO_PATH_INVALID");
+  }
+  if ((await findMissingPhotos(paths)).length > 0) throw new InstallationPartnerError("PHOTO_UPLOAD_INCOMPLETE");
+  return paths;
+}
+
 export async function submitPartnerCompletion(
   orderId: string,
   {
@@ -588,12 +611,7 @@ export async function submitPartnerCompletion(
   }: { partnerId: string; userId: string; body?: string | null; photoPaths: string[]; now?: Date },
 ) {
   // 진행 내용과 사진은 둘 다 선택이다. 청구 금액만 완료 전에 들어가 있어야 한다.
-  const paths = Array.from(new Set(photoPaths.map((path) => path.trim()).filter(Boolean)));
-  if (paths.length > PARTNER_COMPLETION_PHOTO_MAX) throw new InstallationPartnerError("PHOTO_COUNT_INVALID");
-  if (!paths.every((path) => isPartnerPhotoPathForOrder(orderId, path))) {
-    throw new InstallationPartnerError("PHOTO_PATH_INVALID");
-  }
-  if ((await findMissingPhotos(paths)).length > 0) throw new InstallationPartnerError("PHOTO_UPLOAD_INCOMPLETE");
+  const paths = await validateCompletionPhotoPaths(orderId, photoPaths);
 
   return prisma.$transaction(async (tx) => {
     const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
@@ -633,6 +651,44 @@ export async function submitPartnerCompletion(
       },
       tx as never,
     );
+  });
+}
+
+/**
+ * 완료 등록 뒤 본사 검수 전에 협력사가 진행 내용·사진을 고친다.
+ * photoPaths 는 남길 기존 사진 + 새로 올린 사진 전체다. 새 기록(COMPLETION_EDIT)이 현재 완료 내용이 되고,
+ * 이전 기록은 진행 기록에 그대로 남는다. 상태와 완료일(partnerCompletedAt)은 바꾸지 않는다.
+ */
+export async function editPartnerCompletion(
+  orderId: string,
+  {
+    partnerId,
+    userId,
+    body,
+    photoPaths,
+    now = new Date(),
+  }: { partnerId: string; userId: string; body?: string | null; photoPaths: string[]; now?: Date },
+) {
+  const paths = await validateCompletionPhotoPaths(orderId, photoPaths);
+
+  return prisma.$transaction(async (tx) => {
+    const order = await loadPartnerOrderForUpdate(tx, orderId, partnerId);
+    if (order.status !== INSTALLATION_ORDER_STATUSES.WAITING_HQ_REVIEW) {
+      throw new InstallationPartnerError("ORDER_NOT_IN_REVIEW");
+    }
+
+    await tx.installationPartnerNote.create({
+      data: {
+        installationOrderId: orderId,
+        partnerId,
+        authorUserId: userId,
+        authorType: "PARTNER",
+        kind: "COMPLETION_EDIT",
+        body: normalizeOptionalText(body),
+        photoPaths: paths,
+        createdAt: now,
+      },
+    });
   });
 }
 
@@ -683,6 +739,58 @@ export async function reviewPartnerCompletion(
         orderData: { partnerStatus: nextPartnerStatus, partnerStatusChangedAt: now },
         event: {
           eventType: approve ? "PARTNER_COMPLETION_APPROVED" : "PARTNER_COMPLETION_REJECTED",
+          actorType: "ADMIN",
+          actorId: adminId,
+          reason: normalizedReason,
+          metadata: { partnerId: order.partnerId },
+        },
+      },
+      tx as never,
+    );
+  });
+}
+
+/**
+ * 본사가 승인한 협력사 완료 건을 검수 전(완료 등록 · 본사 검수 대기)으로 되돌린다.
+ * 협력사는 다시 금액·담당 기사·완료 내용을 고칠 수 있고, 본사는 다시 승인/반려한다. 사유 필수.
+ */
+export async function revertPartnerCompletion(
+  orderId: string,
+  { adminId, reason, now = new Date() }: { adminId: string; reason: string; now?: Date },
+) {
+  const normalizedReason = requireText(reason, "REASON_REQUIRED");
+
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.installationOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, status: true, partnerId: true },
+    });
+    if (!order?.partnerId) throw new InstallationPartnerError("ORDER_NOT_FOUND");
+    if (order.status !== INSTALLATION_ORDER_STATUSES.COMPLETED) {
+      throw new InstallationPartnerError("ORDER_NOT_COMPLETED");
+    }
+
+    await tx.installationPartnerNote.create({
+      data: {
+        installationOrderId: orderId,
+        partnerId: order.partnerId,
+        authorUserId: adminId,
+        authorType: "HQ",
+        kind: "REVIEW",
+        partnerStatus: PARTNER_STATUSES.COMPLETION_SUBMITTED,
+        body: `본사 검수 승인 취소 (검수 전으로): ${normalizedReason}`,
+        createdAt: now,
+      },
+    });
+
+    await transitionInstallationOrderStatus(
+      orderId,
+      INSTALLATION_ORDER_STATUSES.WAITING_HQ_REVIEW,
+      {
+        now,
+        orderData: { partnerStatus: PARTNER_STATUSES.COMPLETION_SUBMITTED, partnerStatusChangedAt: now },
+        event: {
+          eventType: "PARTNER_COMPLETION_REVERTED",
           actorType: "ADMIN",
           actorId: adminId,
           reason: normalizedReason,

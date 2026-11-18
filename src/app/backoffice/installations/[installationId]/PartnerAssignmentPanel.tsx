@@ -11,6 +11,7 @@ import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import {
   addHqPartnerNoteAction,
   reviewPartnerCompletionAction,
+  revertPartnerCompletionAction,
   switchOrderToInhouseAction,
   switchOrderToPartnerAction,
 } from "./partner-actions";
@@ -24,6 +25,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   ORDER_NOT_PARTNER_SWITCHABLE: "지금 상태에서는 협력사로 넘길 수 없습니다.",
   ORDER_NOT_INHOUSE_SWITCHABLE: "지금 상태에서는 자사 기사 배정으로 돌릴 수 없습니다.",
   ORDER_NOT_IN_REVIEW: "검수 대기 상태가 아닙니다.",
+  ORDER_NOT_COMPLETED: "승인된 완료 건이 아닙니다.",
   REASON_REQUIRED: "사유를 입력해 주세요.",
   NOTE_REQUIRED: "메모 내용을 입력해 주세요.",
   NOTE_TOO_LONG: "메모가 너무 깁니다. (2000자 이하)",
@@ -43,6 +45,7 @@ export default function PartnerAssignmentPanel({
   const { detail } = data;
   const assigned = Boolean(detail?.partnerStatus);
   const inReview = assigned && data.orderStatus === "WAITING_HQ_REVIEW";
+  const approved = assigned && data.orderStatus === "COMPLETED";
 
   // 협력사와 관계없고 넘길 수도 없는 주문이면 패널을 그리지 않는다.
   if (!detail && !data.canSwitchToPartner) return null;
@@ -139,7 +142,13 @@ export default function PartnerAssignmentPanel({
         value={text}
         onChange={(event) => setText(event.target.value)}
         rows={2}
-        placeholder={inReview ? "반려 사유 또는 승인 메모" : "PL ENG 에 전달할 메모 / 전환 사유"}
+        placeholder={
+          inReview
+            ? "반려 사유 또는 승인 메모"
+            : approved
+              ? "승인 취소 사유 / PL ENG 에 전달할 메모"
+              : "PL ENG 에 전달할 메모 / 전환 사유"
+        }
         className="mt-4 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
       />
       {error ? <p className="mt-1 text-sm text-rose-700">{error}</p> : null}
@@ -169,6 +178,21 @@ export default function PartnerAssignmentPanel({
               반려 (PL ENG 에 되돌리기)
             </button>
           </>
+        ) : null}
+        {approved ? (
+          <button
+            type="button"
+            disabled={busy}
+            className={getBackofficeButtonClass("dangerSecondary")}
+            onClick={() =>
+              run(
+                () => revertPartnerCompletionAction({ installationId, reason: text }),
+                "승인을 취소하고 검수 전으로 되돌릴까요? PL ENG 가 금액·담당 기사·완료 내용을 다시 고칠 수 있게 됩니다. (입력한 내용이 사유로 남습니다)",
+              )
+            }
+          >
+            승인 취소 (검수 전으로)
+          </button>
         ) : null}
         <button
           type="button"
