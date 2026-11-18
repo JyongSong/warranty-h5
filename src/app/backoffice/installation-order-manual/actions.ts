@@ -6,11 +6,12 @@ import { BACKOFFICE_READ_ONLY_ERROR, canEditBackoffice } from "@/lib/login/backo
 import {
   AdminManualOrderError,
   createAdminManualOrder,
+  getNextAdminManualOrderNumber,
   type CreateAdminManualOrderInput,
 } from "@/lib/installation/orders/source/admin-create";
 
 export type CreateManualOrderActionResult =
-  | { ok: true; installationOrderId: string }
+  | { ok: true; installationOrderId: string; orderNumber: string; nextOrderNumber: string }
   | { ok: false; error: string };
 
 export async function createManualOrderAction(
@@ -29,7 +30,14 @@ export async function createManualOrderAction(
   try {
     const result = await createAdminManualOrder({ ...input, adminId });
     revalidatePath("/backoffice/installations");
-    return { ok: true, installationOrderId: result.installationOrderId };
+    // 다음 접수용 번호를 바로 돌려줘 폼을 새로 채운다. 실패해도 접수 결과에는 영향 없다.
+    const nextOrderNumber = await getNextAdminManualOrderNumber().catch(() => "");
+    return {
+      ok: true,
+      installationOrderId: result.installationOrderId,
+      orderNumber: result.orderNumber,
+      nextOrderNumber,
+    };
   } catch (error) {
     if (error instanceof AdminManualOrderError) return { ok: false, error: error.message };
     console.error("[installation-order-manual/actions]", error);
