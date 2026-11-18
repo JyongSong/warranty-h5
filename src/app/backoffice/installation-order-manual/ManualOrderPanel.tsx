@@ -29,6 +29,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   INSTALL_ADDRESS_REQUIRED: "설치 주소를 입력해 주세요.",
   INSTALL_ADDRESS_UNPARSEABLE: "주소에서 시/도·시/군/구를 읽지 못했습니다. 주소 검색으로 입력해 주세요.",
   INSTALL_DATE_INVALID: "설치일을 확인해 주세요.",
+  ORDER_NUMBER_TOO_LONG: "주문번호는 50자 이내로 입력해 주세요.",
+  ORDER_NUMBER_INVALID: "주문번호에는 띄어쓰기나 쉼표를 넣을 수 없습니다.",
+  ORDER_NUMBER_DUPLICATE: "이미 있는 주문번호입니다. 다른 번호를 입력해 주세요.",
   INSTALL_ITEMS_REQUIRED: "설치 품목을 1개 이상 넣어 주세요.",
   INSTALL_ITEMS_TOO_MANY: `설치 품목은 ${ADMIN_ORDER_ITEMS_MAX}개까지 넣을 수 있습니다.`,
   INSTALL_ITEM_INVALID: "설치 품목을 다시 골라 주세요.",
@@ -62,7 +65,10 @@ function newItemRow(): ItemRow {
   };
 }
 
-export default function ManualOrderPanel() {
+export default function ManualOrderPanel({ initialOrderNumber }: { initialOrderNumber: string }) {
+  // 미리 채운 순번. 관리자가 바꾸지 않았으면 접수 때 겹쳐도 서버가 다음 순번으로 넘긴다.
+  const [suggestedOrderNumber, setSuggestedOrderNumber] = useState(initialOrderNumber);
+  const [orderNumber, setOrderNumber] = useState(initialOrderNumber);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -73,9 +79,10 @@ export default function ManualOrderPanel() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; orderNumber: string } | null>(null);
 
   function reset() {
+    setOrderNumber(suggestedOrderNumber);
     setName("");
     setPhone("");
     setAddress("");
@@ -114,6 +121,8 @@ export default function ManualOrderPanel() {
     setBusy(true);
     try {
       const result = await createManualOrderAction({
+        orderNumber,
+        orderNumberAuto: orderNumber.trim() === suggestedOrderNumber,
         customerName: name,
         customerPhone: phone,
         installAddress: address,
@@ -131,8 +140,10 @@ export default function ManualOrderPanel() {
         setError(ERROR_MESSAGES[result.error] ?? `접수하지 못했습니다. (${result.error})`);
         return;
       }
-      setCreatedOrderId(result.installationOrderId);
+      setCreated({ id: result.installationOrderId, orderNumber: result.orderNumber });
       reset();
+      setSuggestedOrderNumber(result.nextOrderNumber);
+      setOrderNumber(result.nextOrderNumber);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setError(ERROR_MESSAGES.MANUAL_ORDER_CREATE_FAILED);
@@ -148,16 +159,26 @@ export default function ManualOrderPanel() {
         ERP·CJ에 없는 예외 건을 관리자가 직접 접수합니다. 고객 입력 문자 없이 바로 기사 배정 단계로 들어갑니다.
       </p>
 
-      {createdOrderId ? (
+      {created ? (
         <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-          접수했습니다.{" "}
-          <Link href={`/backoffice/installations/${createdOrderId}`} className="underline">
+          {created.orderNumber} 접수했습니다.{" "}
+          <Link href={`/backoffice/installations/${created.id}`} className="underline">
             설치 건 보기
           </Link>
         </p>
       ) : null}
 
       <div className="mt-4 grid gap-3">
+        <label className="grid gap-1">
+          <span className={labelClass}>주문번호 (자동으로 채워지며 바꿀 수 있습니다)</span>
+          <input
+            value={orderNumber}
+            onChange={(event) => setOrderNumber(event.target.value)}
+            maxLength={50}
+            placeholder="비워 두면 자동 번호"
+            className={`${inputClass} sm:w-72`}
+          />
+        </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1">
             <span className={labelClass}>고객 이름</span>
@@ -305,7 +326,7 @@ export default function ManualOrderPanel() {
             disabled={busy}
             onClick={() => {
               reset();
-              setCreatedOrderId(null);
+              setCreated(null);
             }}
             className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700"
           >
