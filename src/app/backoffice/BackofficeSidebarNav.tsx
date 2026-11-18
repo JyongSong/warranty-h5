@@ -51,6 +51,12 @@ const menuItems: MenuItem[] = [
         icon: "database",
       },
       {
+        href: "/backoffice/installation-order-manual",
+        access: "edit",
+        label: "주문 직접 입력",
+        icon: "orders",
+      },
+      {
         href: "/backoffice/installations?statusView=active",
         label: "설치 업무 큐",
         icon: "queue",
