@@ -10,6 +10,7 @@ import InstallerForm from "../InstallerForm";
 import type { InstallerItem } from "../shared";
 import { getSettlementInfo } from "@/lib/installer/settlement-info";
 import SettlementInfoPanel from "./SettlementInfoPanel";
+import PopbillLinkPanel from "./PopbillLinkPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ export default async function BackofficeInstallerDetailPage({
         }
       />
       <SettlementInfoPanel installerId={id} info={settlementInfo} canManage={canEditBackoffice(admin.level)} />
+      <PopbillLinkPanel installerId={id} />
       <InstallerForm item={item} canManage={canEditBackoffice(admin.level)} />
     </div>
   );

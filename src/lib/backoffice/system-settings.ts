@@ -47,6 +47,9 @@ export const SYSTEM_SETTING_KEYS = {
   // 기사 정산 기능 공개 스위치. 끄면 기사 앱에서 정산 정보 등록 입구·월 정산서·현금영수증 앱 제한이 모두 숨고,
   // 백오피스 월 정산서 탭도 숨으며 발행이 막힌다. 앱 업데이트를 한 번에 공개하려고 둔다.
   installerSettlementLaunched: "installer.settlement.launched",
+  // 팝빌 전자세금계산서(정발행) 공개 스위치. 켜면 기사 앱에 「전자세금계산서 연동」과 정산서 「전자세금계산서 발행」 버튼이 보인다.
+  // 정산 기능(installer.settlement.launched)이 켜져 있어야 의미가 있다.
+  installerPopbillEnabled: "installer.popbill.enabled",
   // 본사(공급받는자) 정보. 기사가 세금계산서·현금영수증을 발행할 때 앱에 그대로 보여 준다.
   hqBusinessNumber: "hq.invoice.businessNumber",
   hqBusinessName: "hq.invoice.businessName",
@@ -290,6 +293,14 @@ const SYSTEM_SETTING_SPECS = ([
     validationHint: "true 또는 false",
   },
   {
+    key: SYSTEM_SETTING_KEYS.installerPopbillEnabled,
+    description:
+      "팝빌 전자세금계산서 자동 발행 공개 여부 (기사 앱 전자세금계산서 연동·정산서 발행 버튼). false 면 기존 사진 제출만",
+    type: "boolean" as const,
+    defaultValue: "false",
+    validationHint: "true 또는 false",
+  },
+  {
     key: SYSTEM_SETTING_KEYS.installerTaxDocTypeEnabled,
     description: "기사 앱 정산 정보 등록에서 증빙 종류(전자/종이 세금계산서·현금영수증) 선택 표시 여부",
     type: "boolean" as const,
@@ -350,6 +361,14 @@ export async function isSystemSettingEnabled(key: string) {
   });
 
   return setting?.value === "true";
+}
+
+/**
+ * Vercel 미리보기(preview) 배포에서만: 환경 변수 PREVIEW_ENABLE_SETTLEMENT=true 면 정산·팝빌 공개 스위치를 켠 것으로 본다.
+ * 미리보기도 운영 DB 를 같이 쓰므로, DB 스위치를 켜면 운영 앱에도 공개된다. 그걸 피하려고 둔다. 운영(production)에서는 무시한다.
+ */
+export function isPreviewSettlementOverride(): boolean {
+  return process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_ENABLE_SETTLEMENT === "true";
 }
 
 export async function getSystemSettingValue(key: string): Promise<string | null> {

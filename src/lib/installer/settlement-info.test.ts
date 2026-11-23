@@ -38,9 +38,12 @@ describe("parseSettlementInfoInput", () => {
   it("normalizes business number to digits", () => {
     expect(parseSettlementInfoInput("inst-1", base).businessNumber).toBe("2208162517");
   });
-  it("requires email for 전자세금계산서", () => {
-    expect(() => parseSettlementInfoInput("inst-1", { ...base, taxDocType: "E_TAX_INVOICE" })).toThrow(
-      new SettlementInfoError("EMAIL_REQUIRED"),
+  it("does not require email for 세금계산서", () => {
+    expect(parseSettlementInfoInput("inst-1", { ...base, taxDocType: "E_TAX_INVOICE" }).invoiceEmail).toBeNull();
+  });
+  it("rejects a malformed email", () => {
+    expect(() => parseSettlementInfoInput("inst-1", { ...base, invoiceEmail: "not-an-email" })).toThrow(
+      new SettlementInfoError("EMAIL_INVALID"),
     );
   });
   it("rejects photo paths of another installer", () => {

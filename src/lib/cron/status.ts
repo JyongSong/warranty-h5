@@ -54,6 +54,16 @@ export const CJ_ORDER_PUSH_WATCHDOG_JOB: CronJobDefinition = {
   enabledSettingKey: "cj.orderPushWatchdog.enabled",
 };
 
+// 기사 정산 알림(세금계산서 기한·공동인증서 만료) + 국세청 전송 확인. 매일 00:00 UTC = 09:00 KST.
+// 별도 켜고 끄는 스위치 없이 정산 공개(installer.settlement.launched)를 따른다.
+export const SETTLEMENT_REMINDERS_CRON_JOB: CronJobDefinition = {
+  key: "settlement.reminders",
+  label: "기사 정산 알림·국세청 전송 확인",
+  path: "/api/internal/cron/settlement/reminders",
+  schedule: "0 0 * * *",
+  enabledSettingKey: "installer.settlement.launched",
+};
+
 export const INSTALLATION_CRON_JOBS = [
   INSTALLATION_SYNC_ORDERS_CRON_JOB,
   INSTALLATION_DISPATCHER_CRON_JOB,

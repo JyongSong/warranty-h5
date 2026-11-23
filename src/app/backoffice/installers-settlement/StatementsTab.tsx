@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MonthPreviewRow, StatementView } from "@/lib/installation/settlement/statements";
+import type { PopbillPointsSummary } from "@/lib/installation/settlement/popbill-admin";
 import { TAX_DOC_TYPE_LABEL } from "@/lib/installer/settlement-info-shared";
 import {
   cancelStatementAction,
+  getPopbillChargeUrlAction,
   issueMonthStatementsAction,
   markPaidAction,
   reviewEvidenceAction,
+  voidStatementInvoiceAction,
 } from "./actions";
 import { TabLink } from "./SettlementClient";
 
@@ -30,14 +33,33 @@ const ERR: Record<string, string> = {
   ALREADY_IN_PROGRESS: "증빙 제출 또는 지급이 시작돼 발행을 취소할 수 없습니다.",
   REJECT_REASON_REQUIRED: "반려 사유를 입력해 주세요.",
   SOME_NOT_PAYABLE: "지급 조건이 안 되는 건이 섞여 있습니다. 새로고침 후 다시 선택해 주세요.",
+  ALREADY_PAID: "이미 지급된 정산서라 세금계산서를 취소할 수 없습니다.",
+  NOT_APP_ISSUED: "앱에서 발행한 세금계산서가 아닙니다.",
+  POPBILL_DOC_NOT_FOUND: "팝빌에서 세금계산서를 찾지 못했습니다.",
+  POPBILL_STATE_UNSUPPORTED: "지금 상태에서는 취소할 수 없습니다. 팝빌에서 확인해 주세요.",
+  HQ_INFO_MISSING: "본사 정보(hq.invoice.*)가 비어 있어 수정세금계산서를 발행할 수 없습니다.",
+  POPBILL_NO_MEMBER: "팝빌 회원이 없어 충전 화면을 열 수 없습니다.",
+  POPBILL_UNAVAILABLE: "팝빌에 연결하지 못했습니다.",
 };
+
+function errText(code?: string): string {
+  if (!code) return "실패";
+  if (code.startsWith("POPBILL_FAILED:")) return `팝빌 오류: ${code.slice("POPBILL_FAILED:".length)}`;
+  return ERR[code] ?? code;
+}
 
 /** 정산서 하나의 진행 단계(화면 표시용) */
 function stage(s: StatementView): { text: string; cls: string } {
   if (!s.flow) return { text: "증빙 종류 미선택", cls: "bg-zinc-100 text-zinc-600" };
   if (s.flow === "TAX") {
     if (s.paidAt) return { text: "지급 완료", cls: "bg-emerald-100 text-emerald-800" };
-    if (s.evidenceStatus === "CONFIRMED") return { text: "지급 대기", cls: "bg-blue-100 text-blue-800" };
+    if (s.ntsSendState === "FAILED") return { text: "국세청 전송 실패", cls: "bg-red-100 text-red-700" };
+    if (s.evidenceStatus === "CONFIRMED" && s.payDeferred) {
+      return { text: `기한 후 제출 · ${Number(s.payYm.slice(5))}월 지급`, cls: "bg-amber-100 text-amber-800" };
+    }
+    if (s.evidenceStatus === "CONFIRMED") {
+      return { text: s.ntsConfirmNum ? "지급 대기 · 앱 발행" : "지급 대기", cls: "bg-blue-100 text-blue-800" };
+    }
     if (s.evidenceStatus === "SUBMITTED") return { text: "계산서 확인 필요", cls: "bg-amber-100 text-amber-800" };
     if (s.evidenceStatus === "REJECTED") return { text: "계산서 반려", cls: "bg-red-100 text-red-700" };
     return { text: "계산서 대기", cls: "bg-zinc-100 text-zinc-600" };
@@ -50,9 +72,11 @@ function stage(s: StatementView): { text: string; cls: string } {
 }
 
 /** payBlockReason 과 같은 규칙(서버가 다시 확인한다) */
+// 서버의 payBlockReason 과 같은 규칙
 function payable(s: StatementView): boolean {
   if (s.paidAt || s.infoStatus !== "APPROVED" || !s.flow) return false;
-  return s.flow === "CASH" || s.evidenceStatus === "CONFIRMED";
+  if (s.flow === "CASH") return true;
+  return s.evidenceStatus === "CONFIRMED" && !s.payDeferred;
 }
 
 export default function StatementsTab({
@@ -62,7 +86,10 @@ export default function StatementsTab({
   preview,
   launched,
   earlier,
+  points,
 }: {
+  /** 팝빌 파트너 포인트(설정이 없거나 조회 실패면 null) */
+  points: PopbillPointsSummary | null;
   launched: boolean;
   /** 이 달보다 이전 달에 남은 미발행 건 */
   earlier: { ym: string; count: number } | null;
@@ -86,7 +113,7 @@ export default function StatementsTab({
     setError(null);
     startTransition(async () => {
       const res = await fn();
-      if (!res.ok) setError(ERR[res.error ?? ""] ?? res.error ?? "실패");
+      if (!res.ok) setError(errText(res.error));
       else {
         after?.();
         router.refresh();
@@ -105,6 +132,12 @@ export default function StatementsTab({
     }
     return t;
   }, [statements]);
+
+  // 이 달 정산서 중 아직 앱 발행 안 된 세금계산서 건: 포인트가 이만큼은 있어야 한다.
+  const pendingAppIssue = statements.filter(
+    (s) => s.flow === "TAX" && !s.paidAt && !s.ntsConfirmNum && (s.evidenceStatus === "PENDING" || s.evidenceStatus === "REJECTED"),
+  ).length;
+  const ntsFailed = statements.filter((s) => s.ntsSendState === "FAILED").length;
 
   const payableIds = statements.filter(payable).map((s) => s.id);
   const selectedPayable = [...selected].filter((id) => payableIds.includes(id));
@@ -146,7 +179,8 @@ export default function StatementsTab({
       </section>
 
       <p className="text-xs text-zinc-500">
-        일정: 말일 마감 → 다음 달 5일까지 정산서 발행 → 10일까지 기사 세금계산서 → 15일 지급. 세금계산서 건은 정산 금액 + 부가세
+        일정: 말일 마감 → 다음 달 1일 정산서 발행 → 5일까지 기사 세금계산서 → 그 달 말일 지급. 5일이 지나 낸 세금계산서는
+        다음 달 말일에 지급합니다(그 전에는 지급 처리가 막힙니다). 늦게 나온 추가 정산서는 다음 달 5일이 기한입니다. 세금계산서 건은 정산 금액 + 부가세
         10%를 지급하고, 현금영수증 건은 정산 금액을 먼저 지급한 뒤 영수증을 받습니다.
       </p>
 
@@ -163,6 +197,20 @@ export default function StatementsTab({
           <button className="font-semibold underline" onClick={() => go(earlier.ym)}>
             {fmtYm(earlier.ym)}로 이동
           </button>
+        </div>
+      ) : null}
+
+      {points ? (
+        <PointsBar
+          points={points}
+          needed={pendingAppIssue}
+          onError={(code) => setError(errText(code))}
+        />
+      ) : null}
+
+      {ntsFailed > 0 ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          국세청 전송에 실패한 세금계산서가 {ntsFailed}건 있습니다. 아래 목록에서 「국세청 전송 실패」를 확인하세요.
         </div>
       ) : null}
 
@@ -310,6 +358,14 @@ export default function StatementsTab({
                         onReview={(approve, reason) =>
                           run(() => reviewEvidenceAction({ statementId: s.id, approve, rejectReason: reason }))
                         }
+                        onVoidInvoice={(reason) => {
+                          if (
+                            confirm(
+                              `${s.installerName} 기사의 앱 발행 세금계산서를 취소할까요?\n국세청 전송 전이면 발행취소, 전송 후면 음수 수정세금계산서가 발행됩니다(100원). 정산서는 반려로 돌아가고 기사에게 다시 발행하라는 알림이 갑니다.`,
+                            )
+                          )
+                            run(() => voidStatementInvoiceAction({ statementId: s.id, reason }));
+                        }}
                         onCancel={() => {
                           if (
                             confirm(
@@ -341,6 +397,7 @@ function FragmentRow({
   onToggle,
   pending,
   onReview,
+  onVoidInvoice,
   onCancel,
 }: {
   s: StatementView;
@@ -352,8 +409,10 @@ function FragmentRow({
   onToggle: () => void;
   pending: boolean;
   onReview: (approve: boolean, reason?: string) => void;
+  onVoidInvoice: (reason: string) => void;
   onCancel: () => void;
 }) {
+  const [voidReason, setVoidReason] = useState("");
   const [reason, setReason] = useState("");
   const infoWarning = s.infoStatus === null ? "정산 정보 미등록" : s.infoStatus !== "APPROVED" ? "정산 정보 미승인" : null;
   return (
@@ -396,7 +455,14 @@ function FragmentRow({
               </div>
               {s.flow === "TAX" ? (
                 <div>
-                  <span className="text-zinc-500">계산서 작성일</span> {s.invoiceIssueDate ?? "-"}
+                  <span className="text-zinc-500">{s.ntsConfirmNum ? "앱 발행일" : "계산서 작성일"}</span>{" "}
+                  {s.invoiceIssueDate ?? "-"}
+                  {s.ntsConfirmNum ? (
+                    <span className="ml-2">
+                      <span className="text-zinc-500">국세청 승인번호</span> {s.ntsConfirmNum}{" "}
+                      <NtsBadge state={s.ntsSendState} />
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <div>
@@ -409,6 +475,45 @@ function FragmentRow({
               </div>
             </div>
             {s.evidenceRejectReason ? <p className="text-red-600">반려 사유: {s.evidenceRejectReason}</p> : null}
+            {s.popbillError && !s.ntsConfirmNum ? (
+              <p className="text-amber-700">팝빌 발행 마지막 실패: {s.popbillError}</p>
+            ) : null}
+            {s.ntsSendState === "FAILED" ? (
+              <p className="text-red-600">
+                국세청 전송 실패: {s.ntsSendError ?? "-"} — 팝빌이 다시 전송하지 않으면 취소 후 기사에게 다시 발행을 요청하세요.
+              </p>
+            ) : null}
+            {s.popbillHistory.length > 0 ? (
+              <div className="text-xs text-zinc-500">
+                취소한 앱 발행 세금계산서:
+                <ul className="ml-4 list-disc">
+                  {s.popbillHistory.map((h, i) => (
+                    <li key={i}>
+                      {new Date(h.at).toLocaleDateString("ko-KR")} · 승인번호 {h.ntsConfirmNum} ·{" "}
+                      {h.type === "MODIFY" ? `수정세금계산서(-) ${h.modifyNtsConfirmNum ?? ""}` : "발행취소"} · 사유: {h.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {s.ntsConfirmNum && !s.paidAt ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className="w-72 rounded-md border border-zinc-300 px-2 py-1 text-sm"
+                  placeholder="세금계산서 취소 사유 (기사에게 전달)"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                />
+                <button
+                  className="rounded-md border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
+                  disabled={pending || !voidReason.trim()}
+                  onClick={() => onVoidInvoice(voidReason.trim())}
+                >
+                  세금계산서 취소
+                </button>
+                <span className="text-xs text-zinc-400">국세청 전송 전이면 발행취소, 후면 수정세금계산서(-) · 지급 전에만</span>
+              </div>
+            ) : null}
             {s.evidencePhotoUrls.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {s.evidencePhotoUrls.map((url, i) =>
@@ -437,7 +542,7 @@ function FragmentRow({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-zinc-500">
                   {s.flow === "TAX"
-                    ? "홈택스 매입 내역 또는 원본으로 금액(공급가액·세액)을 확인하세요."
+                    ? "홈택스 매입 내역 또는 사진으로 금액(공급가액·세액)을 확인하세요."
                     : "홈택스에서 승인번호·금액을 확인하세요."}
                 </span>
                 <button className={primaryBtn} disabled={pending} onClick={() => onReview(true)}>
@@ -466,6 +571,60 @@ function Stat({ label, value, strong }: { label: string; value: string; strong?:
     <div className={`rounded-xl border px-4 py-3 ${strong ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white"}`}>
       <div className={`text-xs ${strong ? "text-zinc-300" : "text-zinc-500"}`}>{label}</div>
       <div className="mt-1 text-lg font-bold">{value}</div>
+    </div>
+  );
+}
+
+function NtsBadge({ state }: { state: string | null }) {
+  if (state === "SUCCESS") return <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-bold text-emerald-800">국세청 전송 완료</span>;
+  if (state === "FAILED") return <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-700">국세청 전송 실패</span>;
+  if (state === "CANCELED") return <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">팝빌에서 발행취소됨</span>;
+  return <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-xs font-bold text-zinc-600">국세청 전송 대기</span>;
+}
+
+/** 팝빌 파트너 포인트: 잔액·발행 가능 건수, 이 달 남은 앱 발행 건보다 적으면 빨갛게 + 충전 버튼 */
+function PointsBar({
+  points,
+  needed,
+  onError,
+}: {
+  points: PopbillPointsSummary;
+  needed: number;
+  onError: (code: string) => void;
+}) {
+  const [opening, setOpening] = useState(false);
+  const short = points.issuable < needed;
+  async function charge() {
+    setOpening(true);
+    const win = window.open("about:blank", "_blank");
+    const r = await getPopbillChargeUrlAction();
+    setOpening(false);
+    if (!r.ok) {
+      win?.close();
+      onError(r.error);
+      return;
+    }
+    if (win) win.location.href = r.url;
+    else window.location.href = r.url;
+  }
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
+        short ? "border-red-200 bg-red-50 text-red-700" : "border-zinc-200 bg-white text-zinc-700"
+      }`}
+    >
+      <div>
+        <span className="font-semibold">팝빌 포인트 {points.balance.toLocaleString()}P</span>
+        <span className="ml-2">· 약 {points.issuable.toLocaleString()}건 발행 가능 (건당 {points.unitCost}원)</span>
+        {short ? (
+          <span className="ml-2 font-semibold">
+            이 달 아직 발행 안 된 세금계산서 {needed}건보다 적습니다. 충전하지 않으면 기사 앱 발행이 실패합니다.
+          </span>
+        ) : null}
+      </div>
+      <button className={secondaryBtn} disabled={opening} onClick={charge}>
+        포인트 충전
+      </button>
     </div>
   );
 }
