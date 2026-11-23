@@ -71,12 +71,17 @@ function todayKst(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-/** 다음 달 10일 (월합계 세금계산서 발행 기한) */
-function invoiceDeadline(ym: string): string {
+/** 법정 발행 기한: 다음 달 10일(월합계 세금계산서). 이 날이 지나면 지연발행. 본사 제출 기한(5일)과 다르다. */
+function legalInvoiceDeadline(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y, m, 10));
   return `${d.getUTCMonth() + 1}월 10일`;
 }
+
+/** "2026-12-05" → "12월 5일" */
+const mdLabel = (date: string) => `${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일`;
+/** "2027-01" → "1월 말일" */
+const payLabel = (ym: string) => `${Number(ym.slice(5, 7))}월 말일`;
 
 export default function StatementClient({
   statement: s,
@@ -122,7 +127,7 @@ export default function StatementClient({
           </div>
         </div>
 
-        <StatusBox s={s} ym={s.ym} appIssue={popbill?.ready ?? false} />
+        <StatusBox s={s} appIssue={popbill?.ready ?? false} />
 
         <details style={{ ...ui.card, padding: "12px 16px" }}>
           <summary style={{ fontSize: 14, fontWeight: 700, cursor: "pointer" }}>포함된 작업 {lines.length}건 보기</summary>
@@ -161,7 +166,7 @@ export default function StatementClient({
   );
 }
 
-function StatusBox({ s, ym, appIssue }: { s: StatementView; ym: string; appIssue: boolean }) {
+function StatusBox({ s, appIssue }: { s: StatementView; appIssue: boolean }) {
   if (s.infoStatus === null || !s.flow) {
     return (
       <Notice tone="warn" title="정산 정보를 먼저 등록해 주세요">
@@ -185,16 +190,31 @@ function StatusBox({ s, ym, appIssue }: { s: StatementView; ym: string; appIssue
     if (s.evidenceStatus === "CONFIRMED") {
       return (
         <Notice tone="ok" title={s.ntsConfirmNum ? "전자세금계산서 발행 완료" : "세금계산서 확인 완료"}>
-          곧 지급됩니다.
+          {payLabel(s.payYm)}에 지급됩니다.
+          {s.payDeferred ? ` (기한 ${mdLabel(s.invoiceDeadline)} 이후 제출)` : ""}
         </Notice>
       );
     }
-    if (s.evidenceStatus === "SUBMITTED") return <Notice tone="info" title="본사 확인 중">세금계산서를 확인하고 있습니다.</Notice>;
+    if (s.evidenceStatus === "SUBMITTED") {
+      return (
+        <Notice tone="info" title="본사 확인 중">
+          세금계산서를 확인하고 있습니다. 확인되면 {payLabel(s.payYm)}에 지급됩니다.
+        </Notice>
+      );
+    }
+    const how = appIssue
+      ? "아래 「전자세금계산서 발행」 버튼을 눌러 주세요."
+      : "아래 정보로 세금계산서를 발행한 뒤 사진을 올려 주세요.";
+    if (s.deadlinePassed) {
+      return (
+        <Notice tone="warn" title={`제출 기한(${mdLabel(s.invoiceDeadline)})이 지났습니다`}>
+          {how} 지금 제출하면 {payLabel(s.payYm)}에 지급됩니다.
+        </Notice>
+      );
+    }
     return (
-      <Notice tone="info" title={`세금계산서를 발행해 주세요 (${invoiceDeadline(ym)}까지)`}>
-        {appIssue
-          ? "아래 「전자세금계산서 발행」 버튼을 눌러 주세요. 발행되면 바로 지급 대상이 됩니다."
-          : "아래 정보로 세금계산서를 발행한 뒤 사진을 올려 주세요. 확인 후 지급됩니다."}
+      <Notice tone="info" title={`세금계산서를 발행해 주세요 (${mdLabel(s.invoiceDeadline)}까지)`}>
+        {how} {mdLabel(s.invoiceDeadline)}까지 내시면 {payLabel(s.payYm)}에 지급되고, 늦으면 다음 달 말일에 지급됩니다.
       </Notice>
     );
   }
@@ -274,7 +294,7 @@ function PopbillIssueCard({ s, ready }: { s: StatementView; ready: boolean }) {
       {s.popbillError && !error && !late ? <p style={ui.errorText}>지난 발행 시도 실패: {s.popbillError}</p> : null}
       {late ? (
         <p style={lateBox}>
-          발행 기한({invoiceDeadline(s.ym)})이 지나 <b>지연발행</b>됩니다. 공급자(기사님)에게 지연발급 가산세가 부과될 수
+          세금계산서 법정 발행 기한({legalInvoiceDeadline(s.ym)})이 지나 <b>지연발행</b>됩니다. 공급자(기사님)에게 지연발급 가산세가 부과될 수
           있습니다. 그래도 발행하시겠습니까?
         </p>
       ) : null}

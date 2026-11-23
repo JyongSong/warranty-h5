@@ -54,6 +54,9 @@ function stage(s: StatementView): { text: string; cls: string } {
   if (s.flow === "TAX") {
     if (s.paidAt) return { text: "지급 완료", cls: "bg-emerald-100 text-emerald-800" };
     if (s.ntsSendState === "FAILED") return { text: "국세청 전송 실패", cls: "bg-red-100 text-red-700" };
+    if (s.evidenceStatus === "CONFIRMED" && s.payDeferred) {
+      return { text: `기한 후 제출 · ${Number(s.payYm.slice(5))}월 지급`, cls: "bg-amber-100 text-amber-800" };
+    }
     if (s.evidenceStatus === "CONFIRMED") {
       return { text: s.ntsConfirmNum ? "지급 대기 · 앱 발행" : "지급 대기", cls: "bg-blue-100 text-blue-800" };
     }
@@ -69,9 +72,11 @@ function stage(s: StatementView): { text: string; cls: string } {
 }
 
 /** payBlockReason 과 같은 규칙(서버가 다시 확인한다) */
+// 서버의 payBlockReason 과 같은 규칙
 function payable(s: StatementView): boolean {
   if (s.paidAt || s.infoStatus !== "APPROVED" || !s.flow) return false;
-  return s.flow === "CASH" || s.evidenceStatus === "CONFIRMED";
+  if (s.flow === "CASH") return true;
+  return s.evidenceStatus === "CONFIRMED" && !s.payDeferred;
 }
 
 export default function StatementsTab({
@@ -174,7 +179,8 @@ export default function StatementsTab({
       </section>
 
       <p className="text-xs text-zinc-500">
-        일정: 말일 마감 → 다음 달 5일까지 정산서 발행 → 10일까지 기사 세금계산서 → 15일 지급. 세금계산서 건은 정산 금액 + 부가세
+        일정: 말일 마감 → 다음 달 1일 정산서 발행 → 5일까지 기사 세금계산서 → 그 달 말일 지급. 5일이 지나 낸 세금계산서는
+        다음 달 말일에 지급합니다(그 전에는 지급 처리가 막힙니다). 늦게 나온 추가 정산서는 다음 달 5일이 기한입니다. 세금계산서 건은 정산 금액 + 부가세
         10%를 지급하고, 현금영수증 건은 정산 금액을 먼저 지급한 뒤 영수증을 받습니다.
       </p>
 

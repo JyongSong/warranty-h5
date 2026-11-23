@@ -23,6 +23,9 @@ import type { TaxDocType } from "@/lib/installer/settlement-info-shared";
  * 정산서를 만들고(라인 statement_id), M월 정산 주기(SETTLED)에 묶어 금액을 잠근다.
  * 발행 뒤에 M월 건이 늦게 승인되면 다시 미발행으로 보이고, 발행하면 그 기사의 M월 「추가 정산서」(seq 2…)가 된다.
  *
+ * 일정(세금계산서): 말일 마감 → 다음 달 1일 정산서 발행 → 5일까지 기사 세금계산서 → 그 달 말일 지급.
+ *   5일이 지나 낸 세금계산서는 다음 달 말일에 지급한다(그 전에는 지급 처리가 막힌다). invoiceDeadlineOf 참고.
+ *
  * 증빙 흐름(증빙 종류로 갈림):
  *   TAX  (전자·종이 세금계산서): 증빙 제출 → 본사 확인 → 지급.  지급액 = 공급가액 + 부가세(10%, 원 미만 절사)
  *   CASH (현금영수증):            지급 → 승인번호 제출 → 본사 확인. 지급액 = 정산 금액
@@ -85,6 +88,41 @@ export function flowOf(taxDocType: string | null | undefined): EvidenceFlow | nu
 export function computeAmounts(baseAmount: number, flow: EvidenceFlow | null) {
   const vatAmount = flow === "TAX" ? Math.floor(baseAmount / 10) : 0;
   return { vatAmount, payAmount: baseAmount + vatAmount };
+}
+
+// ── 세금계산서 기한 · 지급 월 ───────────────────────────────────────────────
+
+/** 세금계산서 제출 기한(일). 정산서는 1일에 나오고 기사는 5일까지 낸다. */
+export const INVOICE_DEADLINE_DAY = 5;
+
+const kstParts = (d: Date) => {
+  const k = new Date(d.getTime() + KST_OFFSET_MS);
+  return { y: k.getUTCFullYear(), m: k.getUTCMonth() + 1, day: k.getUTCDate() };
+};
+const ymOf = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+/** 그 달 1일 0시(KST) */
+export function ymStart(ym: string): Date {
+  return new Date(`${ym}-01T00:00:00+09:00`);
+}
+
+/**
+ * 정산서의 세금계산서 기한과 기본 지급 월.
+ * 정산서가 나온 날(KST)이 5일 이전이면 그 달 5일, 5일이 지났으면(늦게 나온 추가 정산서) 다음 달 5일.
+ * 기한까지 내면 기한이 있는 달 말일에 지급한다.
+ */
+export function invoiceDeadlineOf(statementCreatedAt: Date): { date: string; endsAt: Date; payYm: string } {
+  const { y, m, day } = kstParts(statementCreatedAt);
+  const ym = day <= INVOICE_DEADLINE_DAY ? ymOf(y, m) : shiftYm(ymOf(y, m), 1);
+  const date = `${ym}-${String(INVOICE_DEADLINE_DAY).padStart(2, "0")}`;
+  const endsAt = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000);
+  return { date, endsAt, payYm: ym };
+}
+
+/** 실제 지급 월: 기한 안에 냈으면 기한 달, 기한 뒤에 냈으면 그다음 달. 아직 안 냈으면 지금 내면 몇 월인지. */
+export function payYmOf(statementCreatedAt: Date, submittedAt: Date | null, now = new Date()): string {
+  const d = invoiceDeadlineOf(statementCreatedAt);
+  const at = submittedAt ?? now;
+  return at < d.endsAt ? d.payYm : shiftYm(d.payYm, 1);
 }
 
 // ── 본사 발행 ─────────────────────────────────────────────────────────────
@@ -286,6 +324,14 @@ export type StatementView = {
   /** 국세청 전송 결과(앱 발행 건): SENDING | SUCCESS | FAILED */
   ntsSendState: string | null;
   ntsSendError: string | null;
+  /** 세금계산서 제출 기한(YYYY-MM-DD, 세금계산서 흐름만 의미 있음) */
+  invoiceDeadline: string;
+  /** 기한이 지났는지(지금 기준) */
+  deadlinePassed: boolean;
+  /** 지급 월(YYYY-MM): 기한 안 제출이면 기한 달, 늦으면 다음 달. 미제출이면 지금 내는 경우 기준 */
+  payYm: string;
+  /** 기한 뒤에 내서 아직 지급할 수 없는 상태(지급 월 전) */
+  payDeferred: boolean;
   /** 본사가 취소한 앱 발행 세금계산서 이력(최근이 끝) */
   popbillHistory: Array<{ type: string; ntsConfirmNum: string; modifyNtsConfirmNum?: string | null; reason: string; at: string }>;
   paidAt: string | null;
@@ -329,12 +375,14 @@ function tryDecrypt(value: string | null | undefined): string | null {
   }
 }
 
-async function toView(row: StatementRow, withPhotos: boolean): Promise<StatementView> {
+async function toView(row: StatementRow, withPhotos: boolean, now = new Date()): Promise<StatementView> {
   const info = row.installer.settlementInfo;
   const taxDocType = (row.taxDocType ?? info?.taxDocType ?? null) as TaxDocType | null;
   const flow = flowOf(taxDocType);
   const computed = computeAmounts(row.baseAmount, flow);
   const photos = withPhotos ? await getCompletionPhotoSignedUrls(row.evidencePhotoPaths) : [];
+  const deadline = invoiceDeadlineOf(row.createdAt);
+  const payYm = payYmOf(row.createdAt, row.evidenceSubmittedAt, now);
   return {
     id: row.id,
     ym: row.ym,
@@ -358,6 +406,10 @@ async function toView(row: StatementRow, withPhotos: boolean): Promise<Statement
     popbillError: row.popbillError,
     ntsSendState: row.ntsSendState,
     ntsSendError: row.ntsSendError,
+    invoiceDeadline: deadline.date,
+    deadlinePassed: now >= deadline.endsAt,
+    payYm,
+    payDeferred: flow === "TAX" && !row.paidAt && now < ymStart(payYm),
     popbillHistory: Array.isArray(row.popbillHistory) ? (row.popbillHistory as StatementView["popbillHistory"]) : [],
     paidAt: row.paidAt?.toISOString() ?? null,
     infoStatus: info?.status ?? null,
@@ -561,11 +613,14 @@ export async function reviewEvidence(input: {
 }
 
 /** 지급 가능 여부와 이유. 화면 표시와 지급 처리가 같은 규칙을 쓴다. */
-export function payBlockReason(v: Pick<StatementView, "flow" | "evidenceStatus" | "paidAt" | "infoStatus">): string | null {
+export function payBlockReason(
+  v: Pick<StatementView, "flow" | "evidenceStatus" | "paidAt" | "infoStatus" | "payDeferred" | "payYm">,
+): string | null {
   if (v.paidAt) return "이미 지급";
   if (v.infoStatus !== "APPROVED") return "정산 정보 미승인";
   if (!v.flow) return "증빙 종류 미선택";
   if (v.flow === "TAX" && v.evidenceStatus !== "CONFIRMED") return "세금계산서 확인 전";
+  if (v.flow === "TAX" && v.payDeferred) return `기한 후 제출 · ${Number(v.payYm.slice(5))}월 지급`;
   return null;
 }
 

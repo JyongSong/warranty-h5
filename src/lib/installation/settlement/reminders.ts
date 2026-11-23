@@ -4,11 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { getCertStatus } from "@/lib/popbill/client";
 import { isPopbillTaxInvoiceEnabled } from "@/lib/installer/popbill-tax-invoice";
-import { currentYm, flowOf, formatYm, isSettlementLaunched, shiftYm } from "@/lib/installation/settlement/statements";
+import {
+  INVOICE_DEADLINE_DAY,
+  formatYm,
+  flowOf,
+  invoiceDeadlineOf,
+  isSettlementLaunched,
+} from "@/lib/installation/settlement/statements";
 
 /**
  * 기사 정산 알림(매일 09:00 KST cron).
- * - 매달 8일: 지난달 정산서의 세금계산서를 아직 안 낸 기사에게 「10일까지 발행」 알림
+ * - 매달 3일·5일: 이번 달 5일이 기한인 정산서의 세금계산서를 아직 안 냈거나 반려된 기사에게 「5일까지 발행」 알림
  * - 매일: 팝빌 공동인증서 만료 30·14·7·3·1일 전 알림
  */
 
@@ -27,7 +33,8 @@ export function kstDaysBetween(from: Date, to: Date): number {
   return Math.round((b - a) / DAY_MS);
 }
 
-export const INVOICE_REMINDER_DAY = 8;
+/** 세금계산서 기한 알림을 보내는 날(KST 일). 5일이 기한이라 3일(D-2)과 당일 아침. */
+export const INVOICE_REMINDER_DAYS = [3, INVOICE_DEADLINE_DAY] as const;
 export const CERT_REMINDER_DAYS = [30, 14, 7, 3, 1] as const;
 
 export type ReminderResult = { targets: number; sent: number; failed: number };
@@ -42,40 +49,56 @@ async function push(installerId: string, title: string, body: string): Promise<b
   }
 }
 
-/** 매달 8일: 지난달 정산서 중 세금계산서를 아직 안 냈거나 반려된 기사에게 알린다. 8일이 아니면 아무것도 안 한다. */
+/**
+ * 매달 3일·5일: 기한이 이번 달 5일인 정산서 중 세금계산서를 아직 안 냈거나 반려된 기사에게 알린다.
+ * 기한은 정산서가 나온 날로 정해지므로(invoiceDeadlineOf), 지난달 6일~이번 달 5일에 나온 정산서가 대상이다.
+ */
 export async function sendInvoiceDeadlineReminders(now = new Date()): Promise<ReminderResult | null> {
-  if (Number(kstDate(now).slice(8, 10)) !== INVOICE_REMINDER_DAY) return null;
+  const today = kstDate(now);
+  const day = Number(today.slice(8, 10));
+  if (!(INVOICE_REMINDER_DAYS as readonly number[]).includes(day)) return null;
   if (!(await isSettlementLaunched())) return null;
 
-  const ym = shiftYm(currentYm(now), -1);
+  const deadlineDate = `${today.slice(0, 8)}${String(INVOICE_DEADLINE_DAY).padStart(2, "0")}`;
+  const createdTo = new Date(new Date(`${deadlineDate}T00:00:00+09:00`).getTime() + DAY_MS);
+  const createdFrom = new Date(createdTo.getTime() - 40 * DAY_MS);
   const rows = await prisma.settlementStatement.findMany({
-    where: { ym, paidAt: null, evidenceStatus: { in: ["PENDING", "REJECTED"] } },
+    where: {
+      paidAt: null,
+      evidenceStatus: { in: ["PENDING", "REJECTED"] },
+      createdAt: { gte: createdFrom, lt: createdTo },
+    },
     select: {
+      ym: true,
       installerId: true,
       taxDocType: true,
       evidenceStatus: true,
+      createdAt: true,
       installer: { select: { settlementInfo: { select: { taxDocType: true } } } },
     },
   });
-  const byInstaller = new Map<string, { count: number; rejected: boolean }>();
+  const byInstaller = new Map<string, { yms: Set<string>; count: number; rejected: boolean }>();
   for (const r of rows) {
     if (flowOf(r.taxDocType ?? r.installer.settlementInfo?.taxDocType) !== "TAX") continue;
-    const cur = byInstaller.get(r.installerId) ?? { count: 0, rejected: false };
+    if (invoiceDeadlineOf(r.createdAt).date !== deadlineDate) continue;
+    const cur = byInstaller.get(r.installerId) ?? { yms: new Set<string>(), count: 0, rejected: false };
+    cur.yms.add(r.ym);
     cur.count += 1;
     cur.rejected ||= r.evidenceStatus === "REJECTED";
     byInstaller.set(r.installerId, cur);
   }
 
-  const [, m] = ym.split("-").map(Number);
-  const deadline = `${(m % 12) + 1}월 10일`;
+  const deadline = `${Number(deadlineDate.slice(5, 7))}월 ${INVOICE_DEADLINE_DAY}일`;
+  const isToday = day === INVOICE_DEADLINE_DAY;
   let sent = 0;
   let failed = 0;
   for (const [installerId, v] of byInstaller) {
-    const what = v.count > 1 ? `${formatYm(ym)} 정산서 ${v.count}장` : `${formatYm(ym)} 정산서`;
+    const months = [...v.yms].sort().map(formatYm).join("·");
+    const what = v.count > 1 ? `${months} 정산서 ${v.count}장` : `${months} 정산서`;
     const ok = await push(
       installerId,
-      `세금계산서 발행 기한 ${deadline}`,
-      `${what}의 세금계산서를 ${deadline}까지 발행해 주세요.${v.rejected ? " 반려된 건은 다시 제출해 주세요." : ""} 기한이 지나면 지연발행으로 가산세가 부과될 수 있습니다.`,
+      isToday ? `오늘(${deadline})까지 세금계산서를 발행해 주세요` : `세금계산서 제출 기한 ${deadline}`,
+      `${what}의 세금계산서를 ${deadline}까지 발행해 주세요.${v.rejected ? " 반려된 건은 다시 제출해 주세요." : ""} 기한이 지나면 정산금이 다음 달 말일에 지급됩니다.`,
     );
     if (ok) sent += 1;
     else failed += 1;
