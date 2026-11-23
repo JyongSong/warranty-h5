@@ -17,6 +17,7 @@ import {
   submitCashReceiptAction,
   submitTaxInvoiceAction,
 } from "./actions";
+import { openExternalAsync } from "@/lib/installer/open-external";
 
 let supabaseBrowser: ReturnType<typeof createClient> | null = null;
 function getSupabaseBrowser() {
@@ -329,15 +330,8 @@ function IssuedInvoiceCard({ s }: { s: StatementView }) {
   const [error, setError] = useState<string | null>(null);
   async function view() {
     setError(null);
-    const win = window.open("about:blank", "_blank");
-    const r = await getInvoiceViewUrlAction(s.id);
-    if (!r.ok) {
-      win?.close();
-      setError(ISSUE_ERR[r.error] ?? ISSUE_ERR.POPBILL_UNAVAILABLE);
-      return;
-    }
-    if (win) win.location.href = r.url;
-    else window.location.href = r.url;
+    const r = await openExternalAsync(() => getInvoiceViewUrlAction(s.id));
+    if (!r.ok) setError(ISSUE_ERR[r.error] ?? ISSUE_ERR.POPBILL_UNAVAILABLE);
   }
   return (
     <div style={ui.card}>

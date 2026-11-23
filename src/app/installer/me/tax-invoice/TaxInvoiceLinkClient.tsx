@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import type { PopbillLinkStatus, PopbillLinkView } from "@/lib/installer/popbill-tax-invoice";
 import { getCertRegisterUrlAction, verifyPopbillLinkAction } from "./actions";
+import { openExternalAsync, openExternalUrl } from "@/lib/installer/open-external";
 import * as ui from "../../ui";
 
 const STATUS: Record<PopbillLinkStatus, { text: string; bg: string; color: string }> = {
@@ -98,16 +99,9 @@ export default function TaxInvoiceLinkClient({
   const openCert = () =>
     startTransition(async () => {
       setMessage(null);
-      // 팝업 차단을 피하려고 창을 먼저 연 뒤 주소를 넣는다.
-      const win = window.open("about:blank", "_blank");
-      const r = await getCertRegisterUrlAction();
-      if (!r.ok) {
-        win?.close();
-        setMessage({ text: ERRORS[r.error] ?? ERRORS.POPBILL_UNAVAILABLE, ok: false });
-        return;
-      }
-      if (win) win.location.href = r.url;
-      else window.location.href = r.url;
+      // 앱에서는 휴대폰 기본 브라우저로, 일반 브라우저에서는 새 탭으로 연다.
+      const r = await openExternalAsync(getCertRegisterUrlAction);
+      if (!r.ok) setMessage({ text: ERRORS[r.error] ?? ERRORS.POPBILL_UNAVAILABLE, ok: false });
     });
 
   return (
@@ -160,7 +154,17 @@ export default function TaxInvoiceLinkClient({
               {copied ? "복사됨" : "복사"}
             </button>
           </div>
-          <a href={signupUrl} target="_blank" rel="noreferrer" style={{ ...linkButton, marginTop: 10 }}>
+          <a
+            href={signupUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...linkButton, marginTop: 10 }}
+            onClick={(e) => {
+              // 앱에서는 휴대폰 기본 브라우저로 연다(새 창은 앱 웹뷰에서 안 열릴 수 있다).
+              e.preventDefault();
+              openExternalUrl(signupUrl);
+            }}
+          >
             팝빌 연동회원 가입하러 가기
           </a>
           <p style={{ ...stepText, fontSize: 13, color: "#71717a", margin: "10px 0 0" }}>
