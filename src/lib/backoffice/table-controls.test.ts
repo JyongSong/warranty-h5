@@ -70,9 +70,23 @@ describe("backoffice table controls", () => {
   test("keeps saved column order compatible with current columns", () => {
     expect(normalizeTablePreferenceColumnOrder(["memo", "removed", "order"], ["order", "memo", "phone"])).toEqual([
       "memo",
-      "order",
       "phone",
+      "order",
     ]);
+  });
+
+  test("inserts a column missing from the saved order at its default position, not at the end", () => {
+    expect(
+      normalizeTablePreferenceColumnOrder(
+        ["erpOrderNo", "installDate", "sourceAddress", "statusChangedAt"],
+        ["selection", "erpOrderNo", "settlementAmount", "installDate", "sourceAddress", "statusChangedAt"],
+        ["selection"],
+      ),
+    ).toEqual(["selection", "erpOrderNo", "settlementAmount", "installDate", "sourceAddress", "statusChangedAt"]);
+  });
+
+  test("puts a new first column at the front", () => {
+    expect(normalizeTablePreferenceColumnOrder(["b", "c"], ["a", "b", "c"])).toEqual(["a", "b", "c"]);
   });
 
   test("keeps locked leading columns before saved user column order", () => {
@@ -82,7 +96,7 @@ describe("backoffice table controls", () => {
         ["selection", "order", "memo", "phone"],
         ["selection"],
       ),
-    ).toEqual(["selection", "memo", "order", "phone"]);
+    ).toEqual(["selection", "memo", "phone", "order"]);
   });
 
   test("keeps saved sorting compatible with current columns", () => {

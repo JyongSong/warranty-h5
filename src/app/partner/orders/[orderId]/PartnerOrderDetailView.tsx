@@ -23,7 +23,9 @@ export default function PartnerOrderDetailView({
   order: PartnerOrderDetail;
   basePath?: string;
 }) {
-  const workable = order.status === "INSTALLER_ASSIGNED";
+  // 본사 검수 중(완료 등록 뒤)에도 검수가 끝나기 전까지는 고칠 수 있다.
+  const inReview = order.status === "WAITING_HQ_REVIEW";
+  const workable = order.status === "INSTALLER_ASSIGNED" || inReview;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950">
@@ -94,12 +96,16 @@ export default function PartnerOrderDetailView({
 
           <aside className="grid gap-4 lg:sticky lg:top-20">
             {workable ? (
-              <PartnerOrderActions orderId={order.id} claimAmount={order.claimAmount} installer={order.installer} />
+              <PartnerOrderActions
+                orderId={order.id}
+                claimAmount={order.claimAmount}
+                installer={order.installer}
+                inReview={inReview}
+                completion={order.completion}
+              />
             ) : (
               <p className="rounded-lg border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-600">
-                {order.status === "WAITING_HQ_REVIEW"
-                  ? "설치 완료가 등록되어 본사 검수 중입니다."
-                  : order.status === "COMPLETED"
+                {order.status === "COMPLETED"
                     ? "본사 검수가 끝난 완료 건입니다."
                     : "더 이상 진행할 수 없는 건입니다."}
               </p>

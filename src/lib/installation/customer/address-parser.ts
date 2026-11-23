@@ -45,6 +45,10 @@ export function parseInstallationAddress(address: string): ParsedInstallationAdd
   const sido = normalizeSido(tokens[0]);
   if (!sido) return null;
 
+  // 세종특별자치시는 시·군·구가 없는 단층제라 바로 읍·면·동/도로명이 온다
+  // ("세종특별자치시 한누리대로 2130"). 시 자체를 시군구 자리에 둔다.
+  if (sido === "세종") return { sido, sigungu: "세종특별자치시" };
+
   const sigungu = parseSigungu(tokens.slice(1));
   if (!sigungu) return null;
 
@@ -100,6 +104,8 @@ function parseSigungu(tokens: string[]) {
 function getAddress1TokenCount(tokens: string[]) {
   const first = tokens[0] ?? "";
   if (!normalizeSido(first) && !isMergedSidoToken(first)) return 0;
+  // 세종은 시군구 단계가 없으므로 시/도 토큰까지만 address1 이다.
+  if (normalizeSido(first) === "세종") return tokens.length > 1 ? 1 : 0;
 
   const firstRegion = tokens[1];
   const secondRegion = tokens[2];

@@ -80,7 +80,8 @@ const ALLOWED_TRANSITIONS: Record<string, readonly string[]> = {
   WAITING_HQ_REVIEW: ["INSTALLER_ASSIGNED", "COMPLETED", "CANCELLED"],
   CANCELLED: ["COMPLETED"],
   // INSTALLER_ASSIGNED: 관리자가 완료 승인을 취소하고 기사에게 재제출을 요청할 때
-  COMPLETED: ["COMPLETED", "INSTALLER_ASSIGNED"],
+  // WAITING_HQ_REVIEW: 협력사(PL) 완료 건의 승인을 취소하고 검수 전으로 되돌릴 때
+  COMPLETED: ["COMPLETED", "INSTALLER_ASSIGNED", "WAITING_HQ_REVIEW"],
 };
 
 export async function transitionInstallationOrderStatus(

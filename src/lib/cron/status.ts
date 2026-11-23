@@ -45,7 +45,16 @@ export const CJ_ORDER_PUSH_JOB: CronJobDefinition = {
   enabledSettingKey: "cj.orderPush.enabled",
 };
 
-// 기사 정산 알림(8일 세금계산서 기한·공동인증서 만료). 매일 00:00 UTC = 09:00 KST.
+// 위 수신이 CJ_PUSH_STALE_HOURS 시간 넘게 끊기면 문자로 알린다.
+export const CJ_ORDER_PUSH_WATCHDOG_JOB: CronJobDefinition = {
+  key: "cj.orderPushWatchdog",
+  label: "CJ 주문번호 수신 끊김 알림",
+  path: "/api/internal/cron/cj-push-watchdog",
+  schedule: "45 * * * *",
+  enabledSettingKey: "cj.orderPushWatchdog.enabled",
+};
+
+// 기사 정산 알림(세금계산서 기한·공동인증서 만료) + 국세청 전송 확인. 매일 00:00 UTC = 09:00 KST.
 // 별도 켜고 끄는 스위치 없이 정산 공개(installer.settlement.launched)를 따른다.
 export const SETTLEMENT_REMINDERS_CRON_JOB: CronJobDefinition = {
   key: "settlement.reminders",

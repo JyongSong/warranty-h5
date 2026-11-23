@@ -26,6 +26,8 @@ export const SYSTEM_SETTING_KEYS = {
   installationCustomerInputRequestMode: "installation.sms.customerInputRequestMode",
   installationSmsDeliveryMode: "installation.sms.deliveryMode",
   installationSmsTestPhoneNumber: "installation.sms.testPhoneNumber",
+  // 회사 PC 의 CJ 주문번호 자동 수신이 10시간 끊기면 문자 받을 번호. 비어 있으면 안 보낸다.
+  cjPushAlertPhones: "cj.orderPush.alertPhones",
   installationSmsSendWindowStart: "installation.sms.sendWindowStart",
   installationSmsSendWindowEnd: "installation.sms.sendWindowEnd",
   // 카카오 알림톡 전환 스위치. false 면 기존 SMS 문구 그대로 SMS 로만 발송한다.
@@ -191,6 +193,13 @@ const SYSTEM_SETTING_SPECS = ([
   {
     key: SYSTEM_SETTING_KEYS.installationSmsTestPhoneNumber,
     description: "테스트 발송 수신 번호",
+    type: "phoneList" as const,
+    defaultValue: "",
+    validationHint: "전화번호. 여러 번호는 콤마, 세미콜론, 줄바꿈으로 구분",
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.cjPushAlertPhones,
+    description: "CJ 주문번호 자동 수신(회사 PC)이 10시간 끊기면 알림 문자 받을 번호",
     type: "phoneList" as const,
     defaultValue: "",
     validationHint: "전화번호. 여러 번호는 콤마, 세미콜론, 줄바꿈으로 구분",

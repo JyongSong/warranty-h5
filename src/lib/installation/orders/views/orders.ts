@@ -18,6 +18,7 @@ export type InstallationOrderStatusView =
   | "waitingAdminReview"
   | "waitingInstallerResponse"
   | "assigned"
+  | "completionRejected"
   | "waitingHqReview"
   | "completed"
   | "cancelled";
@@ -29,7 +30,8 @@ export type InstallationOrderSearchField =
   | "installerName"
   | "installerPhone"
   | "orderDate"
-  | "installerDateRange";
+  | "installerDateRange"
+  | "completedDate";
 export type InstallationOrderSearchCondition = {
   field: InstallationOrderSearchField;
   keyword?: string;
@@ -327,7 +329,14 @@ function buildInstallationOrderStatusViewWhere(
   if (statusView === "preAssignment") return { status: "READY_FOR_CANDIDATE_SELECTION" };
   if (statusView === "waitingAdminReview") return { status: "WAITING_ADMIN_REVIEW" };
   if (statusView === "waitingInstallerResponse") return { status: "WAITING_INSTALLER_RESPONSE" };
-  if (statusView === "assigned") return { status: "INSTALLER_ASSIGNED" };
+  // 완료 검수에서 반려된 건은 상태가 INSTALLER_ASSIGNED 로 돌아간다. 재제출 전까지는 "반려" 탭에만 보이게
+  // 기사 배정 완료에서 뺀다(재제출하면 reviewStatus 가 PENDING 으로 바뀌어 완료 검수 대기로 간다).
+  if (statusView === "assigned") {
+    return { status: "INSTALLER_ASSIGNED", NOT: { completion: { is: { reviewStatus: "REJECTED" } } } };
+  }
+  if (statusView === "completionRejected") {
+    return { status: "INSTALLER_ASSIGNED", completion: { is: { reviewStatus: "REJECTED" } } };
+  }
   if (statusView === "waitingHqReview") return { status: "WAITING_HQ_REVIEW" };
   if (statusView === "completed") return { status: "COMPLETED" };
   if (statusView === "cancelled") return { status: "CANCELLED" };
@@ -378,6 +387,23 @@ async function buildInstallationOrderSelectedSearchWhere(
     if (!range) return null;
     return {
       customerRequests: { some: { installDate: range } },
+    };
+  }
+
+  // 완료일 = 기사 완료 제출 시각(installEndAt). 날짜는 KST 기준.
+  if (condition.field === "completedDate") {
+    const from = normalizeDateOnlySearchValue(condition.from);
+    const to = normalizeDateOnlySearchValue(condition.to);
+    if (!from && !to) return null;
+    return {
+      completion: {
+        is: {
+          installEndAt: {
+            ...(from ? { gte: kstDayStart(from, 0) } : {}),
+            ...(to ? { lt: kstDayStart(to, 1) } : {}),
+          },
+        },
+      },
     };
   }
 
@@ -517,4 +543,10 @@ function normalizeCompactDateOnlySearchValue(value: string | undefined) {
   if (/^\d{8}$/.test(trimmed)) return trimmed;
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed.replaceAll("-", "");
   return null;
+}
+
+function kstDayStart(dateOnly: string, addDays: number) {
+  const date = new Date(`${dateOnly}T00:00:00.000+09:00`);
+  date.setUTCDate(date.getUTCDate() + addDays);
+  return date;
 }

@@ -86,6 +86,15 @@ type ApproveInstallationAssignmentInput = {
   assignmentId: string;
 };
 
+export type ApproveInstallationCompletionsActionResult =
+  | {
+      ok: true;
+      approvedCount: number;
+      failedCount: number;
+      failures: Array<{ orderId: string; error: string }>;
+    }
+  | { ok: false; error: string };
+
 type ApproveInstallationAssignmentsInput = {
   assignmentIds: string[];
 };
@@ -607,6 +616,37 @@ export async function approveInstallationCompletionAction(
     console.error("[action/installations/completion-approve]", error);
     return { ok: false, error: "COMPLETION_APPROVE_FAILED" };
   }
+}
+
+// 완료 검수 대기 일괄 승인. 금액(장거리·기타 청구·대행 출장비)은 고치지 않고 기사가 제출한 그대로 승인한다.
+// 건마다 따로 처리해서 한 건이 실패해도 나머지는 승인된다.
+export async function approveInstallationCompletionsAction(input: {
+  orderIds: string[];
+}): Promise<ApproveInstallationCompletionsActionResult> {
+  const auth = await requireInstallationAdmin();
+  if (!auth.ok) return auth;
+
+  const orderIds = Array.from(new Set(input.orderIds.map((orderId) => orderId.trim()).filter(Boolean)));
+  if (orderIds.length === 0) return { ok: false, error: "ORDER_IDS_REQUIRED" };
+
+  const failures: Array<{ orderId: string; error: string }> = [];
+  let approvedCount = 0;
+
+  for (const orderId of orderIds) {
+    try {
+      await approveInstallerCompletion({ adminId: auth.admin.id, orderId });
+      approvedCount += 1;
+    } catch (error) {
+      if (error instanceof InstallationCompletionError) {
+        failures.push({ orderId, error: error.message });
+      } else {
+        console.error("[action/installations/bulk-approve-completion]", { orderId, error });
+        failures.push({ orderId, error: "COMPLETION_APPROVE_FAILED" });
+      }
+    }
+  }
+
+  return { ok: true, approvedCount, failedCount: failures.length, failures };
 }
 
 export async function rejectInstallationCompletionAction(

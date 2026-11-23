@@ -418,6 +418,7 @@ describe("listInstallationOrderStatuses", () => {
       expect.objectContaining({
         where: {
           status: "INSTALLER_ASSIGNED",
+          NOT: { completion: { is: { reviewStatus: "REJECTED" } } },
         },
       }),
     );
@@ -555,6 +556,45 @@ describe("listInstallationOrderStatuses", () => {
     expect(count).toHaveBeenCalledWith({
       where: {
         status: "INSTALLER_ASSIGNED",
+        NOT: { completion: { is: { reviewStatus: "REJECTED" } } },
+      },
+    });
+  });
+
+  it("counts completion-rejected orders separately from assigned ones", async () => {
+    count.mockResolvedValue(1);
+
+    await expect(countInstallationOrderStatuses({ statusView: "completionRejected" })).resolves.toBe(1);
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        status: "INSTALLER_ASSIGNED",
+        completion: { is: { reviewStatus: "REJECTED" } },
+      },
+    });
+  });
+
+  it("filters by completion date in KST", async () => {
+    count.mockResolvedValue(0);
+
+    await countInstallationOrderStatuses({
+      statusView: "completed",
+      searchCondition: { field: "completedDate", from: "2026-11-01", to: "2026-11-13" },
+    });
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        status: "COMPLETED",
+        AND: [
+          {
+            completion: {
+              is: {
+                installEndAt: {
+                  gte: new Date("2026-10-31T15:00:00.000Z"),
+                  lt: new Date("2026-11-13T15:00:00.000Z"),
+                },
+              },
+            },
+          },
+        ],
       },
     });
   });

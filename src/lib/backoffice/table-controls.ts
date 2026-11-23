@@ -118,12 +118,24 @@ export function normalizeTablePreferenceColumnOrder(
   const compatibleSavedColumnIds = savedColumnOrder.filter(
     (columnId) => currentColumnIdSet.has(columnId) && !lockedLeadingColumnIdSet.has(columnId),
   );
-  const savedColumnIdSet = new Set(compatibleSavedColumnIds);
-  const newColumnIds = currentColumnIds.filter(
-    (columnId) => !savedColumnIdSet.has(columnId) && !lockedLeadingColumnIdSet.has(columnId),
-  );
+  // 저장된 순서에 없는 열(탭마다 열 구성이 달라 새로 나타난 열 등)은 끝에 붙이지 않고,
+  // 기본 순서에서 바로 앞에 있는 열 뒤에 끼워 넣는다. 앞에 놓을 열이 없으면 맨 앞.
+  const orderedColumnIds = [...compatibleSavedColumnIds];
+  currentColumnIds.forEach((columnId, currentIndex) => {
+    if (lockedLeadingColumnIdSet.has(columnId) || orderedColumnIds.includes(columnId)) return;
 
-  return [...compatibleLockedLeadingColumnIds, ...compatibleSavedColumnIds, ...newColumnIds];
+    let insertAt = 0;
+    for (let previousIndex = currentIndex - 1; previousIndex >= 0; previousIndex -= 1) {
+      const anchorIndex = orderedColumnIds.indexOf(currentColumnIds[previousIndex]);
+      if (anchorIndex >= 0) {
+        insertAt = anchorIndex + 1;
+        break;
+      }
+    }
+    orderedColumnIds.splice(insertAt, 0, columnId);
+  });
+
+  return [...compatibleLockedLeadingColumnIds, ...orderedColumnIds];
 }
 
 export function normalizeTablePreferenceSorting(

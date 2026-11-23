@@ -4,8 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent } from "react";
 import { compressImage } from "@/lib/installer/image";
+import type { CompletionPhoto } from "@/lib/installer/storage";
 import {
   addPartnerNoteAction,
+  editPartnerCompletionAction,
   setPartnerInstallerAction,
   getPartnerUploadTargetsAction,
   setPartnerClaimAmountAction,
@@ -18,7 +20,8 @@ const PHOTO_MAX = 10;
 const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
   ORDER_NOT_FOUND: "주문을 찾을 수 없습니다.",
-  ORDER_NOT_WORKABLE: "이미 완료 등록되었거나 진행할 수 없는 건입니다.",
+  ORDER_NOT_WORKABLE: "본사 검수가 끝났거나 진행할 수 없는 건입니다.",
+  ORDER_NOT_IN_REVIEW: "본사 검수가 이미 끝나 수정할 수 없습니다.",
   REASON_REQUIRED: "설치 불가 사유를 적어 주세요.",
   INSTALLER_REQUIRED: "담당 기사를 입력해 주세요.",
   INSTALLER_TOO_LONG: "담당 기사는 100자 이내로 입력해 주세요.",
@@ -46,14 +49,19 @@ function getSupabaseBrowser() {
 
 // 협력사가 하는 일: 청구 금액을 넣어 접수, 담당 기사·메모, 설치 완료 등록, (못 맡으면) 설치 불가.
 // 기사 배정 과정·일정은 협력사가 알아서 하고, 본사에는 누가 맡았는지만 남긴다.
+// 완료 등록 뒤(inReview)에도 본사 검수 전까지는 금액·담당 기사·완료 내용(진행 내용·사진)을 고칠 수 있다.
 export default function PartnerOrderActions({
   orderId,
   claimAmount,
   installer,
+  inReview = false,
+  completion = null,
 }: {
   orderId: string;
   claimAmount: number | null;
   installer: string | null;
+  inReview?: boolean;
+  completion?: { body: string | null; photos: CompletionPhoto[] } | null;
 }) {
   const router = useRouter();
   const [amountInput, setAmountInput] = useState(claimAmount != null ? String(claimAmount) : "");
@@ -61,8 +69,12 @@ export default function PartnerOrderActions({
   const [unableReason, setUnableReason] = useState("");
   const [installerInput, setInstallerInput] = useState(installer ?? "");
   const [noteBody, setNoteBody] = useState("");
-  const [completionBody, setCompletionBody] = useState("");
+  const [completionBody, setCompletionBody] = useState(inReview ? (completion?.body ?? "") : "");
   const [photos, setPhotos] = useState<File[]>([]);
+  // 완료 내용 수정: 기존 사진 중 지운 것. 저장 후 새로고침돼도 지운 사진은 목록에 없으니 그대로 둬도 된다.
+  const [removedPaths, setRemovedPaths] = useState<string[]>([]);
+  const keptPhotos = inReview ? (completion?.photos ?? []).filter((photo) => !removedPaths.includes(photo.path)) : [];
+  const photoRoom = PHOTO_MAX - keptPhotos.length;
   const [busy, setBusy] = useState<"amount" | "installer" | "unable" | "note" | "completion" | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
@@ -129,7 +141,24 @@ export default function PartnerOrderActions({
     event.target.value = "";
     if (incoming.length === 0) return;
     const compressed = await Promise.all(incoming.map(compressImage));
-    setPhotos((current) => [...current, ...compressed].slice(0, PHOTO_MAX));
+    setPhotos((current) => [...current, ...compressed].slice(0, Math.max(photoRoom, 0)));
+  }
+
+  // 새로 고른 사진만 Storage 로 올리고 경로를 돌려준다.
+  async function uploadNewPhotos(): Promise<{ ok: true; paths: string[] } | { ok: false; error: string }> {
+    if (photos.length === 0) return { ok: true, paths: [] };
+    const targets = await getPartnerUploadTargetsAction(orderId, photos.length);
+    if (!targets.ok) return targets;
+
+    const supabase = getSupabaseBrowser();
+    for (let index = 0; index < photos.length; index += 1) {
+      const target = targets.targets[index];
+      const upload = await supabase.storage
+        .from(targets.bucket)
+        .uploadToSignedUrl(target.path, target.token, photos[index]);
+      if (upload.error) return { ok: false, error: "PHOTO_UPLOAD_INCOMPLETE" };
+    }
+    return { ok: true, paths: targets.targets.map((target) => target.path) };
   }
 
   async function handleCompletion() {
@@ -137,36 +166,38 @@ export default function PartnerOrderActions({
       setMessage({ tone: "error", text: ERROR_MESSAGES.CLAIM_AMOUNT_REQUIRED });
       return;
     }
-    if (!window.confirm("설치 완료로 등록할까요? 등록하면 본사 검수가 끝날 때까지 수정할 수 없습니다.")) return;
+    if (!window.confirm("설치 완료로 등록할까요? 본사 검수 전까지는 등록한 내용을 고칠 수 있습니다.")) return;
 
     const ok = await run(
       "completion",
       async () => {
         // 진행 내용과 사진은 선택이다. 사진이 있을 때만 업로드한다.
-        let photoPaths: string[] = [];
-        if (photos.length > 0) {
-          const targets = await getPartnerUploadTargetsAction(orderId, photos.length);
-          if (!targets.ok) return targets;
-
-          const supabase = getSupabaseBrowser();
-          for (let index = 0; index < photos.length; index += 1) {
-            const target = targets.targets[index];
-            const upload = await supabase.storage
-              .from(targets.bucket)
-              .uploadToSignedUrl(target.path, target.token, photos[index]);
-            if (upload.error) return { ok: false, error: "PHOTO_UPLOAD_INCOMPLETE" };
-          }
-          photoPaths = targets.targets.map((target) => target.path);
-        }
-
-        return submitPartnerCompletionAction({ orderId, body: completionBody, photoPaths });
+        const uploaded = await uploadNewPhotos();
+        if (!uploaded.ok) return uploaded;
+        return submitPartnerCompletionAction({ orderId, body: completionBody, photoPaths: uploaded.paths });
       },
       "설치 완료를 등록했습니다. 본사 검수 후 완료 처리됩니다.",
     );
     if (ok) {
       setPhotos([]);
-      setCompletionBody("");
     }
+  }
+
+  async function handleCompletionEdit() {
+    const ok = await run(
+      "completion",
+      async () => {
+        const uploaded = await uploadNewPhotos();
+        if (!uploaded.ok) return uploaded;
+        return editPartnerCompletionAction({
+          orderId,
+          body: completionBody,
+          photoPaths: [...keptPhotos.map((photo) => photo.path), ...uploaded.paths],
+        });
+      },
+      "완료 내용을 수정했습니다.",
+    );
+    if (ok) setPhotos([]);
   }
 
   return (
@@ -187,7 +218,7 @@ export default function PartnerOrderActions({
         <p className="mb-3 mt-1 text-xs text-zinc-500">
           {claimAmount == null
             ? "본사에 청구할 시공비를 입력하면 접수됩니다. 기사 배정과 일정은 직접 진행해 주세요."
-            : "설치 완료 등록 전까지 수정할 수 있고, 바꿀 때마다 기록이 남습니다."}
+            : "본사 검수 전까지 수정할 수 있고, 바꿀 때마다 기록이 남습니다."}
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -221,10 +252,41 @@ export default function PartnerOrderActions({
       {/* 접수(청구 금액 입력) 뒤에만 완료 등록을 연다. */}
       {claimAmount != null ? (
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="text-base font-bold">설치 완료 등록</h2>
-        <p className="mb-3 mt-1 text-xs text-zinc-500">진행 내용과 사진은 선택입니다. 등록하면 본사가 확인한 뒤 완료 처리됩니다.</p>
+        <h2 className="text-base font-bold">{inReview ? "완료 내용 수정" : "설치 완료 등록"}</h2>
+        <p className="mb-3 mt-1 text-xs text-zinc-500">
+          {inReview
+            ? "본사 검수 중입니다. 검수가 끝나기 전까지 진행 내용과 사진을 고칠 수 있고, 고친 내용은 진행 기록에 남습니다."
+            : "진행 내용과 사진은 선택입니다. 등록하면 본사가 확인한 뒤 완료 처리됩니다."}
+        </p>
+        {keptPhotos.length > 0 ? (
+          <div className="mb-2 grid grid-cols-4 gap-2">
+            {keptPhotos.map((photo, index) => (
+              <div key={photo.path} className="relative">
+                {photo.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- 서명 URL 이라 next/image 최적화 대상이 아니다
+                  <img
+                    src={photo.url}
+                    alt={`완료 사진 ${index + 1}`}
+                    className="aspect-square w-full rounded border border-zinc-200 object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-square items-center justify-center rounded border border-dashed border-rose-300 text-xs text-rose-600">
+                    불러오기 실패
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setRemovedPaths((current) => [...current, photo.path])}
+                  className="absolute right-1 top-1 rounded bg-white/90 px-1.5 text-xs font-semibold text-rose-600"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <label className="flex h-24 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-sm font-medium text-zinc-600 hover:border-zinc-500">
-          사진 추가 ({photos.length}/{PHOTO_MAX})
+          사진 추가 ({keptPhotos.length + photos.length}/{PHOTO_MAX})
           <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotos} />
         </label>
         {photos.length > 0 ? (
@@ -252,11 +314,11 @@ export default function PartnerOrderActions({
         />
         <button
           type="button"
-          onClick={handleCompletion}
+          onClick={inReview ? handleCompletionEdit : handleCompletion}
           disabled={busy !== null}
           className="mt-2 h-10 w-full rounded-md bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy === "completion" ? "등록 중…" : "설치 완료 등록"}
+          {busy === "completion" ? "저장 중…" : inReview ? "완료 내용 저장" : "설치 완료 등록"}
         </button>
       </section>
       ) : null}
@@ -298,6 +360,8 @@ export default function PartnerOrderActions({
         </button>
       </section>
 
+      {/* 완료 등록 뒤에는 설치 불가를 고를 수 없다. */}
+      {inReview ? null : (
       <details className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium text-zinc-500">이 건을 맡을 수 없나요?</summary>
         <textarea
@@ -316,6 +380,7 @@ export default function PartnerOrderActions({
           {busy === "unable" ? "전송 중…" : "본사에 설치 불가 알리기"}
         </button>
       </details>
+      )}
     </div>
   );
 }

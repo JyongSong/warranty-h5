@@ -25,13 +25,14 @@ import type {
 } from "@/lib/installation/orders/views/orders";
 import {
   approveInstallationAssignmentsAction,
+  approveInstallationCompletionsAction,
   sendCustomerInputSmsForInstallationOrdersAction,
 } from "./actions";
 import { formatPartnerStatus, PARTNER_STATUSES } from "@/lib/installation/partner/routing";
 import type { PartnerInstallItem } from "@/lib/installation/partner/install-items";
 
-// v4: 기본 열 순서 변경(희망일/시간·기사/브랜치 합침, 설치 품목 추가). 옛 저장 순서를 버린다.
-const TABLE_PREFS_KEY = "backoffice.installations.table.v4";
+// v6: v5 에서 탭을 오가며 정산 금액 열이 맨 끝으로 저장된 순서를 버린다.
+const TABLE_PREFS_KEY = "backoffice.installations.table.v6";
 const BULK_ACTION_LOCKED_LEADING_COLUMN_IDS = ["selection"];
 
 export type InstallationOrderListItem = {
@@ -121,6 +122,7 @@ const SEARCH_FIELD_OPTIONS: Array<{ field: InstallationOrderSearchField; label: 
   { field: "installerName", label: "기사이름" },
   { field: "installerPhone", label: "기사전화번호" },
   { field: "installerDateRange", label: "기사+기간" },
+  { field: "completedDate", label: "완료일 범위" },
 ];
 
 type InlineSearchDateRange = {
@@ -141,6 +143,7 @@ export default function InstallationOrderList({
   pagination,
   showSearchControls = true,
   searchVariant = "fields",
+  searchFieldOptions,
   showStatusFilters = true,
   emptyMessage = "표시할 설치 주문이 없습니다.",
 }: {
@@ -157,6 +160,8 @@ export default function InstallationOrderList({
   showSearchControls?: boolean;
   /** "fields" = 검색 조건 선택형, "unified" = 입력칸 하나로 주문번호/출고번호/고객명/전화번호 통합 검색 */
   searchVariant?: "fields" | "unified";
+  /** 검색 조건 선택지를 이 순서로 제한한다. 없으면 기본 목록(완료일 범위 제외). */
+  searchFieldOptions?: InstallationOrderSearchField[];
   showStatusFilters?: boolean;
   emptyMessage?: string;
 }) {
@@ -166,7 +171,13 @@ export default function InstallationOrderList({
   const isTerminalView = statusView === "completed" || statusView === "cancelled";
   const showBulkCustomerInputSmsControls = statusView === "customerInputSmsRequired";
   const showBulkAssignmentApprovalControls = statusView === "waitingAdminReview";
-  const showBulkSelectionControls = showBulkCustomerInputSmsControls || showBulkAssignmentApprovalControls;
+  const showBulkCompletionApprovalControls = statusView === "waitingHqReview";
+  const showBulkSelectionControls =
+    showBulkCustomerInputSmsControls || showBulkAssignmentApprovalControls || showBulkCompletionApprovalControls;
+  // 주문 단위 선택은 문자 발송(고객 문자 발송 필요)과 완료 일괄 승인(완료 검수 대기)이 같이 쓴다.
+  const isOrderSelectable = showBulkCompletionApprovalControls
+    ? isCompletionApprovalSelectable
+    : isCustomerInputSmsSelectable;
   const lockedLeadingColumnIds = showBulkSelectionControls ? BULK_ACTION_LOCKED_LEADING_COLUMN_IDS : undefined;
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(() => new Set());
@@ -174,9 +185,11 @@ export default function InstallationOrderList({
   const [bulkAssignmentMessage, setBulkAssignmentMessage] = useState<string | null>(null);
   const [isBulkSmsPending, startBulkSmsTransition] = useTransition();
   const [isBulkAssignmentPending, startBulkAssignmentTransition] = useTransition();
+  const [bulkCompletionMessage, setBulkCompletionMessage] = useState<string | null>(null);
+  const [isBulkCompletionPending, startBulkCompletionTransition] = useTransition();
   const selectableOrderIds = useMemo(
-    () => initialItems.filter(isCustomerInputSmsSelectable).map((item) => item.id),
-    [initialItems],
+    () => initialItems.filter(isOrderSelectable).map((item) => item.id),
+    [initialItems, isOrderSelectable],
   );
   const selectableAssignmentIds = useMemo(
     () =>
@@ -275,6 +288,31 @@ export default function InstallationOrderList({
     });
   };
 
+  const approveBulkCompletions = () => {
+    if (selectedSelectableOrderIds.length === 0) return;
+    const confirmed = window.confirm(
+      `선택한 ${selectedSelectableOrderIds.length}건의 완료를 승인할까요?\n` +
+        "장거리·기타 청구·대행 출장비는 기사가 제출한 금액 그대로 승인됩니다. 금액을 고쳐야 하는 건은 상세에서 따로 승인하세요.",
+    );
+    if (!confirmed) return;
+
+    setBulkCompletionMessage(null);
+    startBulkCompletionTransition(async () => {
+      const result = await approveInstallationCompletionsAction({ orderIds: selectedSelectableOrderIds });
+      if (!result.ok) {
+        setBulkCompletionMessage(`일괄 승인 실패: ${result.error}`);
+        return;
+      }
+
+      setSelectedOrderIds(new Set());
+      setBulkCompletionMessage(
+        `일괄 승인 완료: 성공 ${result.approvedCount}건, 실패 ${result.failedCount}건` +
+          (result.failures.length > 0 ? ` (${result.failures.map((failure) => failure.error).join(", ")})` : ""),
+      );
+      router.refresh();
+    });
+  };
+
   const defaultSorting = useMemo<SortingState>(() => [{ id: "statusChangedAt", desc: true }], []);
   const columns = useMemo<ColumnDef<InstallationOrderListItem>[]>(
     () => {
@@ -295,10 +333,10 @@ export default function InstallationOrderList({
               <input
                 type="checkbox"
                 checked={allSelectableOrdersSelected}
-                disabled={selectableOrderIds.length === 0}
+                disabled={selectableOrderIds.length === 0 || isBulkCompletionPending}
                 onChange={(event) => toggleAllSelectableOrders(event.currentTarget.checked)}
                 className="h-4 w-4 rounded border-zinc-300"
-                aria-label="발송 가능한 주문 전체 선택"
+                aria-label={showBulkCompletionApprovalControls ? "승인 가능한 완료 전체 선택" : "발송 가능한 주문 전체 선택"}
               />
             )}
           </label>
@@ -329,13 +367,14 @@ export default function InstallationOrderList({
             );
           }
 
-          if (!isCustomerInputSmsSelectable(item)) return <span className="text-xs text-zinc-300">-</span>;
+          if (!isOrderSelectable(item)) return <span className="text-xs text-zinc-300">-</span>;
 
           return (
             <label className="inline-flex items-center justify-center">
               <input
                 type="checkbox"
                 checked={selectedOrderIds.has(item.id)}
+                disabled={isBulkCompletionPending}
                 onChange={(event) => toggleOrderSelection(item.id, event.currentTarget.checked)}
                 className="h-4 w-4 rounded border-zinc-300"
                 aria-label={`${item.erpOrderNo} 주문 선택`}
@@ -358,6 +397,10 @@ export default function InstallationOrderList({
               {row.original.channel === "CJ" ? (
                 <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
                   CJ
+                </span>
+              ) : row.original.channel === "MANUAL" ? (
+                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                  직접
                 </span>
               ) : null}
               <Link
@@ -502,6 +545,11 @@ export default function InstallationOrderList({
                   <span title="기사 앱 미설치 (문자로만 안내)">{label}</span>
                 )}
                 {branch ? <div className="truncate text-xs text-zinc-500" title={branch}>{branch}</div> : null}
+                {row.original.assignment.installerPhone ? (
+                  <div className="whitespace-nowrap text-xs tabular-nums text-zinc-500">
+                    {formatBackofficePhone(row.original.assignment.installerPhone)}
+                  </div>
+                ) : null}
               </div>
             );
           },
@@ -602,7 +650,7 @@ export default function InstallationOrderList({
         },
       ];
 
-      // 정산 금액은 설치 완료 탭에서만 보인다.
+      // 정산 금액은 완료 검수 대기(예상)·설치 완료(확정) 탭에서 보인다.
       const settlementAmountColumn: ColumnDef<InstallationOrderListItem> = {
           id: "settlementAmount",
           // 정렬은 숫자로, 표시는 확정/예상 구분해서.
@@ -666,14 +714,16 @@ export default function InstallationOrderList({
         },
       ];
 
-      // 기본 순서: 주문번호, 희망일/시간, 설치 주소, 설치 연락처, 기사/브랜치, 설치 품목,
-      // (설치 완료 탭만) 정산 금액, 그다음은 예전 순서 그대로.
+      // 기본 순서: 주문번호, (검수 대기·설치 완료 탭만) 정산 금액, 희망일/시간, 설치 주소, 설치 연락처,
+      // 기사/브랜치, 설치 품목, 그다음은 예전 순서 그대로.
+      // 반려 건은 정산 대상이 아니라 금액이 없으므로 뺀다.
+      const showSettlementAmount = statusView === "waitingHqReview" || statusView === "completed";
       const leadingColumns = [
         ...orderNumberColumns,
+        ...(showSettlementAmount ? [settlementAmountColumn] : []),
         ...installationColumns,
         assignedInstallerColumn,
         installItemsColumn,
-        ...(statusView === "completed" ? [settlementAmountColumn] : []),
         ...assignmentColumns,
         ...orderContextColumns,
         ...operationColumns,
@@ -688,6 +738,8 @@ export default function InstallationOrderList({
        basePath,
        detailSearchQuery,
        isBulkAssignmentPending,
+       isBulkCompletionPending,
+       isOrderSelectable,
        isTerminalView,
        statusView,
        selectableAssignmentIds.length,
@@ -696,6 +748,7 @@ export default function InstallationOrderList({
        selectedInstallationId,
       selectedOrderIds,
       showBulkAssignmentApprovalControls,
+      showBulkCompletionApprovalControls,
       showBulkSelectionControls,
       toggleAllSelectableAssignments,
       toggleAllSelectableOrders,
@@ -730,10 +783,25 @@ export default function InstallationOrderList({
       {bulkAssignmentMessage ? <span className="text-xs font-semibold text-zinc-600">{bulkAssignmentMessage}</span> : null}
     </>
   ) : null;
+  const bulkCompletionAction = showBulkCompletionApprovalControls ? (
+    <>
+      <button
+        type="button"
+        onClick={approveBulkCompletions}
+        disabled={selectedSelectableOrderIds.length === 0 || isBulkCompletionPending}
+        className={getBackofficeButtonClass("primary")}
+      >
+        {isBulkCompletionPending ? "일괄 승인 중..." : `선택 완료 일괄 승인 (${selectedSelectableOrderIds.length})`}
+      </button>
+      {bulkCompletionMessage ? (
+        <span className="text-xs font-semibold text-zinc-600">{bulkCompletionMessage}</span>
+      ) : null}
+    </>
+  ) : null;
   const shouldRenderSecondaryControls =
     !showSearchControls ||
     Boolean(showStatusFilters && statusFilterItems?.length) ||
-    Boolean(bulkSmsAction || bulkAssignmentAction);
+    Boolean(bulkSmsAction || bulkAssignmentAction || bulkCompletionAction);
 
   return (
     <section>
@@ -754,7 +822,33 @@ export default function InstallationOrderList({
           }
           cellClassName="align-top px-4 py-3 text-zinc-600"
           renderBeforeTable={(columnControls) => (
-            <div className="mb-5">
+            <div className="mb-5 flex flex-col gap-4">
+              {shouldRenderSecondaryControls ? (
+                <div className="@container">
+                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
+                    <div className="w-full min-w-0 flex-1">
+                      {showStatusFilters && statusFilterItems?.length ? (
+                        <InstallationOrderStatusViewTabs
+                          activeStatusView={statusView}
+                          basePath={basePath}
+                          items={statusFilterItems}
+                          searchCondition={searchCondition}
+                          searchQuery={searchQuery}
+                          pageSize={pagination?.pageSize}
+                        />
+                      ) : null}
+                      {bulkSmsAction || bulkAssignmentAction || bulkCompletionAction ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {bulkSmsAction}
+                          {bulkAssignmentAction}
+                          {bulkCompletionAction}
+                        </div>
+                      ) : null}
+                    </div>
+                    {!showSearchControls ? <div className="self-end">{columnControls}</div> : null}
+                  </div>
+                </div>
+              ) : null}
               {showSearchControls ? (
                 <div className="@container">
                   <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
@@ -768,6 +862,7 @@ export default function InstallationOrderList({
                       ) : (
                         <InstallationOrderInlineSearchForm
                           basePath={basePath}
+                          fieldOptions={searchFieldOptions}
                           historyDateRange={historyDateRange}
                           pageSize={pagination?.pageSize}
                           searchCondition={searchCondition}
@@ -776,31 +871,6 @@ export default function InstallationOrderList({
                       )}
                     </div>
                     <div className="self-end">{columnControls}</div>
-                  </div>
-                </div>
-              ) : null}
-              {shouldRenderSecondaryControls ? (
-                <div className={`${showSearchControls ? "mt-4 " : ""}@container`}>
-                  <div className="flex min-w-0 flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
-                    <div className="w-full min-w-0 flex-1">
-                      {showStatusFilters && statusFilterItems?.length ? (
-                        <InstallationOrderStatusViewTabs
-                          activeStatusView={statusView}
-                          basePath={basePath}
-                          items={statusFilterItems}
-                          searchCondition={searchCondition}
-                          searchQuery={searchQuery}
-                          pageSize={pagination?.pageSize}
-                        />
-                      ) : null}
-                      {bulkSmsAction || bulkAssignmentAction ? (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {bulkSmsAction}
-                          {bulkAssignmentAction}
-                        </div>
-                      ) : null}
-                    </div>
-                    {!showSearchControls ? <div className="self-end">{columnControls}</div> : null}
                   </div>
                 </div>
               ) : null}
@@ -858,35 +928,43 @@ function InstallationOrderUnifiedSearchForm({
 
 function InstallationOrderInlineSearchForm({
   basePath,
+  fieldOptions,
   historyDateRange,
   pageSize,
   searchCondition,
   statusView,
 }: {
   basePath: string;
+  fieldOptions?: InstallationOrderSearchField[];
   historyDateRange?: HistoryDateRange;
   pageSize?: number;
   searchCondition?: InstallationOrderSearchCondition;
   statusView: InstallationOrderStatusView;
 }) {
-  const initialSelectedField = searchCondition?.field ?? "orderDate";
+  const options = fieldOptions
+    ? fieldOptions.flatMap((field) => SEARCH_FIELD_OPTIONS.filter((option) => option.field === field))
+    : SEARCH_FIELD_OPTIONS.filter((option) => option.field !== "completedDate");
+  const initialSelectedField = searchCondition?.field ?? options[0]?.field ?? "orderDate";
   const [selectedField, setSelectedField] = useState<InstallationOrderSearchField>(
     initialSelectedField,
   );
   const [dateRange, setDateRange] = useState<InlineSearchDateRange>(() =>
     getInitialInlineSearchDateRange(searchCondition, initialSelectedField),
   );
-  const isDateField = selectedField === "desiredInstallDate" || selectedField === "orderDate";
+  const isDateField =
+    selectedField === "desiredInstallDate" || selectedField === "orderDate" || selectedField === "completedDate";
   const isInstallerDateRange = selectedField === "installerDateRange";
-  const handleSearchFieldChange = useCallback(
-    (field: InstallationOrderSearchField) => {
-      setSelectedField(field);
-      if (field === "desiredInstallDate" || field === "orderDate" || field === "installerDateRange") {
-        setDateRange(getInitialInlineSearchDateRange(searchCondition, field));
-      }
-    },
-    [searchCondition],
-  );
+  const handleSearchFieldChange = (field: InstallationOrderSearchField) => {
+    setSelectedField(field);
+    if (
+      field === "desiredInstallDate" ||
+      field === "orderDate" ||
+      field === "installerDateRange" ||
+      field === "completedDate"
+    ) {
+      setDateRange(getInitialInlineSearchDateRange(searchCondition, field));
+    }
+  };
 
   return (
     <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3">
@@ -911,7 +989,7 @@ function InstallationOrderInlineSearchForm({
             onChange={(event) => handleSearchFieldChange(event.target.value as InstallationOrderSearchField)}
             className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-950"
           >
-            {SEARCH_FIELD_OPTIONS.map((option) => (
+            {options.map((option) => (
               <option key={option.field} value={option.field}>
                 {option.label}
               </option>
@@ -980,6 +1058,10 @@ function isCustomerInputSmsSelectable(item: InstallationOrderListItem) {
   return item.status === "CUSTOMER_INPUT_SMS_REQUIRED" && !item.customerRequest;
 }
 
+function isCompletionApprovalSelectable(item: InstallationOrderListItem) {
+  return item.status === "WAITING_HQ_REVIEW";
+}
+
 function isAssignmentApprovalSelectable(item: InstallationOrderListItem) {
   return item.status === "WAITING_ADMIN_REVIEW" && item.assignment?.status === "WAITING_ADMIN_REVIEW";
 }
@@ -1016,49 +1098,76 @@ function InstallationOrderStatusViewTabs({
         ...activeStageTabs,
       ];
   const showStageTabs = stageTabs.length > 1;
+  const stageGroups = groupStageTabs(stageTabs);
+  const renderTab = (tab: (typeof stageTabs)[number], variant: "overview" | "stage") => (
+    <InstallationOrderStatusViewTab
+      key={tab.statusView}
+      activeStatusView={variant === "overview" ? overviewActiveStatusView : activeStatusView}
+      basePath={basePath}
+      pageSize={pageSize}
+      searchCondition={searchCondition}
+      searchQuery={searchQuery}
+      tab={tab}
+      variant={variant}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-2" aria-label="설치 주문 필터">
+    <div className="flex flex-col gap-3" aria-label="설치 주문 필터">
       {overviewTabs.length > 0 ? (
         <div
           className="inline-flex w-fit max-w-full overflow-x-auto rounded-lg bg-zinc-100 p-1"
           role="tablist"
           aria-label="보기"
         >
-          {overviewTabs.map((tab) => (
-            <InstallationOrderStatusViewTab
-              key={tab.statusView}
-              activeStatusView={overviewActiveStatusView}
-              basePath={basePath}
-              pageSize={pageSize}
-              searchCondition={searchCondition}
-              searchQuery={searchQuery}
-              tab={tab}
-            />
-          ))}
+          {overviewTabs.map((tab) => renderTab(tab, "overview"))}
         </div>
       ) : null}
       {showStageTabs ? (
-        <div
-          className="inline-flex w-fit max-w-full overflow-x-auto rounded-lg bg-zinc-100 p-1"
-          role="tablist"
-          aria-label="진행 단계"
-        >
-          {stageTabs.map((tab) => (
-            <InstallationOrderStatusViewTab
-              key={tab.statusView}
-              activeStatusView={activeStatusView}
-              basePath={basePath}
-              pageSize={pageSize}
-              searchCondition={searchCondition}
-              searchQuery={searchQuery}
-              tab={tab}
-            />
+        <div className="flex flex-wrap items-stretch gap-2" role="tablist" aria-label="진행 단계">
+          {stageGroups.map((group) => (
+            <div
+              key={group.key}
+              className="flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-2 pb-2 pt-1.5"
+            >
+              <span className="px-1 text-[11px] font-semibold tracking-wide text-zinc-400">{group.label || "\u00a0"}</span>
+              <div className="flex flex-wrap gap-1.5">{group.tabs.map((tab) => renderTab(tab, "stage"))}</div>
+            </div>
           ))}
         </div>
       ) : null}
     </div>
   );
+}
+
+// 진행 단계 탭을 흐름(고객 → 배정 → 시공 → 완료) 단위로 묶어 블록으로 보여준다.
+const STAGE_TAB_GROUPS: Array<{ key: string; label: string; statusViews: InstallationOrderStatusView[] }> = [
+  { key: "all", label: "", statusViews: ["active", "attention"] },
+  {
+    key: "customer",
+    label: "고객",
+    statusViews: ["customerInputSmsRequired", "waitingCustomerInput", "attentionCustomerInputSmsRequired"],
+  },
+  {
+    key: "dispatch",
+    label: "배정",
+    statusViews: ["preAssignment", "waitingAdminReview", "waitingInstallerResponse", "attentionAdminReview"],
+  },
+  { key: "work", label: "시공·검수", statusViews: ["assigned", "waitingHqReview", "completionRejected"] },
+  { key: "issue", label: "예외", statusViews: ["attentionIssueOnly"] },
+  { key: "done", label: "완료", statusViews: ["completed"] },
+];
+
+function groupStageTabs<T extends { statusView: InstallationOrderStatusView }>(tabs: T[]) {
+  const groups = STAGE_TAB_GROUPS.map((group) => ({
+    key: group.key,
+    label: group.label,
+    tabs: group.statusViews.flatMap((statusView) => tabs.filter((tab) => tab.statusView === statusView)),
+  }));
+  const grouped = new Set(STAGE_TAB_GROUPS.flatMap((group) => group.statusViews));
+  const rest = tabs.filter((tab) => !grouped.has(tab.statusView));
+  if (rest.length > 0) groups.push({ key: "other", label: "기타", tabs: rest });
+  return groups.filter((group) => group.tabs.length > 0);
 }
 
 function isAttentionStatusView(statusView: InstallationOrderStatusView) {
@@ -1093,6 +1202,7 @@ function InstallationOrderStatusViewTab({
   searchCondition,
   searchQuery,
   tab,
+  variant = "overview",
 }: {
   activeStatusView: InstallationOrderStatusView;
   basePath: string;
@@ -1100,6 +1210,7 @@ function InstallationOrderStatusViewTab({
   searchCondition?: InstallationOrderSearchCondition;
   searchQuery: string;
   tab: { statusView: InstallationOrderStatusView; label: string; count?: number; href?: string };
+  variant?: "overview" | "stage";
 }) {
   const isActive = activeStatusView === tab.statusView;
 
@@ -1109,11 +1220,19 @@ function InstallationOrderStatusViewTab({
       aria-current={isActive ? "page" : undefined}
       role="tab"
       aria-selected={isActive}
-      className={getStatusViewTabClassName(isActive)}
+      className={variant === "stage" ? getStageTabClassName(isActive) : getStatusViewTabClassName(isActive)}
     >
       <span>{tab.label}</span>
       {typeof tab.count === "number" ? (
-        <span className={getStatusViewTabCountClassName(isActive)}>{tab.count}</span>
+        <span
+          className={
+            variant === "stage"
+              ? getStageTabCountClassName(isActive, tab.count)
+              : getStatusViewTabCountClassName(isActive)
+          }
+        >
+          {tab.count}
+        </span>
       ) : null}
     </Link>
   );
@@ -1125,6 +1244,21 @@ function getStatusViewTabClassName(isActive: boolean) {
   }
 
   return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-zinc-600 transition hover:text-zinc-950";
+}
+
+function getStageTabClassName(isActive: boolean) {
+  if (isActive) {
+    return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-zinc-900 bg-zinc-900 px-3 text-sm font-semibold text-white shadow-sm";
+  }
+
+  return "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-950";
+}
+
+function getStageTabCountClassName(isActive: boolean, count: number) {
+  const base = "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs tabular-nums";
+  if (isActive) return `${base} bg-white/20 text-white`;
+  if (count === 0) return `${base} bg-zinc-100 text-zinc-400`;
+  return `${base} bg-zinc-200 text-zinc-800`;
 }
 
 function getStatusViewTabCountClassName(isActive: boolean) {
@@ -1209,9 +1343,12 @@ export function getDefaultInlineSearchDateRange(
   field: InstallationOrderSearchField,
   now = new Date(),
 ): InlineSearchDateRange | undefined {
+  const today = new Date(`${getKstTodayDateString(now)}T00:00:00.000Z`);
+  if (field === "completedDate") {
+    return { from: formatUtcDateOnly(addUtcDays(today, -30)), to: formatUtcDateOnly(today) };
+  }
   if (field !== "desiredInstallDate") return undefined;
 
-  const today = new Date(`${getKstTodayDateString(now)}T00:00:00.000Z`);
   return {
     from: formatUtcDateOnly(today),
     to: formatUtcDateOnly(addUtcDays(today, 14)),
