@@ -81,8 +81,8 @@ function legalInvoiceDeadline(ym: string): string {
 
 /** "2026-12-05" → "12월 5일" */
 const mdLabel = (date: string) => `${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일`;
-/** "2027-01" → "1월 말일" */
-const payLabel = (ym: string) => `${Number(ym.slice(5, 7))}월 말일`;
+/** "2027-01" → "1월 중" */
+const payLabel = (ym: string) => `${Number(ym.slice(5, 7))}월 중`;
 
 export default function StatementClient({
   statement: s,
@@ -215,7 +215,7 @@ function StatusBox({ s, appIssue }: { s: StatementView; appIssue: boolean }) {
     }
     return (
       <Notice tone="info" title={`세금계산서를 발행해 주세요 (${mdLabel(s.invoiceDeadline)}까지)`}>
-        {how} {mdLabel(s.invoiceDeadline)}까지 내시면 {payLabel(s.payYm)}에 지급되고, 늦으면 다음 달 말일에 지급됩니다.
+        {how} {mdLabel(s.invoiceDeadline)}까지 내시면 {payLabel(s.payYm)}에 지급되고, 늦으면 다음 달 중에 지급됩니다.
       </Notice>
     );
   }

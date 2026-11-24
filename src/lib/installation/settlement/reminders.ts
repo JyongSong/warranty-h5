@@ -98,7 +98,7 @@ export async function sendInvoiceDeadlineReminders(now = new Date()): Promise<Re
     const ok = await push(
       installerId,
       isToday ? `오늘(${deadline})까지 세금계산서를 발행해 주세요` : `세금계산서 제출 기한 ${deadline}`,
-      `${what}의 세금계산서를 ${deadline}까지 발행해 주세요.${v.rejected ? " 반려된 건은 다시 제출해 주세요." : ""} 기한이 지나면 정산금이 다음 달 말일에 지급됩니다.`,
+      `${what}의 세금계산서를 ${deadline}까지 발행해 주세요.${v.rejected ? " 반려된 건은 다시 제출해 주세요." : ""} 기한이 지나면 정산금이 다음 달 중에 지급됩니다.`,
     );
     if (ok) sent += 1;
     else failed += 1;
