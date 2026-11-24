@@ -92,6 +92,7 @@ model Installer {
   geocodedAt              DateTime?                              @map("geocoded_at") @db.Timestamptz(6)
   drivingDistances        InstallerDrivingDistance[]
   settlementInfo          InstallerSettlementInfo?
+  settlementInfoChanges   InstallerSettlementInfoChange[]
   settlementStatements    SettlementStatement[]
   popbillLink             InstallerPopbillLink?
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
@@ -1058,6 +1059,24 @@ model InstallerSettlementInfo {
 
   @@index([status])
   @@map("installer_settlement_infos")
+}
+
+// 기사 정산 정보 변경 이력(본사가 증빙 종류를 바꾸거나, 팝빌 연동 완료로 자동 전환될 때).
+// changed_by_admin_id 가 비어 있으면 시스템이 바꾼 것(source 로 이유를 남긴다).
+model InstallerSettlementInfoChange {
+  id               String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId      String    @map("installer_id")
+  installer        Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+  field            String
+  fromValue        String?   @map("from_value")
+  toValue          String?   @map("to_value")
+  // ADMIN | POPBILL_LINK
+  source           String
+  changedByAdminId String?   @map("changed_by_admin_id")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([installerId, createdAt])
+  @@map("installer_settlement_info_changes")
 }
 
 // 기사 팝빌 연동: 기사가 팝빌에 우리 LinkID 로 연동회원 가입 + 공동인증서 등록을 마쳤는지 앱의 「연동 확인」으로 기록한다.

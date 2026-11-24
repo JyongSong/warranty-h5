@@ -57,3 +57,20 @@ describe("parseSettlementInfoInput", () => {
     expect(parseSettlementInfoInput("inst-1", { ...base, taxDocType: "" }, { taxDocTypeEnabled: false }).taxDocType).toBeNull();
   });
 });
+
+import { resolveTaxChoice } from "./settlement-info-shared";
+
+describe("resolveTaxChoice (기사가 「세금계산서」를 고를 때 저장 값)", () => {
+  it("keeps a type the office already set", () => {
+    expect(resolveTaxChoice("PAPER_TAX_INVOICE", true)).toBe("PAPER_TAX_INVOICE");
+    expect(resolveTaxChoice("E_TAX_INVOICE", false)).toBe("E_TAX_INVOICE");
+  });
+  it("uses 팝빌 when the installer is already linked", () => {
+    expect(resolveTaxChoice(null, true)).toBe("E_TAX_INVOICE");
+    expect(resolveTaxChoice("CASH_RECEIPT", true)).toBe("E_TAX_INVOICE");
+  });
+  it("defaults to direct issuance otherwise", () => {
+    expect(resolveTaxChoice(null, false)).toBe("PAPER_TAX_INVOICE");
+    expect(resolveTaxChoice("CASH_RECEIPT", false)).toBe("PAPER_TAX_INVOICE");
+  });
+});
