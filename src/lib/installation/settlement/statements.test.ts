@@ -57,7 +57,7 @@ describe("payBlockReason", () => {
     expect(payBlockReason({ ...base, flow: "CASH", evidenceStatus: "PENDING", payDeferred: true })).toBeNull());
 });
 
-describe("invoice deadline (1일 발행 → 5일 기한 → 말일 지급)", () => {
+describe("invoice deadline (1일 발행 → 5일 기한 → 그 달 중 지급)", () => {
   const kst = (s: string) => new Date(`${s}+09:00`);
   it("statement issued on the 1st is due on the 5th of that month", () => {
     expect(invoiceDeadlineOf(kst("2026-12-01T10:00:00"))).toMatchObject({ date: "2026-12-05", payYm: "2026-12" });

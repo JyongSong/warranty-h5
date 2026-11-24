@@ -23,8 +23,8 @@ import type { TaxDocType } from "@/lib/installer/settlement-info-shared";
  * 정산서를 만들고(라인 statement_id), M월 정산 주기(SETTLED)에 묶어 금액을 잠근다.
  * 발행 뒤에 M월 건이 늦게 승인되면 다시 미발행으로 보이고, 발행하면 그 기사의 M월 「추가 정산서」(seq 2…)가 된다.
  *
- * 일정(세금계산서): 말일 마감 → 다음 달 1일 정산서 발행 → 5일까지 기사 세금계산서 → 그 달 말일 지급.
- *   5일이 지나 낸 세금계산서는 다음 달 말일에 지급한다(그 전에는 지급 처리가 막힌다). invoiceDeadlineOf 참고.
+ * 일정(세금계산서): 말일 마감 → 다음 달 1일 정산서 발행 → 5일까지 기사 세금계산서 → 그 달 중 지급.
+ *   5일이 지나 낸 세금계산서는 다음 달 중 지급한다(그 달 1일 전에는 지급 처리가 막힌다). invoiceDeadlineOf 참고.
  *
  * 증빙 흐름(증빙 종류로 갈림):
  *   TAX  (전자·종이 세금계산서): 증빙 제출 → 본사 확인 → 지급.  지급액 = 공급가액 + 부가세(10%, 원 미만 절사)
@@ -108,7 +108,7 @@ export function ymStart(ym: string): Date {
 /**
  * 정산서의 세금계산서 기한과 기본 지급 월.
  * 정산서가 나온 날(KST)이 5일 이전이면 그 달 5일, 5일이 지났으면(늦게 나온 추가 정산서) 다음 달 5일.
- * 기한까지 내면 기한이 있는 달 말일에 지급한다.
+ * 기한까지 내면 기한이 있는 달 중에 지급한다.
  */
 export function invoiceDeadlineOf(statementCreatedAt: Date): { date: string; endsAt: Date; payYm: string } {
   const { y, m, day } = kstParts(statementCreatedAt);
