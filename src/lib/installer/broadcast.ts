@@ -11,11 +11,12 @@ import { createInboxNotices } from "@/lib/installer/inbox";
  *
  * 대상 고르기
  * - WORKED: 기준일 이후 작업이 있는 기사(승인된 정산 라인 + 본사 확인 대기 중인 완료 건). 진행 중(배정·응답 대기) 포함은 선택.
+ * - NOT_WORKED: WORKED 의 반대(같은 기준일·진행 중 포함 조건으로 작업이 없는 활동 기사).
  * - ALL: 활동 기사 전원.
  * 화면에서 체크를 풀어 뺄 수 있고, 서버는 받은 id 를 활동 기사로 다시 걸러서만 보낸다.
  */
 
-export type BroadcastScope = "WORKED" | "ALL";
+export type BroadcastScope = "WORKED" | "NOT_WORKED" | "ALL";
 export type BroadcastMode = "BOTH" | "PUSH_ELSE_SMS" | "PUSH_ONLY" | "SMS_ONLY";
 
 export type BroadcastRecipient = {
@@ -40,7 +41,7 @@ export async function listBroadcastRecipients(input: {
   includeInProgress?: boolean;
 }): Promise<BroadcastRecipient[]> {
   let reasons = new Map<string, "DONE" | "IN_PROGRESS">();
-  if (input.scope === "WORKED") {
+  if (input.scope === "WORKED" || input.scope === "NOT_WORKED") {
     const since = /^\d{4}-\d{2}-\d{2}$/.test(input.since ?? "") ? input.since! : "2026-10-01";
     const sinceAt = new Date(`${since}T00:00:00+09:00`);
     const [lines, reviewing, progressing] = await Promise.all([
@@ -69,7 +70,14 @@ export async function listBroadcastRecipients(input: {
   }
 
   const installers = await prisma.installer.findMany({
-    where: { active: true, ...(input.scope === "WORKED" ? { id: { in: [...reasons.keys()] } } : {}) },
+    where: {
+      active: true,
+      ...(input.scope === "WORKED"
+        ? { id: { in: [...reasons.keys()] } }
+        : input.scope === "NOT_WORKED"
+          ? { id: { notIn: [...reasons.keys()] } }
+          : {}),
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,

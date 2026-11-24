@@ -26,6 +26,7 @@ export async function listBroadcastRecipientsAction(input: {
 }): Promise<{ ok: true; recipients: BroadcastRecipient[] } | { ok: false; error: string }> {
   const auth = await requireEditor();
   if (!auth.ok) return auth;
+  if (!SCOPES.includes(input.scope)) return { ok: false, error: "SCOPE_INVALID" };
   try {
     return { ok: true, recipients: await listBroadcastRecipients(input) };
   } catch (error) {
@@ -35,6 +36,7 @@ export async function listBroadcastRecipientsAction(input: {
 }
 
 const MODES: BroadcastMode[] = ["BOTH", "PUSH_ELSE_SMS", "PUSH_ONLY", "SMS_ONLY"];
+const SCOPES: BroadcastScope[] = ["WORKED", "NOT_WORKED", "ALL"];
 
 export async function sendBroadcastAction(input: {
   installerIds: string[];

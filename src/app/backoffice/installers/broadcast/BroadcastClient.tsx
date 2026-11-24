@@ -35,8 +35,19 @@ const ERR: Record<string, string> = {
   UNAUTHORIZED: "다시 로그인해 주세요.",
 };
 
+type Template = {
+  label: string;
+  pushTitle: string;
+  pushBody: string;
+  smsSubject: string;
+  smsBody: string;
+  noticeTitle: string;
+  noticeBody: string;
+};
+
 /** 2026-11 정산 안내(대상: 10·11월 작업 기사) */
-const SETTLEMENT_TEMPLATE = {
+const SETTLEMENT_TEMPLATE: Template = {
+  label: "정산 안내(12월 5일)",
   pushTitle: "설치비 정산 안내 (12월 5일까지)",
   pushBody:
     "「내 정보 → 정산 정보 등록」에서 사업자·계좌·증빙 종류를 등록하고, 「이력·정산」의 정산서로 12월 5일까지 세금계산서를 발행해 주세요. 정산금은 12월 중 지급됩니다.",
@@ -74,6 +85,42 @@ https://www.aqaralife-service.kr/installer-start.html`,
 ■ 4. 현금영수증 중단 안내
 현금영수증 거래 방식은 12월 1일 설치 건부터 중단 예정입니다. 12월 1일 이후 설치 건은 세금계산서로만 정산 가능합니다.`,
 };
+
+/** 정산 정보 등록 안내(대상: 아직 작업이 없는 기사) */
+const REGISTRATION_TEMPLATE: Template = {
+  label: "정산 정보 등록 안내",
+  pushTitle: "정산 정보 등록 안내",
+  pushBody:
+    "「내 정보 → 정산 정보 등록」에서 사업자·계좌 정보와 증빙 종류를 미리 등록해 주세요. 12월 1일 설치 건부터 현금영수증 거래는 중단되고 세금계산서로만 정산됩니다.",
+  smsSubject: "정산 정보 등록 안내",
+  smsBody: `[아카라라이프] 정산 정보 등록 안내
+
+■ 1. 정산 정보 등록
+앱 「내 정보 → 정산 정보 등록」에서 사업자·계좌 정보와 증빙 종류(세금계산서/현금영수증)를 미리 등록해 주세요. 등록하셔야 설치 후 정산금이 지급됩니다.
+앱 설치가 어려운 분(아이폰 등)은 아래 주소로 접속해 같은 기능을 이용하실 수 있습니다.
+https://www.aqaralife-service.kr/installer
+
+■ 2. 앞으로의 정산 일정
+매월 1일 전월분 정산서 발행 → 5일까지 세금계산서 발행 → 그 달 중 지급
+
+■ 3. 현금영수증 거래 중단
+현금영수증 거래 방식은 12월 1일 설치 건부터 중단됩니다. 12월 1일 이후 설치 건은 세금계산서로만 정산 가능합니다.
+
+기사 앱을 아직 설치하지 않으신 분은 아래 링크에서 설치해 주세요.
+https://www.aqaralife-service.kr/installer-start.html`,
+  noticeTitle: "정산 정보 등록 안내",
+  noticeBody: `■ 1. 정산 정보 등록
+「내 정보 → 정산 정보 등록」에서 사업자·계좌 정보와 증빙 종류(세금계산서/현금영수증)를 미리 등록해 주세요. 등록하셔야 설치 후 정산금이 지급됩니다.
+세금계산서 기사님은 「내 정보 → 전자세금계산서 연동」을 해 두시면 앱에서 버튼 하나로 발행할 수 있습니다.
+
+■ 2. 앞으로의 정산 일정
+매월 1일 전월분 정산서 발행 → 5일까지 세금계산서 발행 → 그 달 중 지급
+
+■ 3. 현금영수증 거래 중단
+현금영수증 거래 방식은 12월 1일 설치 건부터 중단됩니다. 12월 1일 이후 설치 건은 세금계산서로만 정산 가능합니다.`,
+};
+
+const TEMPLATES: Template[] = [SETTLEMENT_TEMPLATE, REGISTRATION_TEMPLATE];
 
 /** 문자 바이트(EUC-KR 기준 한글 2바이트). 90바이트 넘으면 LMS */
 function smsBytes(s: string): number {
@@ -176,16 +223,20 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
             <input type="radio" checked={scope === "WORKED"} onChange={() => setScope("WORKED")} />
             작업이 있는 기사
           </label>
-          {scope === "WORKED" ? (
+          <label className="flex items-center gap-2">
+            <input type="radio" checked={scope === "NOT_WORKED"} onChange={() => setScope("NOT_WORKED")} />
+            작업이 없는 기사
+          </label>
+          {scope !== "ALL" ? (
             <>
               <label className="flex items-center gap-2 text-zinc-600">
                 기준일
                 <input type="date" className="rounded-md border border-zinc-300 px-2 py-1" value={since} onChange={(e) => setSince(e.target.value)} />
-                이후 완료(승인·확인 대기 포함)
+                {scope === "WORKED" ? "이후 완료(승인·확인 대기 포함)" : "이후 완료 건이 없는 기사"}
               </label>
               <label className="flex items-center gap-2 text-zinc-600">
                 <input type="checkbox" checked={includeInProgress} onChange={(e) => setIncludeInProgress(e.target.checked)} />
-                진행 중(배정·응답 대기)인 기사 포함
+                {scope === "WORKED" ? "진행 중(배정·응답 대기)인 기사 포함" : "진행 중(배정·응답 대기)인 기사도 작업 있음으로 보고 제외"}
               </label>
             </>
           ) : null}
@@ -261,19 +312,24 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
       <section className="mb-5 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-zinc-800">2. 보내는 방법과 내용</h3>
-          <button
-            className="text-sm text-blue-700 underline"
-            onClick={() => {
-              setPushTitle(SETTLEMENT_TEMPLATE.pushTitle);
-              setPushBody(SETTLEMENT_TEMPLATE.pushBody);
-              setSmsSubject(SETTLEMENT_TEMPLATE.smsSubject);
-              setSmsBody(SETTLEMENT_TEMPLATE.smsBody);
-              setNoticeTitle(SETTLEMENT_TEMPLATE.noticeTitle);
-              setNoticeBody(SETTLEMENT_TEMPLATE.noticeBody);
-            }}
-          >
-            「정산 안내(12월 5일)」 문구 넣기
-          </button>
+          <div className="flex flex-wrap gap-3">
+            {TEMPLATES.map((t) => (
+              <button
+                key={t.label}
+                className="text-sm text-blue-700 underline"
+                onClick={() => {
+                  setPushTitle(t.pushTitle);
+                  setPushBody(t.pushBody);
+                  setSmsSubject(t.smsSubject);
+                  setSmsBody(t.smsBody);
+                  setNoticeTitle(t.noticeTitle);
+                  setNoticeBody(t.noticeBody);
+                }}
+              >
+                「{t.label}」 문구 넣기
+              </button>
+            ))}
+          </div>
         </div>
         <select className="mb-4 rounded-md border border-zinc-300 px-3 py-2 text-sm" value={mode} onChange={(e) => setMode(e.target.value as BroadcastMode)}>
           {(Object.keys(MODE_LABEL) as BroadcastMode[]).map((m) => (
