@@ -6,7 +6,15 @@ import { getBackofficeButtonClass } from "../../backoffice-button-styles";
 import type { BroadcastMode, BroadcastRecipient, BroadcastResult, BroadcastScope } from "@/lib/installer/broadcast";
 import { listBroadcastRecipientsAction, sendBroadcastAction } from "./actions";
 
-type Limits = { pushTitle: number; pushBody: number; smsSubject: number; smsBody: number; recipients: number };
+type Limits = {
+  pushTitle: number;
+  pushBody: number;
+  smsSubject: number;
+  smsBody: number;
+  noticeTitle: number;
+  noticeBody: number;
+  recipients: number;
+};
 
 const MODE_LABEL: Record<BroadcastMode, string> = {
   BOTH: "앱 푸시 + 문자 모두",
@@ -20,6 +28,8 @@ const ERR: Record<string, string> = {
   SMS_REQUIRED: "문자 내용을 입력해 주세요.",
   PUSH_TOO_LONG: "푸시 제목·내용이 너무 깁니다.",
   SMS_TOO_LONG: "문자 내용이 너무 깁니다.",
+  NOTICE_REQUIRED: "앱 공지 팝업 제목과 내용을 입력해 주세요.",
+  NOTICE_TOO_LONG: "앱 공지 팝업 내용이 너무 깁니다.",
   NO_RECIPIENTS: "보낼 기사를 선택해 주세요.",
   TOO_MANY_RECIPIENTS: "한 번에 보낼 수 있는 인원을 넘었습니다.",
   UNAUTHORIZED: "다시 로그인해 주세요.",
@@ -50,6 +60,19 @@ https://www.aqaralife-service.kr/installer
 ■ 5. 앱 설치
 기사 앱을 아직 설치하지 않으신 분은 아래 링크에서 설치해 주세요.
 https://www.aqaralife-service.kr/installer-start.html`,
+  noticeTitle: "설치비 정산 안내 (12월 5일까지)",
+  noticeBody: `■ 1. 정산 정보 등록
+「내 정보 → 정산 정보 등록」에서 사업자·계좌 정보와 증빙 종류(세금계산서/현금영수증)를 등록해 주세요. 등록하셔야 정산금이 지급됩니다.
+
+■ 2. 세금계산서 발행 기한
+「이력·정산」에서 정산서를 확인하시고 12월 5일까지 세금계산서를 발행해 주세요. 정산금은 12월 중 지급됩니다. (5일 이후 제출 시 다음 달 중 지급)
+세금계산서 기사님은 「내 정보 → 전자세금계산서 연동」을 해 두시면 앱에서 버튼 하나로 발행할 수 있습니다.
+
+■ 3. 앞으로의 정산 일정
+매월 1일 전월분 정산서 발행 → 5일까지 세금계산서 발행 → 그 달 중 지급
+
+■ 4. 현금영수증 중단 안내
+현금영수증 거래 방식은 12월 1일 설치 건부터 중단 예정입니다. 12월 1일 이후 설치 건은 세금계산서로만 정산 가능합니다.`,
 };
 
 /** 문자 바이트(EUC-KR 기준 한글 2바이트). 90바이트 넘으면 LMS */
@@ -76,6 +99,9 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
   const [pushBody, setPushBody] = useState("");
   const [smsSubject, setSmsSubject] = useState("");
   const [smsBody, setSmsBody] = useState("");
+  const [noticeOn, setNoticeOn] = useState(true);
+  const [noticeTitle, setNoticeTitle] = useState("");
+  const [noticeBody, setNoticeBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BroadcastResult | null>(null);
 
@@ -107,6 +133,7 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
       `대상 ${chosen.length}명`,
       wantPush ? `앱 푸시 약 ${pushCount}명` : null,
       wantSms ? `문자 ${smsCount}명 (${bytes > 90 ? "LMS" : "SMS"})` : null,
+      noticeOn ? `앱 공지 팝업 ${chosen.length}명` : null,
     ].filter(Boolean);
     if (!confirm(`정말 보낼까요? 보낸 뒤에는 취소할 수 없습니다.\n\n${lines.join("\n")}`)) return;
     startTransition(async () => {
@@ -115,6 +142,7 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
         mode,
         push: { title: pushTitle, body: pushBody },
         sms: { subject: smsSubject, body: smsBody },
+        notice: { enabled: noticeOn, title: noticeTitle, body: noticeBody },
       });
       if (!r.ok) setError(ERR[r.error] ?? r.error);
       else setResult(r);
@@ -131,7 +159,10 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
 
   const field = "w-full rounded-md border border-zinc-300 px-3 py-2 text-sm";
   const ready =
-    chosen.length > 0 && (!wantPush || (pushTitle.trim() && pushBody.trim())) && (!wantSms || smsBody.trim());
+    chosen.length > 0 &&
+    (!wantPush || (pushTitle.trim() && pushBody.trim())) &&
+    (!wantSms || smsBody.trim()) &&
+    (!noticeOn || (noticeTitle.trim() && noticeBody.trim()));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -237,6 +268,8 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
               setPushBody(SETTLEMENT_TEMPLATE.pushBody);
               setSmsSubject(SETTLEMENT_TEMPLATE.smsSubject);
               setSmsBody(SETTLEMENT_TEMPLATE.smsBody);
+              setNoticeTitle(SETTLEMENT_TEMPLATE.noticeTitle);
+              setNoticeBody(SETTLEMENT_TEMPLATE.noticeBody);
             }}
           >
             「정산 안내(12월 5일)」 문구 넣기
@@ -295,6 +328,28 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
             </div>
           </div>
         </div>
+        <div className={`mt-5 border-t pt-4 ${noticeOn ? "" : "opacity-60"}`}>
+          <label className="mb-2 flex items-center gap-2 text-xs font-bold text-zinc-600">
+            <input type="checkbox" checked={noticeOn} onChange={(e) => setNoticeOn(e.target.checked)} />
+            앱 공지 팝업도 띄우기 (앱·웹을 열면 전체 내용이 팝업으로 뜨고, 「확인」 전까지 다시 뜹니다. 「내 정보 → 본사 공지」에서 다시 볼 수 있음)
+          </label>
+          <input
+            className={`${field} mb-2`}
+            placeholder="팝업 제목"
+            maxLength={limits.noticeTitle}
+            disabled={!noticeOn}
+            value={noticeTitle}
+            onChange={(e) => setNoticeTitle(e.target.value)}
+          />
+          <textarea
+            className={`${field} h-48`}
+            placeholder="팝업 내용 (줄바꿈 그대로 보이고, http 주소는 눌러서 열 수 있습니다)"
+            maxLength={limits.noticeBody}
+            disabled={!noticeOn}
+            value={noticeBody}
+            onChange={(e) => setNoticeBody(e.target.value)}
+          />
+        </div>
       </section>
 
       {/* 3. 발송 */}
@@ -303,6 +358,7 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
           선택 {chosen.length}명 → {wantPush ? `푸시 약 ${pushCount}명` : ""}
           {wantPush && wantSms ? " · " : ""}
           {wantSms ? `문자 ${smsCount}명` : ""}
+          {noticeOn ? ` · 앱 공지 팝업 ${chosen.length}명` : ""}
         </div>
         <button className={getBackofficeButtonClass("primary", "md")} disabled={pending || !ready || bytes > 2000} onClick={send}>
           {pending ? "보내는 중…" : "보내기"}
@@ -313,7 +369,8 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
       {result ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <div className="font-semibold">
-            발송 완료 · 대상 {result.recipients}명 · 푸시 {result.pushSent}명 · 문자 {result.smsSent}명
+            발송 완료 · 대상 {result.recipients}명 · 앱 공지 {result.noticeCreated}명 · 푸시 {result.pushSent}명 · 문자{" "}
+            {result.smsSent}명
           </div>
           {result.failed.length > 0 ? (
             <div className="mt-2 text-red-700">

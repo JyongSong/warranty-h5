@@ -55,7 +55,10 @@ export default function MeView({ name, phone, branch, region, settlement }: MeVi
         ) : null}
 
         <Section title="도움말">
-          <ListLink href="/installer/faq">
+          <ListLink href="/installer/me/notices">
+            <span>본사 공지</span>
+          </ListLink>
+          <ListLink href="/installer/faq" topBorder>
             <span>자주 묻는 질문 · 설치비 기준</span>
           </ListLink>
           <ListLink href="/installer/guide" topBorder>
