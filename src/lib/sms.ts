@@ -66,3 +66,27 @@ export async function sendSms(
     console.error("[SMS] 발송 실패:", e);
   }
 }
+
+/**
+ * 공지처럼 결과를 알아야 하는 발송용. 알림톡 없이 문자만 보내고 성공 여부를 돌려준다.
+ * 글이 길거나 subject 가 있으면 Solapi 가 LMS 로 보낸다.
+ */
+export async function sendSmsWithResult(
+  to: string | null | undefined,
+  text: string,
+  subject?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!to) return { ok: false, error: "NO_PHONE" };
+  const from = process.env.SOLAPI_SENDER;
+  const service = getService();
+  if (!from || !service) return { ok: false, error: "SMS_NOT_CONFIGURED" };
+  const normalized = normalizeKr(to);
+  if (!normalized) return { ok: false, error: "NO_PHONE" };
+  try {
+    await service.send({ to: normalized, from, text, subject });
+    return { ok: true };
+  } catch (e) {
+    console.error("[SMS] 공지 발송 실패:", e);
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 120) : "SEND_FAILED" };
+  }
+}

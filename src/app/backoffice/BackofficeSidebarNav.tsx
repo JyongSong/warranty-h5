@@ -109,6 +109,12 @@ const menuItems: MenuItem[] = [
         icon: "installer",
       },
       {
+        href: "/backoffice/installers/broadcast",
+        access: "edit",
+        label: "기사 공지 발송",
+        icon: "installer",
+      },
+      {
         href: "/backoffice/installers/profile-sms",
         access: "edit",
         label: "기사 정보 확인 문자",
