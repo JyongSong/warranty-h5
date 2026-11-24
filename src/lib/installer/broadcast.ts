@@ -4,6 +4,7 @@ import type { InstallationOrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendAssignmentPushToInstaller } from "@/lib/installer/devices";
 import { sendSmsWithResult } from "@/lib/sms";
+import { createInboxNotices } from "@/lib/installer/inbox";
 
 /**
  * 백오피스 「기사 공지 발송」: 고른 기사에게 앱 푸시·문자(LMS)를 보낸다.
@@ -92,18 +93,31 @@ export async function listBroadcastRecipients(input: {
 
 export type BroadcastResult = {
   recipients: number;
+  /** 앱 공지 팝업을 만든 기사 수 */
+  noticeCreated: number;
   pushSent: number;
   smsSent: number;
   failed: Array<{ name: string; channel: "PUSH" | "SMS"; error: string }>;
 };
 
-export const BROADCAST_LIMITS = { pushTitle: 60, pushBody: 300, smsSubject: 40, smsBody: 1800, recipients: 500 } as const;
+export const BROADCAST_LIMITS = {
+  pushTitle: 60,
+  pushBody: 300,
+  smsSubject: 40,
+  smsBody: 1800,
+  noticeTitle: 80,
+  noticeBody: 4000,
+  recipients: 500,
+} as const;
 
 export async function sendBroadcast(input: {
   installerIds: string[];
   mode: BroadcastMode;
   push?: { title: string; body: string };
   sms?: { subject: string; body: string };
+  /** 앱 안 공지 팝업(받은 공지함). 앱 설치 여부와 관계없이 모든 대상에게 만든다(웹으로 들어와도 뜬다). */
+  notice?: { title: string; body: string };
+  adminId?: string | null;
 }): Promise<BroadcastResult> {
   const ids = [...new Set(input.installerIds)].slice(0, BROADCAST_LIMITS.recipients);
   const targets = await prisma.installer.findMany({
@@ -112,7 +126,16 @@ export async function sendBroadcast(input: {
   });
   const wantPush = input.mode !== "SMS_ONLY";
   const wantSms = input.mode !== "PUSH_ONLY";
-  const result: BroadcastResult = { recipients: targets.length, pushSent: 0, smsSent: 0, failed: [] };
+  const result: BroadcastResult = { recipients: targets.length, noticeCreated: 0, pushSent: 0, smsSent: 0, failed: [] };
+  // 공지를 먼저 만들어 둔다. 푸시를 눌러 앱을 열면 바로 팝업이 보이게.
+  if (input.notice) {
+    result.noticeCreated = await createInboxNotices({
+      installerIds: targets.map((t) => t.id),
+      title: input.notice.title,
+      body: input.notice.body,
+      adminId: input.adminId,
+    });
+  }
 
   for (const t of targets) {
     const hasApp = t.devices.length > 0;

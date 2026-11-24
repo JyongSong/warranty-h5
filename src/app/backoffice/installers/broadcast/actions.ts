@@ -41,6 +41,7 @@ export async function sendBroadcastAction(input: {
   mode: BroadcastMode;
   push: { title: string; body: string };
   sms: { subject: string; body: string };
+  notice: { enabled: boolean; title: string; body: string };
 }): Promise<({ ok: true } & BroadcastResult) | { ok: false; error: string }> {
   const auth = await requireEditor();
   if (!auth.ok) return auth;
@@ -48,6 +49,9 @@ export async function sendBroadcastAction(input: {
   const L = BROADCAST_LIMITS;
   const push = { title: input.push.title.trim(), body: input.push.body.trim() };
   const sms = { subject: input.sms.subject.trim(), body: input.sms.body.trim() };
+  const notice = { title: input.notice.title.trim(), body: input.notice.body.trim() };
+  if (input.notice.enabled && (!notice.title || !notice.body)) return { ok: false, error: "NOTICE_REQUIRED" };
+  if (notice.title.length > L.noticeTitle || notice.body.length > L.noticeBody) return { ok: false, error: "NOTICE_TOO_LONG" };
   const wantPush = input.mode !== "SMS_ONLY";
   const wantSms = input.mode !== "PUSH_ONLY";
   if (wantPush && (!push.title || !push.body)) return { ok: false, error: "PUSH_REQUIRED" };
@@ -63,6 +67,8 @@ export async function sendBroadcastAction(input: {
       mode: input.mode,
       push: wantPush ? push : undefined,
       sms: wantSms ? sms : undefined,
+      notice: input.notice.enabled ? notice : undefined,
+      adminId: auth.admin.id,
     });
     console.info("[backoffice/broadcast]", { admin: auth.admin.id, mode: input.mode, ...r, failed: r.failed.length });
     return { ok: true, ...r };

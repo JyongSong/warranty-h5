@@ -93,6 +93,7 @@ model Installer {
   drivingDistances        InstallerDrivingDistance[]
   settlementInfo          InstallerSettlementInfo?
   settlementInfoChanges   InstallerSettlementInfoChange[]
+  inboxNotices            InstallerInboxNotice[]
   settlementStatements    SettlementStatement[]
   popbillLink             InstallerPopbillLink?
   currentOrders        InstallationOrder[]                       @relation("CurrentInstaller")
@@ -1059,6 +1060,22 @@ model InstallerSettlementInfo {
 
   @@index([status])
   @@map("installer_settlement_infos")
+}
+
+// 기사 앱 공지(받은 공지함). 백오피스 「기사 공지 발송」에서 기사마다 한 줄씩 만든다.
+// 앱을 열면 안 읽은 공지를 팝업으로 띄우고, 「확인」을 누르면 read_at 을 채운다. 내 정보 → 공지에서 다시 본다.
+model InstallerInboxNotice {
+  id               String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  installerId      String    @map("installer_id")
+  installer        Installer @relation(fields: [installerId], references: [id], onDelete: Cascade)
+  title            String
+  body             String
+  createdByAdminId String?   @map("created_by_admin_id")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  readAt           DateTime? @map("read_at") @db.Timestamptz(6)
+
+  @@index([installerId, readAt])
+  @@map("installer_inbox_notices")
 }
 
 // 기사 정산 정보 변경 이력(본사가 증빙 종류를 바꾸거나, 팝빌 연동 완료로 자동 전환될 때).

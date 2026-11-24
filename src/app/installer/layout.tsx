@@ -4,6 +4,8 @@ import { getInstallerTabCounts } from "@/lib/installer/tabCounts";
 import FirstVisitGuide from "./FirstVisitGuide";
 import InstallerNav from "./InstallerNav";
 import NoticePopup from "./NoticePopup";
+import InboxNoticePopup from "./InboxNoticePopup";
+import { getNextUnreadNotice } from "@/lib/installer/inbox";
 import PushRegister from "./PushRegister";
 import StatementGate from "./StatementGate";
 import { getBlockingStatement, isSettlementLaunched } from "@/lib/installation/settlement/statements";
@@ -25,11 +27,15 @@ export default async function InstallerLayout({ children }: { children: ReactNod
       ? await getBlockingStatement(installer.id).catch(() => null)
       : null;
 
+  // 본사 공지(받은 공지함). 조회가 실패해도 앱은 열려야 한다.
+  const unreadNotice = installer ? await getNextUnreadNotice(installer.id).catch(() => null) : null;
+
   return (
     <>
       <PushRegister />
       <FirstVisitGuide />
       <NoticePopup loggedIn={Boolean(installer)} />
+      <InboxNoticePopup notice={unreadNotice} />
       <StatementGate blocked={blocking}>{children}</StatementGate>
       <InstallerNav counts={counts} />
     </>
