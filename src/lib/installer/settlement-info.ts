@@ -4,6 +4,7 @@ import { decryptNullablePii, encryptPii } from "@/lib/piiCrypto";
 import {
   TAX_DOC_TYPES,
   isValidBusinessNumber,
+  resolveTaxChoice,
   type SettlementInfoStatus,
   type TaxDocType,
 } from "@/lib/installer/settlement-info-shared";
@@ -159,13 +160,19 @@ export async function isTaxDocTypeEnabled(): Promise<boolean> {
 
 export async function submitSettlementInfo(installerId: string, input: SettlementInfoInput): Promise<void> {
   const taxDocTypeEnabled = await isTaxDocTypeEnabled();
-  const existing = taxDocTypeEnabled
-    ? null
-    : await prisma.installerSettlementInfo.findUnique({ where: { installerId }, select: { taxDocType: true } });
+  const [existing, link] = await Promise.all([
+    prisma.installerSettlementInfo.findUnique({ where: { installerId }, select: { taxDocType: true } }),
+    prisma.installerPopbillLink.findUnique({ where: { installerId }, select: { status: true } }),
+  ]);
+  const existingType = (existing?.taxDocType as TaxDocType | null | undefined) ?? null;
   const parsed = parseSettlementInfoInput(installerId, input, {
     taxDocTypeEnabled,
-    keepTaxDocType: (existing?.taxDocType as TaxDocType | null | undefined) ?? null,
+    keepTaxDocType: existingType,
   });
+  // 앱 화면의 「세금계산서」는 전자(팝빌)·직접 발행 중 하나로 정한다. 본사가 정해 둔 값은 유지한다.
+  if (taxDocTypeEnabled && parsed.taxDocType && parsed.taxDocType !== "CASH_RECEIPT") {
+    parsed.taxDocType = resolveTaxChoice(existingType, link?.status === "READY");
+  }
   const missing = await findMissingPhotos([parsed.businessLicensePhotoPath, parsed.bankbookPhotoPath]);
   if (missing.length > 0) throw new SettlementInfoError("PHOTO_MISSING");
 
@@ -179,11 +186,52 @@ export async function submitSettlementInfo(installerId: string, input: Settlemen
     reviewedAt: null,
     reviewedByAdminId: null,
   };
-  await prisma.installerSettlementInfo.upsert({
-    where: { installerId },
-    create: { installerId, ...data },
-    update: data,
+  await prisma.$transaction([
+    prisma.installerSettlementInfo.upsert({
+      where: { installerId },
+      create: { installerId, ...data },
+      update: data,
+    }),
+    ...(parsed.taxDocType !== existingType
+      ? [
+          prisma.installerSettlementInfoChange.create({
+            data: { installerId, field: "taxDocType", fromValue: existingType, toValue: parsed.taxDocType, source: "INSTALLER" },
+          }),
+        ]
+      : []),
+  ]);
+}
+
+/**
+ * 본사가 기사 증빙 종류를 바꾼다(정산 정보가 있어야 한다). 변경 이력을 남긴다.
+ * 이미 증빙 제출·지급으로 고정된 정산서에는 영향이 없다(정산서는 첫 진행 때 증빙 종류를 고정한다).
+ */
+export async function setSettlementInfoTaxDocType(input: {
+  installerId: string;
+  taxDocType: string;
+  adminId: string;
+}): Promise<void> {
+  const next = input.taxDocType as TaxDocType;
+  if (!TAX_DOC_TYPES.includes(next)) throw new SettlementInfoError("TAX_DOC_TYPE_INVALID");
+  const row = await prisma.installerSettlementInfo.findUnique({
+    where: { installerId: input.installerId },
+    select: { id: true, taxDocType: true },
   });
+  if (!row) throw new SettlementInfoError("NOT_FOUND");
+  if (row.taxDocType === next) return;
+  await prisma.$transaction([
+    prisma.installerSettlementInfo.update({ where: { id: row.id }, data: { taxDocType: next } }),
+    prisma.installerSettlementInfoChange.create({
+      data: {
+        installerId: input.installerId,
+        field: "taxDocType",
+        fromValue: row.taxDocType,
+        toValue: next,
+        source: "ADMIN",
+        changedByAdminId: input.adminId,
+      },
+    }),
+  ]);
 }
 
 /** 본사 승인/반려. 반려는 사유가 있어야 한다(기사 앱에 그대로 보인다). */

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   SETTLEMENT_INFO_STATUS_LABEL,
-  TAX_DOC_TYPE_LABEL,
+  INFO_DOC_TYPE_LABEL,
   formatBusinessNumber,
 } from "@/lib/installer/settlement-info-shared";
 import type { SettlementInfoView } from "@/lib/installer/settlement-info";
@@ -70,7 +70,7 @@ export default function SettlementInfoPanel({
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
             <Item
               label="증빙 종류"
-              value={info.taxDocType ? TAX_DOC_TYPE_LABEL[info.taxDocType] ?? info.taxDocType : "미선택 (선택 항목 숨김 중)"}
+              value={info.taxDocType ? INFO_DOC_TYPE_LABEL[info.taxDocType] ?? info.taxDocType : "미선택 (「기사 정산 정보 관리」에서 지정 가능)"}
               strong={Boolean(info.taxDocType)}
             />
             <Item label="사업자등록번호" value={formatBusinessNumber(info.businessNumber)} />

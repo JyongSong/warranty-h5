@@ -136,6 +136,18 @@ async function saveLink(installerId: string, corpNum: string, check: MemberCheck
     create: { installerId, ...data },
     update: data,
   });
+  // 연동이 끝나면 「세금계산서(직접 발행)」 기사를 「전자세금계산서(팝빌)」로 바꾼다. 현금영수증·미선택은 건드리지 않는다.
+  if (status === "READY") {
+    const info = await prisma.installerSettlementInfo.findUnique({ where: { installerId }, select: { taxDocType: true } });
+    if (info?.taxDocType === "PAPER_TAX_INVOICE") {
+      await prisma.$transaction([
+        prisma.installerSettlementInfo.update({ where: { installerId }, data: { taxDocType: "E_TAX_INVOICE" } }),
+        prisma.installerSettlementInfoChange.create({
+          data: { installerId, field: "taxDocType", fromValue: "PAPER_TAX_INVOICE", toValue: "E_TAX_INVOICE", source: "POPBILL_LINK" },
+        }),
+      ]);
+    }
+  }
   return { status, check };
 }
 

@@ -120,6 +120,11 @@ const menuItems: MenuItem[] = [
         icon: "installer",
       },
       {
+        href: "/backoffice/installers/settlement-info",
+        label: "기사 정산 정보 관리",
+        icon: "installer",
+      },
+      {
         href: "/backoffice/installers-settlement",
         label: "기사 정산",
         icon: "installer",
