@@ -120,7 +120,42 @@ https://www.aqaralife-service.kr/installer-start.html`,
 현금영수증 거래 방식은 12월 1일 설치 건부터 중단됩니다. 12월 1일 이후 설치 건은 세금계산서로만 정산 가능합니다.`,
 };
 
-const TEMPLATES: Template[] = [SETTLEMENT_TEMPLATE, REGISTRATION_TEMPLATE];
+/** 정산 정보 등록 2차 알림(대상: 작업이 있는데 정산 정보 미등록 기사) */
+const REGISTRATION_REMINDER_TEMPLATE: Template = {
+  label: "정산 정보 등록 2차 알림",
+  pushTitle: "[2차 알림] 정산 정보를 등록해 주세요",
+  pushBody:
+    "설치비 정산을 위해 「내 정보 → 정산 정보 등록」에서 사업자·계좌 정보를 등록해 주세요. 정산서는 12월 1일 발행, 세금계산서는 12월 5일까지입니다.",
+  smsSubject: "[2차 알림] 정산 정보 등록",
+  smsBody: `[아카라라이프] 2차 알림 - 정산 정보 등록
+
+설치 비용 정산을 위해 정산 정보 등록이 필요합니다.
+아직 등록하지 않으신 기사님께 다시 안내드립니다.
+
+■ 1. 정산 정보 등록
+앱 「내 정보 → 정산 정보 등록」에서 사업자등록증·통장 사본 사진과 증빙 종류를 등록해 주세요.
+
+■ 2. 정산 일정
+12월 1일 정산서 발행 → 12월 5일까지 세금계산서 발행 → 12월 중 지급
+(5일 이후 제출 시 다음 달 중 지급)
+
+■ 3. 앱 접속
+앱 설치가 어려운 분(아이폰 등)은 아래 주소로 접속해 같은 기능을 이용하실 수 있습니다.
+https://www.aqaralife-service.kr/installer
+기사 앱 설치: https://www.aqaralife-service.kr/installer-start.html`,
+  noticeTitle: "[2차 알림] 정산 정보를 등록해 주세요",
+  noticeBody: `설치 비용 정산을 위해 정산 정보 등록이 필요합니다.
+아직 등록하지 않으신 기사님께 다시 안내드립니다.
+
+■ 1. 정산 정보 등록
+「내 정보 → 정산 정보 등록」에서 사업자등록증·통장 사본 사진과 증빙 종류를 등록해 주세요.
+
+■ 2. 정산 일정
+12월 1일 정산서 발행 → 12월 5일까지 세금계산서 발행 → 12월 중 지급
+(5일 이후 제출 시 다음 달 중 지급)`,
+};
+
+const TEMPLATES: Template[] = [SETTLEMENT_TEMPLATE, REGISTRATION_TEMPLATE, REGISTRATION_REMINDER_TEMPLATE];
 
 /** 문자 바이트(EUC-KR 기준 한글 2바이트). 90바이트 넘으면 LMS */
 function smsBytes(s: string): number {
@@ -260,6 +295,12 @@ export default function BroadcastClient({ limits }: { limits: Limits }) {
               </button>
               <button className="text-zinc-500 underline" onClick={() => setSelected(new Set())}>
                 전체 해제
+              </button>
+              <button
+                className="text-zinc-500 underline"
+                onClick={() => setSelected(new Set(recipients.filter((r) => !r.settlementInfo).map((r) => r.id)))}
+              >
+                정산 정보 미등록만
               </button>
               <span className="text-xs text-zinc-400">처음 보낼 때는 본인만 남기고 먼저 보내 보세요.</span>
             </div>
