@@ -16,6 +16,7 @@ import {
   saveCjManifestUpload,
   searchCjManifestEntries,
 } from "@/lib/installation/cj/manifest";
+import type { CjManifestDateField, CjManifestStatusFilter } from "@/lib/installation/cj/manifest";
 
 export type PartnerLoginResult = { ok: false; message: string } | never;
 
@@ -109,17 +110,35 @@ export type ManifestEntryView = {
 };
 
 export type SearchManifestResult =
-  | { ok: true; entries: ManifestEntryView[]; truncated: boolean }
+  | { ok: true; entries: ManifestEntryView[]; truncated: boolean; total: number }
   | { ok: false; message: string };
 
-export async function searchCjManifestAction(query: string): Promise<SearchManifestResult> {
+export type ManifestSearchInput = {
+  query: string;
+  dateField: CjManifestDateField;
+  dateFrom: string;
+  dateTo: string;
+  status: CjManifestStatusFilter;
+};
+
+const DATE_FIELDS: CjManifestDateField[] = ["orderDate", "createdAt", "consumedAt"];
+const STATUSES: CjManifestStatusFilter[] = ["ALL", "PENDING", "CONSUMED"];
+
+export async function searchCjManifestAction(input: ManifestSearchInput): Promise<SearchManifestResult> {
   await requirePartnerWithCode("CJ");
 
   try {
-    const { entries, truncated } = await searchCjManifestEntries(query);
+    const { entries, truncated, total } = await searchCjManifestEntries({
+      query: String(input.query ?? ""),
+      dateField: DATE_FIELDS.includes(input.dateField) ? input.dateField : "orderDate",
+      dateFrom: input.dateFrom || null,
+      dateTo: input.dateTo || null,
+      status: STATUSES.includes(input.status) ? input.status : "ALL",
+    });
     return {
       ok: true,
       truncated,
+      total,
       entries: entries.map((entry) => ({
         id: entry.id,
         orderNo: entry.orderNo,

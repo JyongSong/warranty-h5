@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const findMany = vi.fn();
 const findUnique = vi.fn();
 const deleteMany = vi.fn();
+const count = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { cjOrderManifest: { findMany, findUnique, deleteMany } },
+  prisma: { cjOrderManifest: { findMany, findUnique, deleteMany, count } },
 }));
 
 const { searchCjManifestEntries, deleteCjManifestEntry, lookupCjOrderNo } = await import(
@@ -20,17 +21,20 @@ beforeEach(() => {
   findMany.mockReset();
   findUnique.mockReset();
   deleteMany.mockReset();
+  count.mockReset();
+  count.mockResolvedValue(0);
 });
 
 describe("searchCjManifestEntries", () => {
   it("검색어가 없으면 최근 20건을 보여 준다", async () => {
     const rows = [entry("20260620034905")];
     findMany.mockResolvedValue(rows);
+    count.mockResolvedValue(1);
 
     const result = await searchCjManifestEntries("  ");
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: undefined, take: 21 }));
-    expect(result).toEqual({ entries: rows, truncated: false });
+    expect(result).toEqual({ entries: rows, truncated: false, total: 1 });
   });
 
   it("검색어를 정규화해 포함 검색한다", async () => {
@@ -39,7 +43,7 @@ describe("searchCjManifestEntries", () => {
     await searchCjManifestEntries(" 0620-0349 ");
 
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { orderNo: { contains: "06200349" } }, take: 51 }),
+      expect.objectContaining({ where: { AND: [{ orderNo: { contains: "06200349" } }] }, take: 51 }),
     );
   });
 
@@ -50,6 +54,56 @@ describe("searchCjManifestEntries", () => {
 
     expect(result.entries).toHaveLength(50);
     expect(result.truncated).toBe(true);
+  });
+
+  it("미접수 + 주문일 범위로 거르고 주문일 순으로 보여 준다", async () => {
+    findMany.mockResolvedValue([]);
+
+    await searchCjManifestEntries({
+      dateField: "orderDate",
+      dateFrom: "2026-11-01",
+      dateTo: "2026-11-20",
+      status: "PENDING",
+    });
+
+    const args = findMany.mock.calls[0][0];
+    expect(args.where).toEqual({
+      AND: [
+        { consumedAt: null },
+        { orderDate: { not: null, gte: "2026-11-01", lte: "2026-11-20" } },
+      ],
+    });
+    expect(args.orderBy[0]).toEqual({ orderDate: { sort: "desc", nulls: "last" } });
+    expect(args.take).toBe(301);
+  });
+
+  it("접수일 범위는 한국 시간 하루 경계로 자른다", async () => {
+    findMany.mockResolvedValue([]);
+
+    await searchCjManifestEntries({ dateField: "consumedAt", dateFrom: "2026-11-21", dateTo: "2026-11-21", status: "CONSUMED" });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      AND: [
+        { consumedAt: { not: null } },
+        {
+          consumedAt: {
+            gte: new Date("2026-11-20T15:00:00.000Z"),
+            lt: new Date("2026-11-21T15:00:00.000Z"),
+          },
+        },
+      ],
+    });
+  });
+
+  it("시작일이 종료일보다 늦으면 바꿔서 쓰고, 형식이 틀린 날짜는 무시한다", async () => {
+    findMany.mockResolvedValue([]);
+
+    await searchCjManifestEntries({ dateField: "createdAt", dateFrom: "2026-11-20", dateTo: "2026-11-01" });
+    expect(findMany.mock.calls[0][0].where.AND[0].createdAt.gte).toEqual(new Date("2026-10-31T15:00:00.000Z"));
+
+    findMany.mockClear();
+    await searchCjManifestEntries({ dateField: "createdAt", dateFrom: "2026/11/20" });
+    expect(findMany.mock.calls[0][0].where).toBeUndefined();
   });
 });
 

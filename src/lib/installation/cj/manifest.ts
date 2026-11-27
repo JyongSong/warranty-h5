@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   isValidCjOrderNoFormat,
@@ -192,24 +193,124 @@ export type CjManifestEntry = {
 
 const SEARCH_LIMIT = 50;
 const RECENT_LIMIT = 20;
+// 날짜·상태 조건을 걸면 그 범위를 통째로 보고 싶어 하므로 더 많이 보여 준다.
+const FILTER_LIMIT = 300;
 
-// 파트너 화면의 주문번호 조회. 검색어가 비어 있으면 최근 등록분을 보여 주고,
-// 있으면 일부만 쳐도 찾을 수 있게 포함 검색을 한다. 고객 입력과 같은 규칙으로
-// 정규화하므로 하이픈·공백을 섞어 쳐도 된다.
+export type CjManifestDateField = "orderDate" | "createdAt" | "consumedAt";
+export type CjManifestStatusFilter = "ALL" | "PENDING" | "CONSUMED";
+
+export type CjManifestSearchFilter = {
+  query?: string;
+  dateField?: CjManifestDateField;
+  // YYYY-MM-DD (한국 시간 기준 날짜). 둘 다 포함 범위.
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  status?: CjManifestStatusFilter;
+};
+
+const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function toValidYmd(value: string | null | undefined) {
+  if (!value || !YMD_PATTERN.test(value)) return null;
+  return Number.isNaN(new Date(`${value}T00:00:00+09:00`).getTime()) ? null : value;
+}
+
+function kstDayStart(ymd: string) {
+  return new Date(`${ymd}T00:00:00+09:00`);
+}
+
+function kstNextDayStart(ymd: string) {
+  return new Date(kstDayStart(ymd).getTime() + 24 * 60 * 60 * 1000);
+}
+
+// 조회 조건을 Prisma 조건으로 바꾼다. 화면 조회와 엑셀 내려받기가 같이 쓴다.
+// 날짜는 주문일(문자열 YYYY-MM-DD) / 등록일 / 접수일 중 하나를 기준으로 거른다.
+function buildManifestQuery(filter: CjManifestSearchFilter) {
+  const query = normalizeCjOrderNo(filter.query ?? "");
+  const dateField: CjManifestDateField = filter.dateField ?? "orderDate";
+  let dateFrom = toValidYmd(filter.dateFrom);
+  let dateTo = toValidYmd(filter.dateTo);
+  if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+  const status: CjManifestStatusFilter = filter.status ?? "ALL";
+
+  const and: Prisma.CjOrderManifestWhereInput[] = [];
+  if (query) and.push({ orderNo: { contains: query } });
+  if (status === "PENDING") and.push({ consumedAt: null });
+  if (status === "CONSUMED") and.push({ consumedAt: { not: null } });
+
+  if (dateFrom || dateTo) {
+    if (dateField === "orderDate") {
+      and.push({
+        orderDate: {
+          not: null,
+          ...(dateFrom ? { gte: dateFrom } : {}),
+          ...(dateTo ? { lte: dateTo } : {}),
+        },
+      });
+    } else {
+      const range = {
+        ...(dateFrom ? { gte: kstDayStart(dateFrom) } : {}),
+        ...(dateTo ? { lt: kstNextDayStart(dateTo) } : {}),
+      };
+      and.push(dateField === "createdAt" ? { createdAt: range } : { consumedAt: range });
+    }
+  }
+
+  const hasDateOrStatus = Boolean(dateFrom || dateTo || status !== "ALL");
+  const where: Prisma.CjOrderManifestWhereInput | undefined = and.length > 0 ? { AND: and } : undefined;
+
+  // 날짜 기준을 고르면 그 날짜 순으로 보여 준다(같으면 등록 최신순).
+  const orderBy: Prisma.CjOrderManifestOrderByWithRelationInput[] =
+    hasDateOrStatus && dateField === "orderDate"
+      ? [{ orderDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }]
+      : hasDateOrStatus && dateField === "consumedAt"
+        ? [{ consumedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }]
+        : [{ createdAt: "desc" }];
+
+  return { where, orderBy, hasDateOrStatus, hasQuery: Boolean(query) };
+}
+
+const MANIFEST_ENTRY_SELECT = {
+  id: true,
+  orderNo: true,
+  orderDate: true,
+  createdAt: true,
+  consumedAt: true,
+} as const;
+
+// 파트너 화면의 주문번호 조회. 검색어·조건이 모두 비어 있으면 최근 등록분을
+// 보여 주고, 있으면 일부만 쳐도 찾을 수 있게 포함 검색을 한다. 고객 입력과 같은
+// 규칙으로 정규화하므로 하이픈·공백을 섞어 쳐도 된다.
 export async function searchCjManifestEntries(
-  rawQuery: string,
+  filter: CjManifestSearchFilter | string,
+): Promise<{ entries: CjManifestEntry[]; truncated: boolean; total: number }> {
+  const options = typeof filter === "string" ? { query: filter } : filter;
+  const { where, orderBy, hasDateOrStatus, hasQuery } = buildManifestQuery(options);
+  const limit = hasDateOrStatus ? FILTER_LIMIT : hasQuery ? SEARCH_LIMIT : RECENT_LIMIT;
+
+  const [rows, total] = await Promise.all([
+    prisma.cjOrderManifest.findMany({ where, orderBy, take: limit + 1, select: MANIFEST_ENTRY_SELECT }),
+    prisma.cjOrderManifest.count({ where }),
+  ]);
+
+  return { entries: rows.slice(0, limit), truncated: rows.length > limit, total };
+}
+
+// 엑셀 내려받기용. 화면과 같은 조건이지만 화면 한도(300건) 없이 전부 낸다.
+// 조건이 하나도 없으면 명단 전체가 나온다. 혹시 모를 폭주만 막는 상한을 둔다.
+export const CJ_MANIFEST_EXPORT_MAX = 50000;
+
+export async function listCjManifestEntriesForExport(
+  filter: CjManifestSearchFilter,
 ): Promise<{ entries: CjManifestEntry[]; truncated: boolean }> {
-  const query = normalizeCjOrderNo(rawQuery);
-  const limit = query ? SEARCH_LIMIT : RECENT_LIMIT;
-
+  const { where, orderBy } = buildManifestQuery(filter);
   const rows = await prisma.cjOrderManifest.findMany({
-    where: query ? { orderNo: { contains: query } } : undefined,
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-    select: { id: true, orderNo: true, orderDate: true, createdAt: true, consumedAt: true },
+    where,
+    orderBy,
+    take: CJ_MANIFEST_EXPORT_MAX + 1,
+    select: MANIFEST_ENTRY_SELECT,
   });
-
-  return { entries: rows.slice(0, limit), truncated: rows.length > limit };
+  return { entries: rows.slice(0, CJ_MANIFEST_EXPORT_MAX), truncated: rows.length > CJ_MANIFEST_EXPORT_MAX };
 }
 
 export type CjManifestDeleteResult = "DELETED" | "NOT_FOUND" | "ALREADY_USED";

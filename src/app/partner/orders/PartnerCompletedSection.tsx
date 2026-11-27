@@ -71,6 +71,14 @@ export default function PartnerCompletedSection({
             );
           })}
         </div>
+        {/* 지금 보고 있는 기간 그대로 내려받는다(입력만 바꾸고 조회 안 한 값은 반영되지 않는다). */}
+        <a
+          href={`${basePath}/export?from=${range.from}&to=${range.to}`}
+          download
+          className="ml-auto inline-flex h-9 items-center rounded-md border border-emerald-600 bg-white px-4 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+        >
+          엑셀 다운로드
+        </a>
       </form>
 
       <div className="grid gap-4 md:grid-cols-3">

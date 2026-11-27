@@ -9,7 +9,7 @@ import {
   searchCjManifestAction,
   uploadCjManifestAction,
 } from "../actions";
-import type { ManifestEntryView } from "../actions";
+import type { ManifestEntryView, ManifestSearchInput } from "../actions";
 
 type Upload = {
   id: string;
@@ -171,33 +171,55 @@ function ManifestSearch({
   initialTruncated: boolean;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [searchedQuery, setSearchedQuery] = useState("");
+  const [filter, setFilter] = useState<ManifestSearchInput>(EMPTY_FILTER);
+  const [searched, setSearched] = useState<ManifestSearchInput>(EMPTY_FILTER);
   const [entries, setEntries] = useState<ManifestEntryView[]>(initialEntries);
   const [truncated, setTruncated] = useState(initialTruncated);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function runSearch(nextQuery: string) {
+  async function runSearch(next: ManifestSearchInput) {
     setLoading(true);
-    const response = await searchCjManifestAction(nextQuery);
+    const response = await searchCjManifestAction(next);
     setLoading(false);
 
     if (!response.ok) {
       setMessage({ ok: false, text: response.message });
       return;
     }
-    setSearchedQuery(nextQuery.trim());
+    setSearched({ ...next, query: next.query.trim() });
     setEntries(response.entries);
     setTruncated(response.truncated);
+    setTotal(response.total);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
-    void runSearch(query);
+    void runSearch(filter);
   }
+
+  function updateFilter(patch: Partial<ManifestSearchInput>) {
+    setFilter((current) => ({ ...current, ...patch }));
+  }
+
+  // 상태는 고르는 즉시 다시 조회한다(가장 자주 바꾸는 조건).
+  function handleStatusChange(status: ManifestSearchInput["status"]) {
+    const next = { ...filter, status };
+    setFilter(next);
+    setMessage(null);
+    void runSearch(next);
+  }
+
+  function handleReset() {
+    setFilter(EMPTY_FILTER);
+    setMessage(null);
+    void runSearch(EMPTY_FILTER);
+  }
+
+  const searchedHasCondition = hasCondition(searched);
 
   async function handleDelete(entry: ManifestEntryView) {
     if (!window.confirm(`주문번호 ${entry.orderNo} 을(를) 명단에서 삭제할까요?\n삭제하면 고객이 이 번호로 접수할 수 없습니다.`)) {
@@ -212,11 +234,12 @@ function ManifestSearch({
     if (!response.ok) {
       setMessage({ ok: false, text: response.message });
       // 그사이 접수됐을 수 있으니 상태를 다시 받아온다.
-      void runSearch(searchedQuery);
+      void runSearch(searched);
       return;
     }
 
     setEntries((current) => current.filter((item) => item.id !== entry.id));
+    setTotal((current) => (current === null ? current : Math.max(0, current - 1)));
     setMessage({ ok: true, text: `${entry.orderNo} 을(를) 삭제했습니다.` });
     // 위쪽 통계 숫자를 갱신한다.
     router.refresh();
@@ -226,29 +249,108 @@ function ManifestSearch({
     <section style={cardStyle}>
       <h2 style={cardTitleStyle}>주문번호 조회</h2>
       <p style={cardHintStyle}>
-        주문번호 일부만 입력해도 찾을 수 있습니다. 비워 두고 조회하면 최근 등록한 20건을
-        보여 줍니다. 고객이 아직 접수하지 않은 번호만 삭제할 수 있습니다.
+        주문번호 일부만 입력해도 찾을 수 있고, 날짜·접수 상태로 거를 수 있습니다. 조건 없이
+        조회하면 최근 등록한 20건을 보여 줍니다. 고객이 아직 접수하지 않은 번호만 삭제할 수
+        있습니다.
       </p>
 
-      <form onSubmit={handleSubmit} style={searchRowStyle}>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="주문번호"
-          inputMode="numeric"
-          style={searchInputStyle}
-        />
-        <button type="submit" disabled={loading} style={searchButtonStyle(loading)}>
-          {loading ? "조회 중..." : "조회"}
-        </button>
+      <form onSubmit={handleSubmit} style={filterFormStyle}>
+        <div style={statusTabsStyle} role="tablist" aria-label="접수 상태">
+          {STATUS_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={filter.status === option.value}
+              onClick={() => handleStatusChange(option.value)}
+              disabled={loading}
+              style={statusTabStyle(filter.status === option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={filterRowStyle}>
+          <select
+            value={filter.dateField}
+            onChange={(event) => updateFilter({ dateField: event.target.value as ManifestSearchInput["dateField"] })}
+            style={selectStyle}
+            aria-label="날짜 기준"
+          >
+            {DATE_FIELD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={filter.dateFrom}
+            onChange={(event) => updateFilter({ dateFrom: event.target.value })}
+            style={dateInputStyle}
+            aria-label="시작일"
+          />
+          <span style={{ color: MUTED }}>~</span>
+          <input
+            type="date"
+            value={filter.dateTo}
+            onChange={(event) => updateFilter({ dateTo: event.target.value })}
+            style={dateInputStyle}
+            aria-label="종료일"
+          />
+          {DATE_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => updateFilter(preset.range())}
+              style={presetButtonStyle}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={searchRowStyle}>
+          <input
+            type="search"
+            value={filter.query}
+            onChange={(event) => updateFilter({ query: event.target.value })}
+            placeholder="주문번호"
+            inputMode="numeric"
+            style={searchInputStyle}
+          />
+          <button type="button" onClick={handleReset} disabled={loading} style={resetButtonStyle}>
+            초기화
+          </button>
+          <button type="submit" disabled={loading} style={searchButtonStyle(loading)}>
+            {loading ? "조회 중..." : "조회"}
+          </button>
+        </div>
       </form>
+
+      <div style={resultBarStyle}>
+        <p style={resultCountStyle}>
+          {searchedHasCondition && total !== null ? (
+            <>
+              조회 결과 <strong>{total.toLocaleString()}</strong>건
+              {truncated ? ` · 이 중 ${entries.length.toLocaleString()}건만 표시` : ""}
+            </>
+          ) : (
+            "조건 없이 내려받으면 등록된 주문번호 전체가 나옵니다."
+          )}
+        </p>
+        {/* 마지막으로 조회한 조건 그대로(화면 표시 한도 없이) 엑셀로 내려받는다. */}
+        <a href={buildExportUrl(searched)} style={exportButtonStyle} download>
+          엑셀 다운로드
+        </a>
+      </div>
 
       {message ? <p style={message.ok ? successStyle : errorStyle}>{message.text}</p> : null}
 
       {entries.length === 0 ? (
         <p style={emptyStyle}>
-          {searchedQuery ? `'${searchedQuery}' 에 해당하는 주문번호가 없습니다.` : "아직 등록된 주문번호가 없습니다."}
+          {searchedHasCondition ? "조건에 맞는 주문번호가 없습니다." : "아직 등록된 주문번호가 없습니다."}
         </p>
       ) : (
         <>
@@ -294,12 +396,59 @@ function ManifestSearch({
             </table>
           </div>
           {truncated ? (
-            <p style={emptyStyle}>결과가 많아 일부만 보여 줍니다. 주문번호를 더 길게 입력해 주세요.</p>
+            <p style={emptyStyle}>결과가 많아 일부만 보여 줍니다. 날짜 범위를 좁히거나 주문번호를 더 길게 입력해 주세요.</p>
           ) : null}
         </>
       )}
     </section>
   );
+}
+
+const EMPTY_FILTER: ManifestSearchInput = {
+  query: "",
+  dateField: "orderDate",
+  dateFrom: "",
+  dateTo: "",
+  status: "ALL",
+};
+
+const STATUS_OPTIONS: { value: ManifestSearchInput["status"]; label: string }[] = [
+  { value: "ALL", label: "전체" },
+  { value: "PENDING", label: "미접수" },
+  { value: "CONSUMED", label: "접수 완료" },
+];
+
+const DATE_FIELD_OPTIONS: { value: ManifestSearchInput["dateField"]; label: string }[] = [
+  { value: "orderDate", label: "주문일" },
+  { value: "createdAt", label: "등록일" },
+  { value: "consumedAt", label: "접수일" },
+];
+
+// 한국 시간 기준 YYYY-MM-DD.
+function kstYmd(offsetDays = 0) {
+  const date = new Date(Date.now() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+const DATE_PRESETS: { label: string; range: () => Pick<ManifestSearchInput, "dateFrom" | "dateTo"> }[] = [
+  { label: "오늘", range: () => ({ dateFrom: kstYmd(), dateTo: kstYmd() }) },
+  { label: "7일", range: () => ({ dateFrom: kstYmd(-6), dateTo: kstYmd() }) },
+  { label: "30일", range: () => ({ dateFrom: kstYmd(-29), dateTo: kstYmd() }) },
+  { label: "날짜 지우기", range: () => ({ dateFrom: "", dateTo: "" }) },
+];
+
+function buildExportUrl(filter: ManifestSearchInput) {
+  const params = new URLSearchParams();
+  if (filter.query.trim()) params.set("query", filter.query.trim());
+  params.set("dateField", filter.dateField);
+  if (filter.dateFrom) params.set("dateFrom", filter.dateFrom);
+  if (filter.dateTo) params.set("dateTo", filter.dateTo);
+  params.set("status", filter.status);
+  return `/partner/cj/export?${params.toString()}`;
+}
+
+function hasCondition(filter: ManifestSearchInput) {
+  return Boolean(filter.query.trim() || filter.dateFrom || filter.dateTo || filter.status !== "ALL");
 }
 
 function formatOrderDate(value: string | null) {
@@ -547,6 +696,82 @@ const tdStyle: CSSProperties = {
 const tdNumStyle: CSSProperties = { ...tdStyle, textAlign: "right" };
 
 const searchRowStyle: CSSProperties = { display: "flex", gap: 8 };
+
+const filterFormStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: 10 };
+
+const filterRowStyle: CSSProperties = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 };
+
+const statusTabsStyle: CSSProperties = { display: "flex", gap: 6 };
+
+function statusTabStyle(active: boolean): CSSProperties {
+  return {
+    padding: "7px 14px",
+    borderRadius: 999,
+    border: `1px solid ${active ? PURPLE : BORDER}`,
+    background: active ? PURPLE : "#fff",
+    color: active ? "#fff" : "#374151",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  };
+}
+
+const selectStyle: CSSProperties = {
+  padding: "9px 10px",
+  borderRadius: 9,
+  border: `1px solid ${BORDER}`,
+  fontSize: 13.5,
+  background: "#fff",
+};
+
+const dateInputStyle: CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 9,
+  border: `1px solid ${BORDER}`,
+  fontSize: 13.5,
+};
+
+const presetButtonStyle: CSSProperties = {
+  padding: "8px 11px",
+  borderRadius: 9,
+  border: `1px solid ${BORDER}`,
+  background: "#fff",
+  color: "#374151",
+  fontSize: 12.5,
+  cursor: "pointer",
+};
+
+const resetButtonStyle: CSSProperties = {
+  padding: "0 14px",
+  borderRadius: 9,
+  border: `1px solid ${BORDER}`,
+  background: "#fff",
+  color: "#374151",
+  fontSize: 13.5,
+  cursor: "pointer",
+};
+
+const resultCountStyle: CSSProperties = { margin: 0, fontSize: 13, color: "#374151" };
+
+const resultBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const exportButtonStyle: CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 9,
+  border: "1px solid #16A34A",
+  background: "#fff",
+  color: "#15803D",
+  fontSize: 13,
+  fontWeight: 600,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
 
 const searchInputStyle: CSSProperties = {
   flex: 1,
